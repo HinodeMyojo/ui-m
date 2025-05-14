@@ -54,8 +54,9 @@ const draggedTask = ref(null)
 const dragOffset = ref(0)
 const dragOverTask = ref(null)
 const dropIndex = ref(null)
+const hoveredTask = ref(null)
 
-const TASK_HEIGHT = 60
+const TASK_HEIGHT = 75
 const TASK_MARGIN = 24
 const TASK_TOTAL_HEIGHT = TASK_HEIGHT + TASK_MARGIN
 const TASKS_TOP_OFFSET = 50
@@ -200,24 +201,32 @@ const getMonthName = (month) => {
                                 left: `${(task.startDate - 1) * (100 / daysInMonth)}%`,
                                 width: `${(task.endDate - task.startDate + 1) * (100 / daysInMonth)}%`,
                                 height: `${TASK_HEIGHT}px`,
-                                marginBottom: `${TASK_MARGIN}px`
+                                marginBottom: `${TASK_MARGIN}px`,
+                                background: hoveredTask === task
+                                    ? `linear-gradient(120deg, ${task.color}ee 90%, #18343b 100%)`
+                                    : `linear-gradient(120deg, ${task.color}cc 85%, #18343b 100%)`
                             }"
                             draggable="true"
                             @dragstart="handleDragStart(task, $event)"
                             @dragend="handleDragEnd"
+                            @mouseenter="hoveredTask = task"
+                            @mouseleave="hoveredTask = null"
                         >
                             <div class="task-inner">
                                 <div class="task-row">
                                     <span class="task-icon">📚</span>
                                     <span class="task-title">{{ task.title }}</span>
                                 </div>
-                                <div class="task-dates">
+                                <div class="task-down">
+                                    <div class="task-dates">
                                     {{ task.startDate }} {{ getMonthName(currentMonth).slice(0,3) }} – {{ task.endDate }} {{ getMonthName(currentMonth).slice(0,3) }}
                                 </div>
-                            </div>
-                            <div class="task-progress-bar-segments">
+                                <div class="task-progress-bar-segments">
                                     <span v-for="n in task.steps" :key="n" class="segment" :class="{ filled: n <= task.stepActive }" :style="{ backgroundColor: n <= task.stepActive ? task.color : '' }"></span>
+                                </div>
+                                </div>
                             </div>
+                            
                         </div>
                     </template>
                     <div v-if="dropIndex === tasks.length" class="drop-indicator" :style="{ top: `${TASKS_TOP_OFFSET + tasks.length * TASK_TOTAL_HEIGHT}px` }"></div>
@@ -267,6 +276,7 @@ const getMonthName = (month) => {
     left: 0;
     right: 0;
     z-index: 1;
+    user-select: none;
 }
 
 .tasks-container {
@@ -294,9 +304,8 @@ const getMonthName = (month) => {
         border-radius 0.2s;
     will-change: top, box-shadow, background, transform, border-radius;
     z-index: 1;
-    background: #18343b;
     box-shadow: 0 2px 12px 0 rgba(0,0,0,0.18);
-    padding: 20px 28px 18px 24px;
+    padding: 5px 24px 16px 24px;
     min-width: 220px;
     display: flex;
     align-items: flex-start;
@@ -305,8 +314,8 @@ const getMonthName = (month) => {
 
 .task-item:hover {
     box-shadow: 0 6px 24px 0 rgba(80,200,255,0.18), 0 1.5px 6px 0 rgba(0,0,0,0.10);
-    background: rgba(60, 80, 100, 0.92) !important;
     filter: brightness(1.08);
+    border-radius: 18px;
 }
 
 .task-item.dragging {
@@ -335,34 +344,46 @@ const getMonthName = (month) => {
 }
 
 .task-icon {
-    font-size: 1.6rem;
-    margin-right: 2px;
+    font-size: 1.2rem;
 }
 
 .task-title {
-    font-size: 1.25rem;
-    font-weight: 700;
+    font-size: 1.05rem;
+    font-weight: 500;
     color: #fff;
     letter-spacing: 0.01em;
-    line-height: 1.2;
+    line-height: 1.1;
+}
+
+.task-down {
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start;
+    width: 100%;
+    gap: 8px;
+    display: flex;
 }
 
 .task-dates {
-    font-size: 1.08rem;
+    font-size: 1rem;
     color: #b7c9d1;
-    margin-left: 2px;
-    margin-top: 2px;
     font-weight: 500;
+    flex: 1.5;
 }
 
 .task-progress-bar-segments {
     display: flex;
     gap: 6px;
+    flex: 2;
     margin-top: 6px;
     margin-left: 2px;
     width: 100%;
     max-width: 100%;
     box-sizing: border-box;
+    background: rgba(20,30,40,0.85);
+    border-radius: 5px;
+    padding: 3px 6px;
+    min-height: 16px;
 }
 
 .segment {
@@ -371,13 +392,17 @@ const getMonthName = (month) => {
     max-width: 32px;
     height: 10px;
     border-radius: 3px;
-    background: rgba(255,255,255,0.08);
-    transition: background 0.2s;
+    background: rgba(60,70,80,0.55);
+    border: 1px solid rgba(80,90,100,0.18);
+    box-shadow: 0 1px 2px 0 rgba(0,0,0,0.08);
+    transition: background 0.2s, border 0.2s, box-shadow 0.2s;
 }
 
 .segment.filled {
     background: var(--segment-color, #25636A);
-    opacity: 0.95;
+    opacity: 0.98;
+    border: 1.5px solid #fff3;
+    box-shadow: 0 2px 6px 0 rgba(0,0,0,0.10);
 }
 
 .main {
