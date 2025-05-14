@@ -1,40 +1,56 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import confetti from 'canvas-confetti'
+import { fetchTasks, addTaskAPI, deleteTaskAPI, updateTaskAPI } from './api.js'
+import { useRouter } from 'vue-router'
 
-const tasks = ref([
+// --- API STUBS ---
+const fakeTasks = [
   {
+    id: 1,
     title: 'Book: Grokking Algorithms',
-    start: new Date(2025, 3, 2), // 2 апреля 2024
-    end: new Date(2025, 3, 18),  // 18 апреля 2024
+    start: new Date(2025, 3, 2),
+    end: new Date(2025, 3, 18),
     color: '#25636A',
     steps: 9,
     stepActive: 7,
   },
   {
+    id: 2,
     title: 'LeetCode: 25 problems',
-    start: new Date(2025, 4, 5), // 5 мая 2024
-    end: new Date(2025, 4, 30),  // 30 мая 2024
+    start: new Date(2025, 4, 5),
+    end: new Date(2025, 4, 30),
     color: '#6B3B1A',
     steps: 25,
     stepActive: 19,
   },
   {
+    id: 3,
     title: 'Interviews (5)',
-    start: new Date(2025, 3, 10), // 10 апреля 2024
-    end: new Date(2025, 3, 28),   // 28 апреля 2024
+    start: new Date(2025, 3, 10),
+    end: new Date(2025, 3, 28),
     color: '#25636A',
     steps: 5,
     stepActive: 2,
   },
   {
+    id: 4,
     title: 'Hackathon Project',
-    start: new Date(2025, 2, 29), // 29 марта 2024
-    end: new Date(2025, 3, 5),    // 5 апреля 2024
+    start: new Date(2025, 2, 29),
+    end: new Date(2025, 3, 5),
     color: '#3B3551',
     steps: 6,
     stepActive: 3,
   },
-])
+]
+
+let idCounter = 5
+
+const tasks = ref([])
+
+async function loadTasks() {
+  tasks.value = (await fetchTasks()).map(t => ({ ...t, start: new Date(t.start), end: new Date(t.end) }))
+}
 
 const currentDate = ref(new Date())
 const currentMonth = ref(currentDate.value.getMonth())
@@ -203,24 +219,164 @@ function closeTaskDetails() {
 function formatDate(date) {
   return date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', year: '2-digit' })
 }
+
+const showAddModal = ref(false)
+const newTask = ref({
+  title: '',
+  start: '',
+  end: '',
+  color: '#25636A',
+  steps: 1,
+  stepActive: 0,
+})
+
+function openAddModal() {
+  showAddModal.value = true
+  newTask.value = {
+    title: '',
+    start: '',
+    end: '',
+    color: '#25636A',
+    steps: 1,
+    stepActive: 0,
+  }
+}
+function closeAddModal() {
+  showAddModal.value = false
+}
+const showFirework = ref(false)
+
+function addTask() {
+  if (!newTask.value.title || !newTask.value.start || !newTask.value.end) return
+  const startDate = new Date(newTask.value.start)
+  const endDate = new Date(newTask.value.end)
+  if (isNaN(startDate) || isNaN(endDate) || endDate < startDate) return
+  const taskToAdd = {
+    title: newTask.value.title,
+    start: startDate,
+    end: endDate,
+    color: newTask.value.color,
+    steps: Math.max(1, Number(newTask.value.steps)),
+    stepActive: Math.max(0, Math.min(Number(newTask.value.stepActive), Number(newTask.value.steps))),
+  }
+  addTaskAPI(taskToAdd).then(added => {
+    loadTasks()
+    showAddModal.value = false
+    setTimeout(() => {
+      confetti({
+        particleCount: 90,
+        spread: 80,
+        startVelocity: 38,
+        origin: { y: 0.35 },
+        colors: ['#ffec3d','#ff85c0','#5cdbd3','#ffd666','#69c0ff','#b37feb','#ff7875','#95de64','#fffbe6','#ffadd2','#bae7ff','#ffd6e7'],
+        scalar: 1.1,
+        gravity: 0.85,
+        ticks: 180
+      })
+      confetti({
+        particleCount: 60,
+        angle: 120,
+        spread: 100,
+        startVelocity: 32,
+        origin: { x: 0.2, y: 0.45 },
+        colors: ['#ffec3d','#ff85c0','#5cdbd3','#ffd666','#69c0ff','#b37feb','#ff7875','#95de64'],
+        scalar: 0.9,
+        gravity: 0.95,
+        ticks: 140
+      })
+      confetti({
+        particleCount: 60,
+        angle: 60,
+        spread: 100,
+        startVelocity: 32,
+        origin: { x: 0.8, y: 0.45 },
+        colors: ['#ffec3d','#ff85c0','#5cdbd3','#ffd666','#69c0ff','#b37feb','#ff7875','#95de64'],
+        scalar: 0.9,
+        gravity: 0.95,
+        ticks: 140
+      })
+    }, 200)
+  })
+}
+
+async function deleteTask(id) {
+  await deleteTaskAPI(id)
+  loadTasks()
+}
+
+async function updateTask(id, patch) {
+  await updateTaskAPI(id, patch)
+  loadTasks()
+}
+
+function handleKeydown(e) {
+  if (e.key === 'ArrowLeft') {
+    handlePrevMonth()
+  } else if (e.key === 'ArrowRight') {
+    handleNextMonth()
+  }
+}
+
+onMounted(() => {
+  loadTasks()
+  window.addEventListener('keydown', handleKeydown)
+})
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', handleKeydown)
+})
+
+function getConfettiStyle(n) {
+  const angle = (360 / 22) * n
+  const colorList = ['#ffec3d','#ff85c0','#5cdbd3','#ffd666','#69c0ff','#b37feb','#ff7875','#95de64','#fffbe6','#ffadd2','#bae7ff','#ffd6e7']
+  const color = colorList[n % colorList.length]
+  const size = 12 + (n % 3) * 8
+  const isStar = n % 4 === 0
+  const rotate = Math.floor(Math.random() * 360)
+  return {
+    '--angle': `${angle}deg`,
+    '--confetti-color': color,
+    '--confetti-size': `${size}px`,
+    '--confetti-rotate': `${rotate}deg`,
+    '--confetti-glow': isStar ? '0 0 16px 4px #fff8' : '0 0 8px 2px #fff6',
+    '--confetti-shape': isStar ? 'polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%)' : 'circle(50% at 50% 50%)',
+    '--confetti-scale': isStar ? 1.2 : 1,
+  }
+}
+
+const router = useRouter()
+
+function logout() {
+  localStorage.removeItem('auth')
+  router.push('/login')
+}
 </script>
 
 <template>
-    <div class="main">
+    <div class="main" :class="{ 'calendar-dimmed': calendarDimmed }">
         <div class="header">
-            <v-icon
-                icon="mdi-chevron-left"
-                size="large"
-                class="month-nav-icon"
-                @click="handlePrevMonth"
-            />
-            <H3>{{ getMonthName(currentMonth) }}</H3>
-            <v-icon
-                icon="mdi-chevron-right"
-                size="large"
-                class="month-nav-icon"
-                @click="handleNextMonth"
-            />
+            <div class="header-left"></div>
+            <div class="header-center">
+                <v-icon
+                    icon="mdi-chevron-left"
+                    size="large"
+                    class="month-nav-icon"
+                    @click="handlePrevMonth"
+                />
+                <div class="month-block">
+                    <h3>{{ getMonthName(currentMonth) }}</h3>
+                    <span class="year-label">{{ currentYear }}</span>
+                </div>
+                <v-icon
+                    icon="mdi-chevron-right"
+                    size="large"
+                    class="month-nav-icon"
+                    @click="handleNextMonth"
+                />
+            </div>
+            <div class="header-right">
+                <button class="add-task-btn" @click="openAddModal">+ Добавить задачу</button>
+                <button class="logout-btn" @click="logout">Выйти</button>
+            </div>
         </div>
         <div class="body">
             <div class="columns-container" 
@@ -297,6 +453,37 @@ function formatDate(date) {
         </div>
       </div>
     </transition>
+    <transition name="modal-fade">
+      <div v-if="showAddModal" class="modal-overlay" @click.self="closeAddModal">
+        <div class="modal-card">
+          <button class="modal-close" @click="closeAddModal">×</button>
+          <div class="modal-content">
+            <h2 class="modal-title">Добавить задачу</h2>
+            <form class="add-task-form" @submit.prevent="addTask">
+              <label>Название задачи
+                <input v-model="newTask.title" type="text" required maxlength="60" />
+              </label>
+              <label>Дата начала
+                <input v-model="newTask.start" type="date" required />
+              </label>
+              <label>Дата окончания
+                <input v-model="newTask.end" type="date" required />
+              </label>
+              <label>Цвет
+                <input v-model="newTask.color" type="color" class="color-fullwidth" />
+              </label>
+              <label>Всего шагов
+                <input v-model.number="newTask.steps" type="number" min="1" max="99" required />
+              </label>
+              <label>Выполнено шагов
+                <input v-model.number="newTask.stepActive" type="number" min="0" :max="newTask.steps" required />
+              </label>
+              <button class="add-task-submit" type="submit">Добавить</button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </transition>
 </template>
 
 <style scoped>
@@ -311,7 +498,7 @@ function formatDate(date) {
 }
 
 .columns-container {
-    width: 80%;
+    width: 100%;
     height: 100%;
     display: flex;
     position: relative;
@@ -323,6 +510,10 @@ function formatDate(date) {
     min-width: 0;
     border-right: 1px solid rgba(44, 47, 54, 0.5);
     position: relative;
+}
+
+.column:first-child {
+    border-left: 1px solid rgba(44, 47, 54, 0.5);
 }
 
 .column.active {
@@ -357,7 +548,7 @@ function formatDate(date) {
     pointer-events: auto;
     cursor: move;
     user-select: none;
-    border-radius: 18px;
+    border-radius: 14px;
     transition:
         top 0.35s cubic-bezier(.4,2,.6,1),
         box-shadow 0.25s cubic-bezier(.4,2,.6,1),
@@ -485,15 +676,73 @@ function formatDate(date) {
     flex: 1;
     display: flex;
     align-items: center;
-    justify-content: center;
-    gap: 50px;
+    justify-content: space-between;
     border-bottom: 2px solid #1E2025;
+    min-height: 64px;
 }
 
-.header h3 {
+.header-left {
+    flex: 1;
+}
+
+.header-center {
+    flex: 2;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 32px;
+}
+
+.header-right {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+}
+
+.month-block {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-width: 120px;
+}
+
+.month-block h3 {
     font-size: 28px;
     font-weight: 600;
     color: #fff;
+    margin: 0;
+    line-height: 1.1;
+}
+
+.year-label {
+    font-size: 0.98rem;
+    color: #7e8a99;
+    margin-top: 2px;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+}
+
+.add-task-btn {
+    background: #232b33;
+    color: #b7c9d1;
+    border: none;
+    border-radius: 10px;
+    font-size: 1.04rem;
+    font-weight: 500;
+    padding: 7px 18px;
+    margin-left: 12px;
+    cursor: pointer;
+    box-shadow: none;
+    transition: background 0.18s, color 0.18s;
+    opacity: 0.82;
+}
+
+.add-task-btn:hover {
+    background: #232b33;
+    color: #fff;
+    opacity: 1;
 }
 
 .month-nav-icon {
@@ -535,12 +784,12 @@ function formatDate(date) {
   animation: modal-bg-fade 0.25s;
 }
 .modal-card {
-  background: #1b232a;
-  border-radius: 22px;
-  box-shadow: 0 8px 48px 0 rgba(0,0,0,0.38);
-  min-width: 340px;
+  background: #23232b;
+  border-radius: 18px;
+  box-shadow: 0 4px 32px 0 #0008;
+  min-width: 320px;
   max-width: 96vw;
-  padding: 36px 36px 28px 36px;
+  padding: 38px 32px 32px 32px;
   position: relative;
   display: flex;
   flex-direction: column;
@@ -631,5 +880,92 @@ function formatDate(date) {
 @keyframes modal-bg-fade {
   0% { opacity: 0; }
   100% { opacity: 1; }
+}
+.add-task-form {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  width: 100%;
+  margin-top: 10px;
+}
+.add-task-form label {
+  color: #b7c9d1;
+  font-size: 1.04rem;
+  font-weight: 500;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+}
+.add-task-form input[type="text"],
+.add-task-form input[type="date"],
+.add-task-form input[type="number"] {
+  background: #18191F;
+  color: #fff;
+  border: 1px solid #2E2660;
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 1.08rem;
+  margin-top: 2px;
+  width: 100%;
+  box-sizing: border-box;
+  outline: none;
+  transition: border 0.2s;
+}
+.add-task-form input[type="text"]:focus,
+.add-task-form input[type="date"]:focus,
+.add-task-form input[type="number"]:focus {
+  border: 1.5px solid #6e4aff;
+}
+.add-task-form input[type="color"].color-fullwidth {
+  width: 100%;
+  min-width: 100px;
+  height: 40px;
+  border-radius: 8px;
+  background: none;
+  margin: 0;
+  padding: 0;
+  border: none;
+  outline: none;
+  box-shadow: 0 2px 8px 0 rgba(0,0,0,0.10);
+  cursor: pointer;
+  display: block;
+}
+.add-task-submit {
+  background: linear-gradient(90deg, #2E2660 60%, #18191F 100%);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 1.08rem;
+  font-weight: 600;
+  padding: 10px 0;
+  margin-top: 10px;
+  cursor: pointer;
+  box-shadow: 0 2px 8px 0 rgba(0,0,0,0.10);
+  transition: background 0.2s, box-shadow 0.2s;
+}
+.add-task-submit:hover {
+  background: linear-gradient(90deg, #6e4aff 60%, #2E2660 100%);
+  box-shadow: 0 4px 16px 0 rgba(0,0,0,0.16);
+}
+.logout-btn {
+  background: none;
+  color: #b7c9d1;
+  border: 1.5px solid #2E2660;
+  border-radius: 10px;
+  font-size: 1.04rem;
+  font-weight: 500;
+  padding: 7px 18px;
+  margin-left: 16px;
+  cursor: pointer;
+  box-shadow: none;
+  transition: background 0.18s, color 0.18s, border 0.18s;
+  opacity: 0.82;
+}
+.logout-btn:hover {
+  background: #232b33;
+  color: #fff;
+  border-color: #6e4aff;
+  opacity: 1;
 }
 </style>

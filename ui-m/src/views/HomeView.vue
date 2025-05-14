@@ -10,7 +10,10 @@ import Main from '../components/Main.vue'
 
 <style scoped>
 main {
-  width: 100%;
+  width: 80%;
   height: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
 }
 </style>
