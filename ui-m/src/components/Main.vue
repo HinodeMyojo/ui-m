@@ -194,19 +194,17 @@ const getMonthName = (month) => {
                         <div v-if="dropIndex === index" class="drop-indicator" :style="{ top: `${TASKS_TOP_OFFSET + index * TASK_TOTAL_HEIGHT}px` }"></div>
                         <div
                             class="task-item"
+                            :class="{ 'drag-over': dragOverTask === task, 'dragging': draggedTask === task }"
                             :style="{
                                 top: `${TASKS_TOP_OFFSET + index * TASK_TOTAL_HEIGHT}px`,
-                                left: `${(task.startDate - 1) * (100 / 31)}%`,
-                                width: `${(task.endDate - task.startDate + 1) * (100 / 31)}%`,
+                                left: `${(task.startDate - 1) * (100 / daysInMonth)}%`,
+                                width: `${(task.endDate - task.startDate + 1) * (100 / daysInMonth)}%`,
                                 height: `${TASK_HEIGHT}px`,
                                 marginBottom: `${TASK_MARGIN}px`
                             }"
                             draggable="true"
                             @dragstart="handleDragStart(task, $event)"
                             @dragend="handleDragEnd"
-                            @dragover="handleTaskDragOver(task, $event)"
-                            @dragleave="handleTaskDragLeave"
-                            :class="{ 'drag-over': dragOverTask === task }"
                         >
                             <div class="task-progress">
                                 <div class="task-progress-bar" 
@@ -293,7 +291,21 @@ const getMonthName = (month) => {
     pointer-events: auto;
     cursor: move;
     user-select: none;
-    transition: top 0.2s ease, height 0.2s, margin-bottom 0.2s;
+    transition:
+        top 0.35s cubic-bezier(.4,2,.6,1),
+        box-shadow 0.25s cubic-bezier(.4,2,.6,1),
+        background 0.25s,
+        transform 0.25s,
+        z-index 0.25s;
+    will-change: top, box-shadow, background, transform;
+    z-index: 1;
+}
+
+.task-item.dragging {
+    box-shadow: 0 8px 32px 0 rgba(0,0,0,0.32);
+    transform: scale(1.04) translateY(-4px);
+    z-index: 10;
+    background: rgba(40, 60, 80, 0.95) !important;
 }
 
 .task-item.drag-over {
@@ -374,7 +386,9 @@ const getMonthName = (month) => {
     right: 0;
     height: 0;
     border-top: 2px dashed #4ecdc4;
-    z-index: 10;
+    z-index: 5;
     pointer-events: none;
+    opacity: 1;
+    transition: top 0.35s cubic-bezier(.4,2,.6,1), opacity 0.2s;
 }
 </style>
