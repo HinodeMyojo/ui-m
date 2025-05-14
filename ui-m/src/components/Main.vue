@@ -388,6 +388,48 @@ function formatShortDateRange(start, end) {
   }
   return `${start.getDate()} ${start.toLocaleString('ru', { month: 'short' })} ${start.getFullYear().toString().slice(-2)} – ${end.getDate()} ${end.toLocaleString('ru', { month: 'short' })} ${end.getFullYear().toString().slice(-2)}`
 }
+
+const showEditModal = ref(false)
+const editTask = ref(null)
+const editTaskForm = ref({})
+const editError = ref('')
+
+function openEditModal(task) {
+  editTask.value = task
+  editTaskForm.value = {
+    title: task.title,
+    start: task.start.toISOString().slice(0, 10),
+    end: task.end.toISOString().slice(0, 10),
+    color: task.color,
+    steps: task.steps,
+    stepActive: task.stepActive,
+  }
+  editError.value = ''
+  showEditModal.value = true
+}
+function closeEditModal() {
+  showEditModal.value = false
+  editTask.value = null
+}
+async function saveEditTask() {
+  if (!editTaskForm.value.title || !editTaskForm.value.start || !editTaskForm.value.end) return
+  if (Number(editTaskForm.value.steps) > 25) {
+    editError.value = 'Максимум 25 пунктов!'
+    return
+  }
+  const startDate = new Date(editTaskForm.value.start)
+  const endDate = new Date(editTaskForm.value.end)
+  if (isNaN(startDate) || isNaN(endDate) || endDate < startDate) return
+  await updateTask(editTask.value.id, {
+    title: editTaskForm.value.title,
+    start: startDate,
+    end: endDate,
+    color: editTaskForm.value.color,
+    steps: Math.max(1, Number(editTaskForm.value.steps)),
+    stepActive: Math.max(0, Math.min(Number(editTaskForm.value.stepActive), Number(editTaskForm.value.steps))),
+  })
+  showEditModal.value = false
+}
 </script>
 
 <template>
@@ -478,6 +520,7 @@ function formatShortDateRange(start, end) {
             <div class="modal-row">
               <span class="modal-icon">📚</span>
               <span class="modal-title">{{ openedTask.title }}</span>
+              <button class="edit-task-btn" @click.stop="openEditModal(openedTask)" title="Редактировать">✏️</button>
             </div>
             <div class="modal-dates">
               {{ formatDate(openedTask.start) }} – {{ formatDate(openedTask.end) }}
@@ -518,6 +561,38 @@ function formatShortDateRange(start, end) {
                 <input v-model.number="newTask.stepActive" type="number" min="0" :max="newTask.steps" required />
               </label>
               <button class="add-task-submit" type="submit">Добавить</button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </transition>
+    <transition name="modal-fade">
+      <div v-if="showEditModal" class="modal-overlay" @click.self="closeEditModal">
+        <div class="modal-card">
+          <button class="modal-close" @click="closeEditModal">×</button>
+          <div class="modal-content">
+            <h2 class="modal-title">Редактировать задачу</h2>
+            <form class="add-task-form" @submit.prevent="saveEditTask">
+              <label>Название задачи
+                <input v-model="editTaskForm.title" type="text" required maxlength="60" />
+              </label>
+              <label>Дата начала
+                <input v-model="editTaskForm.start" type="date" required />
+              </label>
+              <label>Дата окончания
+                <input v-model="editTaskForm.end" type="date" required />
+              </label>
+              <label>Цвет
+                <input v-model="editTaskForm.color" type="color" class="color-fullwidth" />
+              </label>
+              <label>Всего шагов
+                <input v-model.number="editTaskForm.steps" type="number" min="1" max="25" required />
+              </label>
+              <label>Выполнено шагов
+                <input v-model.number="editTaskForm.stepActive" type="number" min="0" :max="editTaskForm.steps" required />
+              </label>
+              <div v-if="editError" class="form-error">{{ editError }}</div>
+              <button class="add-task-submit" type="submit">Сохранить</button>
             </form>
           </div>
         </div>
@@ -834,6 +909,7 @@ function formatShortDateRange(start, end) {
   min-width: 320px;
   max-width: 96vw;
   padding: 38px 32px 32px 32px;
+  min-width: 400px;
   position: relative;
   display: flex;
   flex-direction: column;
@@ -889,15 +965,18 @@ function formatShortDateRange(start, end) {
   gap: 8px;
   width: 100%;
   background: rgba(20,30,40,0.85);
+  align-items: center;
   border-radius: 6px;
   padding: 6px 10px;
   min-height: 20px;
   margin-top: 4px;
+  box-sizing: border-box;
+  justify-content: stretch;
 }
 .modal-segment {
   flex: 1 1 0;
-  min-width: 14px;
-  max-width: 38px;
+  min-width: 0;
+  max-width: none;
   height: 14px;
   border-radius: 4px;
   background: rgba(60,70,80,0.55);
@@ -1026,5 +1105,25 @@ function formatShortDateRange(start, end) {
     align-items: center;
     gap: 4px;
   }
+}
+.edit-task-btn {
+  background: none;
+  border: none;
+  color: #b7c9d1;
+  font-size: 1.1rem;
+  margin-left: 8px;
+  cursor: pointer;
+  opacity: 0.7;
+  transition: opacity 0.18s;
+}
+.edit-task-btn:hover {
+  opacity: 1;
+  color: #6e4aff;
+}
+.form-error {
+  color: #ff7875;
+  font-size: 1rem;
+  margin-top: 2px;
+  min-height: 22px;
 }
 </style>
