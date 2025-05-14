@@ -104,6 +104,29 @@ const TASK_MARGIN = 24
 const TASK_TOTAL_HEIGHT = TASK_HEIGHT + TASK_MARGIN
 const TASKS_TOP_OFFSET = 50
 
+const SEGMENT_WIDTH = 24
+const SEGMENT_GAP = 6
+const TASK_PADDING = 48 // 24px слева и справа
+const calendarRef = ref(null)
+const calendarWidth = ref(0)
+const MAX_TASK_WIDTH_PERC = 0.5
+const MIN_TASK_WIDTH = 120
+
+function updateCalendarWidth() {
+  if (calendarRef.value) {
+    calendarWidth.value = calendarRef.value.offsetWidth
+  }
+}
+
+function calcTaskWidth(task) {
+  const days = task.endDay - task.startDay + 1
+  if (days <= 3) return MIN_TASK_WIDTH
+  if (!calendarWidth.value || !daysInMonth.value) return 200
+  const widthByDays = (calendarWidth.value / daysInMonth.value) * days
+  const maxWidth = calendarWidth.value * MAX_TASK_WIDTH_PERC
+  return Math.min(widthByDays, maxWidth)
+}
+
 const handleDragStart = (task, event) => {
     draggedTask.value = task
     dragOffset.value = event.clientY - event.target.getBoundingClientRect().top
@@ -319,9 +342,12 @@ function handleKeydown(e) {
 
 onMounted(() => {
   loadTasks()
+  window.addEventListener('resize', updateCalendarWidth)
+  updateCalendarWidth()
   window.addEventListener('keydown', handleKeydown)
 })
 onBeforeUnmount(() => {
+  window.removeEventListener('resize', updateCalendarWidth)
   window.removeEventListener('keydown', handleKeydown)
 })
 
@@ -348,6 +374,19 @@ const router = useRouter()
 function logout() {
   localStorage.removeItem('auth')
   router.push('/login')
+}
+
+function formatShortDateRange(start, end) {
+  if (!start || !end) return ''
+  const sameMonth = start.getMonth() === end.getMonth() && start.getFullYear() === end.getFullYear()
+  const sameYear = start.getFullYear() === end.getFullYear()
+  if (sameMonth) {
+    return `${start.getDate()}–${end.getDate()} ${start.toLocaleString('ru', { month: 'short' })}`
+  }
+  if (sameYear) {
+    return `${start.getDate()} ${start.toLocaleString('ru', { month: 'short' })} – ${end.getDate()} ${end.toLocaleString('ru', { month: 'short' })}`
+  }
+  return `${start.getDate()} ${start.toLocaleString('ru', { month: 'short' })} ${start.getFullYear().toString().slice(-2)} – ${end.getDate()} ${end.toLocaleString('ru', { month: 'short' })} ${end.getFullYear().toString().slice(-2)}`
 }
 </script>
 
@@ -379,7 +418,7 @@ function logout() {
             </div>
         </div>
         <div class="body">
-            <div class="columns-container" 
+            <div class="columns-container" ref="calendarRef" 
                  @dragover="handleDragOver"
                  @drop="handleDrop">
                 <div v-for="col in daysInMonth" 
@@ -396,7 +435,7 @@ function logout() {
                             :style="{
                                 top: `${TASKS_TOP_OFFSET + index * TASK_TOTAL_HEIGHT}px`,
                                 left: `${(task.startDay - 1) * (100 / daysInMonth)}%`,
-                                width: `${(task.endDay - task.startDay + 1) * (100 / daysInMonth)}%`,
+                                width: calcTaskWidth(task) + 'px',
                                 height: `${TASK_HEIGHT}px`,
                                 marginBottom: `${TASK_MARGIN}px`,
                                 background: hoveredTask === task
@@ -416,8 +455,8 @@ function logout() {
                                     <span class="task-title">{{ task.title }}</span>
                                 </div>
                                 <div class="task-down">
-                                    <div class="task-dates">
-                                        {{ formatDate(task.start) }} – {{ formatDate(task.end) }}
+                                    <div class="task-dates" :title="formatDate(task.start) + ' – ' + formatDate(task.end)" :class="{ 'task-dates-small': task.steps > 12 || (task.endDay - task.startDay + 1) < 4 }">
+                                        {{ formatShortDateRange(task.start, task.end) }}
                                     </div>
                                     <div class="task-progress-bar-segments">
                                         <span v-for="n in task.steps" :key="n" class="segment" :class="{ filled: n <= task.stepActive }" :style="{ backgroundColor: n <= task.stepActive ? task.color : '' }"></span>
@@ -560,7 +599,8 @@ function logout() {
     z-index: 1;
     box-shadow: 0 2px 12px 0 rgba(0,0,0,0.18);
     padding: 5px 24px 16px 24px;
-    min-width: 220px;
+    min-width: 120px;
+    max-width: 100vw;
     display: flex;
     align-items: flex-start;
     justify-content: flex-start;
@@ -589,6 +629,9 @@ function logout() {
     flex-direction: column;
     align-items: flex-start;
     gap: 8px;
+    /* white-space: nowrap; */
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .task-row {
@@ -607,43 +650,44 @@ function logout() {
     color: #fff;
     letter-spacing: 0.01em;
     line-height: 1.1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
 }
 
 .task-down {
     display: flex;
     flex-direction: row;
-    align-items: flex-start;
+    align-items: center;
+    justify-content: center;
     width: 100%;
     gap: 8px;
-    display: flex;
 }
 
 .task-dates {
-    font-size: 1rem;
-    color: #b7c9d1;
-    font-weight: 500;
-    flex: 1.5;
+    text-align: start;
+    min-width: 0;
+    flex: 2;
 }
 
 .task-progress-bar-segments {
     display: flex;
+    width: 100%;
     gap: 6px;
     flex: 2;
-    margin-top: 6px;
-    margin-left: 2px;
-    width: 100%;
-    max-width: 100%;
-    box-sizing: border-box;
+    justify-content: stretch;
+    align-items: center;
     background: rgba(20,30,40,0.85);
     border-radius: 5px;
     padding: 3px 6px;
     min-height: 16px;
+    box-sizing: border-box;
 }
 
 .segment {
     flex: 1 1 0;
-    min-width: 10px;
-    max-width: 32px;
+    min-width: 0;
     height: 10px;
     border-radius: 3px;
     background: rgba(60,70,80,0.55);
@@ -967,5 +1011,20 @@ function logout() {
   color: #fff;
   border-color: #6e4aff;
   opacity: 1;
+}
+.task-dates-small {
+  font-size: 0.88rem;
+  opacity: 0.85;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+@media (max-width: 700px) {
+  .task-down {
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+  }
 }
 </style>
