@@ -55,6 +55,7 @@ const dragOffset = ref(0)
 const dragOverTask = ref(null)
 const dropIndex = ref(null)
 const hoveredTask = ref(null)
+const openedTask = ref(null)
 
 const TASK_HEIGHT = 75
 const TASK_MARGIN = 24
@@ -162,6 +163,13 @@ const handleNextMonth = () => {
 const getMonthName = (month) => {
     return new Date(2000, month, 1).toLocaleString('default', { month: 'long' }).toUpperCase()
 }
+
+function openTaskDetails(task) {
+  openedTask.value = task
+}
+function closeTaskDetails() {
+  openedTask.value = null
+}
 </script>
 
 <template>
@@ -211,6 +219,7 @@ const getMonthName = (month) => {
                             @dragend="handleDragEnd"
                             @mouseenter="hoveredTask = task"
                             @mouseleave="hoveredTask = null"
+                            @click="openTaskDetails(task)"
                         >
                             <div class="task-inner">
                                 <div class="task-row">
@@ -234,6 +243,28 @@ const getMonthName = (month) => {
             </div>
         </div>
     </div>
+    <transition name="modal-fade">
+      <div v-if="openedTask" class="modal-overlay" @click.self="closeTaskDetails">
+        <div class="modal-card">
+          <button class="modal-close" @click="closeTaskDetails">×</button>
+          <div class="modal-content">
+            <div class="modal-row">
+              <span class="modal-icon">📚</span>
+              <span class="modal-title">{{ openedTask.title }}</span>
+            </div>
+            <div class="modal-dates">
+              {{ openedTask.startDate }} {{ getMonthName(currentMonth).slice(0,3) }} – {{ openedTask.endDate }} {{ getMonthName(currentMonth).slice(0,3) }}
+            </div>
+            <div class="modal-progress-bar-segments">
+              <span v-for="n in openedTask.steps" :key="n" class="modal-segment" :class="{ filled: n <= openedTask.stepActive }" :style="{ backgroundColor: n <= openedTask.stepActive ? openedTask.color : '' }"></span>
+            </div>
+            <div class="modal-progress-label">
+              Прогресс: {{ openedTask.stepActive }} / {{ openedTask.steps }}
+            </div>
+          </div>
+        </div>
+      </div>
+    </transition>
 </template>
 
 <style scoped>
@@ -452,5 +483,121 @@ const getMonthName = (month) => {
     pointer-events: none;
     opacity: 1;
     transition: top 0.35s cubic-bezier(.4,2,.6,1), opacity 0.2s;
+}
+
+/* Modal styles */
+.modal-fade-enter-active, .modal-fade-leave-active {
+  transition: opacity 0.25s cubic-bezier(.4,2,.6,1);
+}
+.modal-fade-enter-from, .modal-fade-leave-to {
+  opacity: 0;
+}
+.modal-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(20, 24, 30, 0.82);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: modal-bg-fade 0.25s;
+}
+.modal-card {
+  background: #1b232a;
+  border-radius: 22px;
+  box-shadow: 0 8px 48px 0 rgba(0,0,0,0.38);
+  min-width: 340px;
+  max-width: 96vw;
+  padding: 36px 36px 28px 36px;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  animation: modal-pop 0.28s cubic-bezier(.4,2,.6,1);
+}
+.modal-close {
+  position: absolute;
+  top: 18px;
+  right: 22px;
+  background: none;
+  border: none;
+  color: #fff;
+  font-size: 2rem;
+  cursor: pointer;
+  opacity: 0.7;
+  transition: opacity 0.2s;
+  z-index: 2;
+}
+.modal-close:hover {
+  opacity: 1;
+}
+.modal-content {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 18px;
+}
+.modal-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.modal-icon {
+  font-size: 2.1rem;
+}
+.modal-title {
+  font-size: 1.45rem;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: 0.01em;
+  line-height: 1.2;
+}
+.modal-dates {
+  font-size: 1.13rem;
+  color: #b7c9d1;
+  font-weight: 500;
+  margin-left: 2px;
+}
+.modal-progress-bar-segments {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+  background: rgba(20,30,40,0.85);
+  border-radius: 6px;
+  padding: 6px 10px;
+  min-height: 20px;
+  margin-top: 4px;
+}
+.modal-segment {
+  flex: 1 1 0;
+  min-width: 14px;
+  max-width: 38px;
+  height: 14px;
+  border-radius: 4px;
+  background: rgba(60,70,80,0.55);
+  border: 1px solid rgba(80,90,100,0.18);
+  box-shadow: 0 1px 2px 0 rgba(0,0,0,0.08);
+  transition: background 0.2s, border 0.2s, box-shadow 0.2s;
+}
+.modal-segment.filled {
+  background: var(--segment-color, #25636A);
+  opacity: 0.98;
+  border: 1.5px solid #fff3;
+  box-shadow: 0 2px 6px 0 rgba(0,0,0,0.10);
+}
+.modal-progress-label {
+  font-size: 1.08rem;
+  color: #b7c9d1;
+  margin-top: 2px;
+  margin-left: 2px;
+}
+@keyframes modal-pop {
+  0% { transform: scale(0.92) translateY(30px); opacity: 0; }
+  100% { transform: scale(1) translateY(0); opacity: 1; }
+}
+@keyframes modal-bg-fade {
+  0% { opacity: 0; }
+  100% { opacity: 1; }
 }
 </style>
