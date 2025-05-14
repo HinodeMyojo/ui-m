@@ -270,17 +270,19 @@ function closeAddModal() {
 const showFirework = ref(false)
 
 function addTask() {
-  if (!newTask.value.title || !newTask.value.start || !newTask.value.end) return
-  const startDate = new Date(newTask.value.start)
+  if (!newTask.value.title || !newTask.value.end) return
+  let startDate = newTask.value.start ? new Date(newTask.value.start) : new Date(currentYear.value, currentMonth.value, 1)
   const endDate = new Date(newTask.value.end)
   if (isNaN(startDate) || isNaN(endDate) || endDate < startDate) return
+  const steps = Math.max(0, Number(newTask.value.steps))
+  const stepActive = steps === 0 ? 0 : Math.max(0, Math.min(Number(newTask.value.stepActive), steps))
   const taskToAdd = {
     title: newTask.value.title,
     start: startDate,
     end: endDate,
     color: newTask.value.color,
-    steps: Math.max(1, Number(newTask.value.steps)),
-    stepActive: Math.max(0, Math.min(Number(newTask.value.stepActive), Number(newTask.value.steps))),
+    steps,
+    stepActive,
   }
   addTaskAPI(taskToAdd).then(added => {
     loadTasks()
@@ -412,23 +414,44 @@ function closeEditModal() {
   editTask.value = null
 }
 async function saveEditTask() {
-  if (!editTaskForm.value.title || !editTaskForm.value.start || !editTaskForm.value.end) return
+  if (!editTaskForm.value.title || !editTaskForm.value.end) return
   if (Number(editTaskForm.value.steps) > 25) {
     editError.value = 'Максимум 25 пунктов!'
     return
   }
-  const startDate = new Date(editTaskForm.value.start)
+  let startDate = editTaskForm.value.start ? new Date(editTaskForm.value.start) : new Date(currentYear.value, currentMonth.value, 1)
   const endDate = new Date(editTaskForm.value.end)
   if (isNaN(startDate) || isNaN(endDate) || endDate < startDate) return
+  const steps = Math.max(0, Number(editTaskForm.value.steps))
+  const stepActive = steps === 0 ? 0 : Math.max(0, Math.min(Number(editTaskForm.value.stepActive), steps))
   await updateTask(editTask.value.id, {
     title: editTaskForm.value.title,
     start: startDate,
     end: endDate,
     color: editTaskForm.value.color,
-    steps: Math.max(1, Number(editTaskForm.value.steps)),
-    stepActive: Math.max(0, Math.min(Number(editTaskForm.value.stepActive), Number(editTaskForm.value.steps))),
+    steps,
+    stepActive,
   })
   showEditModal.value = false
+}
+
+const showDeleteConfirm = ref(false)
+const taskToDelete = ref(null)
+function confirmDeleteTask(task) {
+  showDeleteConfirm.value = true
+  taskToDelete.value = task
+}
+function cancelDeleteTask() {
+  showDeleteConfirm.value = false
+  taskToDelete.value = null
+}
+async function doDeleteTask() {
+  if (taskToDelete.value) {
+    await deleteTask(taskToDelete.value.id)
+    showDeleteConfirm.value = false
+    taskToDelete.value = null
+    openedTask.value = null
+  }
 }
 </script>
 
@@ -500,7 +523,7 @@ async function saveEditTask() {
                                     <div class="task-dates" :title="formatDate(task.start) + ' – ' + formatDate(task.end)" :class="{ 'task-dates-small': task.steps > 12 || (task.endDay - task.startDay + 1) < 4 }">
                                         {{ formatShortDateRange(task.start, task.end) }}
                                     </div>
-                                    <div class="task-progress-bar-segments">
+                                    <div class="task-progress-bar-segments" v-if="task.steps > 0">
                                         <span v-for="n in task.steps" :key="n" class="segment" :class="{ filled: n <= task.stepActive }" :style="{ backgroundColor: n <= task.stepActive ? task.color : '' }"></span>
                                     </div>
                                 </div>
@@ -521,14 +544,15 @@ async function saveEditTask() {
               <span class="modal-icon">📚</span>
               <span class="modal-title">{{ openedTask.title }}</span>
               <button class="edit-task-btn" @click.stop="openEditModal(openedTask)" title="Редактировать">✏️</button>
+              <button class="delete-task-btn" @click="confirmDeleteTask(openedTask)" title="Удалить">🗑</button>
             </div>
             <div class="modal-dates">
               {{ formatDate(openedTask.start) }} – {{ formatDate(openedTask.end) }}
             </div>
-            <div class="modal-progress-bar-segments">
+            <div class="modal-progress-bar-segments" v-if="openedTask.steps > 0">
               <span v-for="n in openedTask.steps" :key="n" class="modal-segment" :class="{ filled: n <= openedTask.stepActive }" :style="{ backgroundColor: n <= openedTask.stepActive ? openedTask.color : '' }"></span>
             </div>
-            <div class="modal-progress-label">
+            <div class="modal-progress-label" v-if="openedTask.steps > 0">
               Прогресс: {{ openedTask.stepActive }} / {{ openedTask.steps }}
             </div>
           </div>
@@ -546,7 +570,7 @@ async function saveEditTask() {
                 <input v-model="newTask.title" type="text" required maxlength="60" />
               </label>
               <label>Дата начала
-                <input v-model="newTask.start" type="date" required />
+                <input v-model="newTask.start" type="date" name="start" />
               </label>
               <label>Дата окончания
                 <input v-model="newTask.end" type="date" required />
@@ -555,10 +579,10 @@ async function saveEditTask() {
                 <input v-model="newTask.color" type="color" class="color-fullwidth" />
               </label>
               <label>Всего шагов
-                <input v-model.number="newTask.steps" type="number" min="1" max="99" required />
+                <input v-model.number="newTask.steps" type="number" name="steps" min="0" max="25" />
               </label>
               <label>Выполнено шагов
-                <input v-model.number="newTask.stepActive" type="number" min="0" :max="newTask.steps" required />
+                <input v-model.number="newTask.stepActive" type="number" :min="0" :max="25" :disabled="!newTask.steps" :class="{ 'steps-disabled': !newTask.steps }" />
               </label>
               <button class="add-task-submit" type="submit">Добавить</button>
             </form>
@@ -577,7 +601,7 @@ async function saveEditTask() {
                 <input v-model="editTaskForm.title" type="text" required maxlength="60" />
               </label>
               <label>Дата начала
-                <input v-model="editTaskForm.start" type="date" required />
+                <input v-model="editTaskForm.start" type="date" name="start" />
               </label>
               <label>Дата окончания
                 <input v-model="editTaskForm.end" type="date" required />
@@ -586,14 +610,28 @@ async function saveEditTask() {
                 <input v-model="editTaskForm.color" type="color" class="color-fullwidth" />
               </label>
               <label>Всего шагов
-                <input v-model.number="editTaskForm.steps" type="number" min="1" max="25" required />
+                <input v-model.number="editTaskForm.steps" type="number" min="0" max="25" />
               </label>
               <label>Выполнено шагов
-                <input v-model.number="editTaskForm.stepActive" type="number" min="0" :max="editTaskForm.steps" required />
+                <input v-model.number="editTaskForm.stepActive" type="number" :min="0" :max="25" :disabled="!editTaskForm.steps" :class="{ 'steps-disabled': !editTaskForm.steps }" />
               </label>
               <div v-if="editError" class="form-error">{{ editError }}</div>
               <button class="add-task-submit" type="submit">Сохранить</button>
             </form>
+          </div>
+        </div>
+      </div>
+    </transition>
+    <transition name="modal-fade">
+      <div v-if="showDeleteConfirm" class="modal-overlay" @click.self="cancelDeleteTask">
+        <div class="modal-card delete-confirm-card">
+          <div class="modal-content delete-confirm-content">
+            <h2 class="modal-title">Удалить задачу?</h2>
+            <div class="delete-confirm-text">Вы уверены, что хотите удалить задачу <b>{{ taskToDelete?.title }}</b>?</div>
+            <div class="delete-confirm-btns">
+              <button class="add-task-submit delete-btn" @click="doDeleteTask">Удалить</button>
+              <button class="add-task-btn cancel-btn" @click="cancelDeleteTask">Отмена</button>
+            </div>
           </div>
         </div>
       </div>
@@ -909,7 +947,7 @@ async function saveEditTask() {
   min-width: 320px;
   max-width: 96vw;
   padding: 38px 32px 32px 32px;
-  min-width: 400px;
+  min-width: 500px;
   position: relative;
   display: flex;
   flex-direction: column;
@@ -1061,8 +1099,8 @@ async function saveEditTask() {
   border-radius: 8px;
   font-size: 1.08rem;
   font-weight: 600;
-  padding: 10px 0;
-  margin-top: 10px;
+  padding: 5px 10px;
+  /* margin-top: 10px; */
   cursor: pointer;
   box-shadow: 0 2px 8px 0 rgba(0,0,0,0.10);
   transition: background 0.2s, box-shadow 0.2s;
@@ -1125,5 +1163,77 @@ async function saveEditTask() {
   font-size: 1rem;
   margin-top: 2px;
   min-height: 22px;
+}
+.steps-disabled {
+  background: #23232b !important;
+  color: #888 !important;
+  border-color: #23232b !important;
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+.delete-task-btn {
+  background: none;
+  border: none;
+  color: #b7c9d1;
+  font-size: 1.2rem;
+  margin-left: 8px;
+  cursor: pointer;
+  opacity: 0.7;
+  transition: opacity 0.18s;
+}
+.delete-task-btn:hover {
+  opacity: 1;
+  color: #ff7875;
+}
+.delete-confirm-card {
+  min-width: 340px;
+  max-width: 96vw;
+  padding: 32px 32px 24px 32px;
+  align-items: center;
+}
+.delete-confirm-content {
+  align-items: center;
+  text-align: center;
+  width: 100%;
+  gap: 18px;
+}
+.delete-confirm-text {
+  margin-bottom: 18px;
+  font-size: 1.08rem;
+  color: #b7c9d1;
+}
+.delete-confirm-btns {
+  display: flex;
+  flex-direction: row;
+  gap: 16px;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+}
+.delete-btn {
+  background: linear-gradient(90deg, #ff7875 60%, #d7263d 100%) !important;
+  color: #fff !important;
+  border: none;
+  font-weight: 600;
+  box-shadow: 0 2px 8px 0 rgba(255,0,0,0.10);
+  transition: background 0.18s, box-shadow 0.18s;
+}
+.delete-btn:hover {
+  background: linear-gradient(90deg, #d7263d 60%, #ff7875 100%) !important;
+  color: #fff !important;
+  box-shadow: 0 4px 16px 0 rgba(255,0,0,0.16);
+}
+.cancel-btn {
+  background: #232b33 !important;
+  color: #b7c9d1 !important;
+  border: 1.5px solid #2E2660;
+  font-weight: 500;
+  box-shadow: none;
+  transition: background 0.18s, color 0.18s, border 0.18s;
+}
+.cancel-btn:hover {
+  background: #23232b !important;
+  color: #fff !important;
+  border-color: #6e4aff;
 }
 </style>
