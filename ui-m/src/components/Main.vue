@@ -1,40 +1,36 @@
 <script setup>
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 
 const tasks = ref([
   {
     title: 'Book: Grokking Algorithms',
-    startDate: 2,
-    endDate: 18,
+    start: new Date(2025, 3, 2), // 2 апреля 2024
+    end: new Date(2025, 3, 18),  // 18 апреля 2024
     color: '#25636A',
-    progress: 7 / 9 * 100,
     steps: 9,
     stepActive: 7,
   },
   {
     title: 'LeetCode: 25 problems',
-    startDate: 5,
-    endDate: 30,
+    start: new Date(2025, 4, 5), // 5 мая 2024
+    end: new Date(2025, 4, 30),  // 30 мая 2024
     color: '#6B3B1A',
-    progress: 19 / 25 * 100,
     steps: 25,
     stepActive: 19,
   },
   {
     title: 'Interviews (5)',
-    startDate: 10,
-    endDate: 28,
+    start: new Date(2025, 3, 10), // 10 апреля 2024
+    end: new Date(2025, 3, 28),   // 28 апреля 2024
     color: '#25636A',
-    progress: 2 / 5 * 100,
     steps: 5,
     stepActive: 2,
   },
   {
     title: 'Hackathon Project',
-    startDate: 15,
-    endDate: 28,
+    start: new Date(2025, 2, 29), // 29 марта 2024
+    end: new Date(2025, 3, 5),    // 5 апреля 2024
     color: '#3B3551',
-    progress: 3 / 6 * 100,
     steps: 6,
     stepActive: 3,
   },
@@ -49,6 +45,36 @@ const getDaysInMonth = (month, year) => {
 }
 
 const daysInMonth = ref(getDaysInMonth(currentMonth.value, currentYear.value))
+
+const monthStart = computed(() => new Date(currentYear.value, currentMonth.value, 1))
+const monthEnd = computed(() => new Date(currentYear.value, currentMonth.value, daysInMonth.value))
+
+const visibleTasks = computed(() => {
+  const msMonthStart = monthStart.value.getTime()
+  const msMonthEnd = monthEnd.value.getTime()
+  const result = tasks.value
+    .map(task => {
+      // Определяем границы задачи в текущем месяце
+      const msTaskStart = task.start.getTime()
+      const msTaskEnd = task.end.getTime()
+      const start = msTaskStart < msMonthStart ? monthStart.value : task.start
+      const end = msTaskEnd > msMonthEnd ? monthEnd.value : task.end
+      // Если задача не пересекается с месяцем — не показываем
+      if (msTaskEnd < msMonthStart || msTaskStart > msMonthEnd) return null
+      // Для позиционирования
+      return {
+        ...task,
+        startDay: start.getDate(),
+        endDay: end.getDate(),
+        progress: (task.stepActive / task.steps) * 100,
+      }
+    })
+    .filter(Boolean)
+  // Для отладки
+  console.log('visibleTasks', result)
+  return result
+})
+
 const columns = Array.from({ length: 31 }, (_, i) => i + 1)
 const draggedTask = ref(null)
 const dragOffset = ref(0)
@@ -76,6 +102,11 @@ const handleDragEnd = (event) => {
     dropIndex.value = null
 }
 
+// Получить индекс задачи в исходном массиве по title (или добавить уникальный id в будущем)
+function getTaskIndex(task) {
+  return tasks.value.findIndex(t => t.title === task.title)
+}
+
 const handleDragOver = (event) => {
     event.preventDefault()
     event.dataTransfer.dropEffect = 'move'
@@ -84,30 +115,28 @@ const handleDragOver = (event) => {
     const y = event.clientY - rect.top
     let index = Math.floor((y - TASKS_TOP_OFFSET) / TASK_TOTAL_HEIGHT)
     if (index < 0) index = 0
-    if (index > tasks.value.length) index = tasks.value.length
+    if (index > visibleTasks.value.length) index = visibleTasks.value.length
     dropIndex.value = index
-}
-
-const handleTaskDragOver = (task, event) => {
-    if (task !== draggedTask.value) {
-        dragOverTask.value = task
-    }
-}
-
-const handleTaskDragLeave = () => {
-    dragOverTask.value = null
 }
 
 const handleDrop = (event) => {
     event.preventDefault()
     if (draggedTask.value !== null && dropIndex.value !== null) {
-        const draggedIndex = tasks.value.indexOf(draggedTask.value)
+        // Получаем индекс задачи в исходном массиве
+        const draggedIndex = getTaskIndex(draggedTask.value)
+        // Получаем индекс задачи, на которую дропаем, в visibleTasks
+        let insertIndex = dropIndex.value
+        // Получаем задачу, на которую дропаем (если не в самый конец)
+        let targetTask = visibleTasks.value[insertIndex]
+        // Получаем индекс в исходном массиве
+        let targetIndex = targetTask ? getTaskIndex(targetTask) : tasks.value.length
+        // Если перетаскиваем вниз по списку, и targetIndex > draggedIndex, уменьшаем targetIndex на 1
+        if (targetIndex > draggedIndex) targetIndex--
+        // Перемещаем задачу в исходном массиве
         if (draggedIndex !== -1) {
             const newTasks = [...tasks.value]
             const [movedTask] = newTasks.splice(draggedIndex, 1)
-            let insertIndex = dropIndex.value
-            if (insertIndex > draggedIndex) insertIndex--
-            newTasks.splice(insertIndex, 0, movedTask)
+            newTasks.splice(targetIndex, 0, movedTask)
             tasks.value = newTasks
         }
     }
@@ -170,6 +199,10 @@ function openTaskDetails(task) {
 function closeTaskDetails() {
   openedTask.value = null
 }
+
+function formatDate(date) {
+  return date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', year: '2-digit' })
+}
 </script>
 
 <template>
@@ -199,15 +232,15 @@ function closeTaskDetails() {
                     <div class="column-number">{{ col }}</div>
                 </div>
                 <div class="tasks-container">
-                    <template v-for="(task, index) in tasks" :key="task.title">
+                    <template v-for="(task, index) in visibleTasks" :key="task.title">
                         <div v-if="dropIndex === index" class="drop-indicator" :style="{ top: `${TASKS_TOP_OFFSET + index * TASK_TOTAL_HEIGHT}px` }"></div>
                         <div
                             class="task-item"
                             :class="{ 'drag-over': dragOverTask === task, 'dragging': draggedTask === task }"
                             :style="{
                                 top: `${TASKS_TOP_OFFSET + index * TASK_TOTAL_HEIGHT}px`,
-                                left: `${(task.startDate - 1) * (100 / daysInMonth)}%`,
-                                width: `${(task.endDate - task.startDate + 1) * (100 / daysInMonth)}%`,
+                                left: `${(task.startDay - 1) * (100 / daysInMonth)}%`,
+                                width: `${(task.endDay - task.startDay + 1) * (100 / daysInMonth)}%`,
                                 height: `${TASK_HEIGHT}px`,
                                 marginBottom: `${TASK_MARGIN}px`,
                                 background: hoveredTask === task
@@ -228,14 +261,13 @@ function closeTaskDetails() {
                                 </div>
                                 <div class="task-down">
                                     <div class="task-dates">
-                                    {{ task.startDate }} {{ getMonthName(currentMonth).slice(0,3) }} – {{ task.endDate }} {{ getMonthName(currentMonth).slice(0,3) }}
-                                </div>
-                                <div class="task-progress-bar-segments">
-                                    <span v-for="n in task.steps" :key="n" class="segment" :class="{ filled: n <= task.stepActive }" :style="{ backgroundColor: n <= task.stepActive ? task.color : '' }"></span>
-                                </div>
+                                        {{ formatDate(task.start) }} – {{ formatDate(task.end) }}
+                                    </div>
+                                    <div class="task-progress-bar-segments">
+                                        <span v-for="n in task.steps" :key="n" class="segment" :class="{ filled: n <= task.stepActive }" :style="{ backgroundColor: n <= task.stepActive ? task.color : '' }"></span>
+                                    </div>
                                 </div>
                             </div>
-                            
                         </div>
                     </template>
                     <div v-if="dropIndex === tasks.length" class="drop-indicator" :style="{ top: `${TASKS_TOP_OFFSET + tasks.length * TASK_TOTAL_HEIGHT}px` }"></div>
@@ -253,7 +285,7 @@ function closeTaskDetails() {
               <span class="modal-title">{{ openedTask.title }}</span>
             </div>
             <div class="modal-dates">
-              {{ openedTask.startDate }} {{ getMonthName(currentMonth).slice(0,3) }} – {{ openedTask.endDate }} {{ getMonthName(currentMonth).slice(0,3) }}
+              {{ formatDate(openedTask.start) }} – {{ formatDate(openedTask.end) }}
             </div>
             <div class="modal-progress-bar-segments">
               <span v-for="n in openedTask.steps" :key="n" class="modal-segment" :class="{ filled: n <= openedTask.stepActive }" :style="{ backgroundColor: n <= openedTask.stepActive ? openedTask.color : '' }"></span>
