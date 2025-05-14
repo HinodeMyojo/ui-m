@@ -1,0 +1,104 @@
+.fc {
+    --fc-border-color: #2C2F36;
+    --fc-button-bg-color: #2C2F36;
+    --fc-button-border-color: #2C2F36;
+    --fc-button-hover-bg-color: #3B3F48;
+    --fc-button-hover-border-color: #3B3F48;
+    --fc-button-active-bg-color: #3B3F48;
+    --fc-button-active-border-color: #3B3F48;
+    --fc-today-bg-color: rgba(37, 99, 106, 0.1);
+    --fc-neutral-bg-color: #1E2025;
+    --fc-page-bg-color: #1E2025;
+    --fc-event-bg-color: transparent;
+    --fc-event-border-color: transparent;
+    --fc-event-text-color: white;
+}
+
+.fc .fc-daygrid-day {
+    background: #1E2025;
+}
+
+.fc .fc-daygrid-day-number {
+    color: white;
+}
+
+.fc .fc-col-header-cell {
+    background: #1E2025;
+}
+
+.fc .fc-col-header-cell-cushion {
+    color: white;
+}
+
+.fc-event {
+    border: none !important;
+    background: transparent !important;
+    cursor: move;
+}
+
+.fc-event-main-content {
+    position: relative;
+    padding: 4px 8px;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+.fc-event-title {
+    color: white;
+    font-size: 12px;
+    margin-bottom: 4px;
+}
+
+.fc-event-progress {
+    height: 4px;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 2px;
+    margin-bottom: 4px;
+}
+
+.fc-event-steps {
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 11px;
+}
+
+.fc-button-primary {
+    background-color: #2C2F36 !important;
+    border-color: #2C2F36 !important;
+}
+
+.fc-button-primary:hover {
+    background-color: #3B3F48 !important;
+    border-color: #3B3F48 !important;
+}
+
+.fc-button-primary:disabled {
+    background-color: #1E2025 !important;
+    border-color: #1E2025 !important;
+}
+
+.fc-toolbar-title {
+    color: white !important;
+}
+
+.fc-day-today {
+    background: rgba(37, 99, 106, 0.1) !important;
+}
+
+.fc-daygrid-event {
+    background: transparent !important;
+    border: none !important;
+}
+
+.fc-daygrid-event-dot {
+    display: none !important;
+}
+
+.fc-daygrid-day-events {
+    padding: 2px !important;
+}
+
+.fc-event-time {
+    display: none !important;
+} 
