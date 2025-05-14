@@ -206,24 +206,17 @@ const getMonthName = (month) => {
                             @dragstart="handleDragStart(task, $event)"
                             @dragend="handleDragEnd"
                         >
-                            <div class="task-progress">
-                                <div class="task-progress-bar" 
-                                    :style="{ 
-                                        width: `${task.progress}%`,
-                                        backgroundColor: task.color
-                                    }">
+                            <div class="task-inner">
+                                <div class="task-row">
+                                    <span class="task-icon">📚</span>
+                                    <span class="task-title">{{ task.title }}</span>
                                 </div>
-                                <div class="task-info">
-                                    <!-- {{ task.title }} ({{ task.stepActive }}/{{ task.steps }}) -->
-                                    <div class="task-model">
-                                        <div class="task-model-title">
-                                            {{ task.title }}
-                                        </div>
-                                        <div class="task-model-progress">
-                                            {{ task.stepActive }}/{{ task.steps }}
-                                        </div>
-                                    </div>
+                                <div class="task-dates">
+                                    {{ task.startDate }} {{ getMonthName(currentMonth).slice(0,3) }} – {{ task.endDate }} {{ getMonthName(currentMonth).slice(0,3) }}
                                 </div>
+                            </div>
+                            <div class="task-progress-bar-segments">
+                                    <span v-for="n in task.steps" :key="n" class="segment" :class="{ filled: n <= task.stepActive }" :style="{ backgroundColor: n <= task.stepActive ? task.color : '' }"></span>
                             </div>
                         </div>
                     </template>
@@ -291,14 +284,29 @@ const getMonthName = (month) => {
     pointer-events: auto;
     cursor: move;
     user-select: none;
+    border-radius: 18px;
     transition:
         top 0.35s cubic-bezier(.4,2,.6,1),
         box-shadow 0.25s cubic-bezier(.4,2,.6,1),
         background 0.25s,
         transform 0.25s,
-        z-index 0.25s;
-    will-change: top, box-shadow, background, transform;
+        z-index 0.25s,
+        border-radius 0.2s;
+    will-change: top, box-shadow, background, transform, border-radius;
     z-index: 1;
+    background: #18343b;
+    box-shadow: 0 2px 12px 0 rgba(0,0,0,0.18);
+    padding: 20px 28px 18px 24px;
+    min-width: 220px;
+    display: flex;
+    align-items: flex-start;
+    justify-content: flex-start;
+}
+
+.task-item:hover {
+    box-shadow: 0 6px 24px 0 rgba(80,200,255,0.18), 0 1.5px 6px 0 rgba(0,0,0,0.10);
+    background: rgba(60, 80, 100, 0.92) !important;
+    filter: brightness(1.08);
 }
 
 .task-item.dragging {
@@ -312,35 +320,64 @@ const getMonthName = (month) => {
     transform: translateY(10px);
 }
 
-.task-progress {
+.task-inner {
     width: 100%;
-    height: 100%;
-    border-radius: 4px;
-    overflow: hidden;
-    position: relative;
-    background: rgba(30, 32, 37, 0.3);
-    backdrop-filter: blur(4px);
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
 }
 
-.task-progress-bar {
-    height: 100%;
-    border-radius: 4px;
-    transition: width 0.3s ease;
+.task-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
 }
 
-.task-info {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    color: white;
-    font-size: 12px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    width: 90%;
-    text-align: center;
-    z-index: 1;
+.task-icon {
+    font-size: 1.6rem;
+    margin-right: 2px;
+}
+
+.task-title {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #fff;
+    letter-spacing: 0.01em;
+    line-height: 1.2;
+}
+
+.task-dates {
+    font-size: 1.08rem;
+    color: #b7c9d1;
+    margin-left: 2px;
+    margin-top: 2px;
+    font-weight: 500;
+}
+
+.task-progress-bar-segments {
+    display: flex;
+    gap: 6px;
+    margin-top: 6px;
+    margin-left: 2px;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+}
+
+.segment {
+    flex: 1 1 0;
+    min-width: 10px;
+    max-width: 32px;
+    height: 10px;
+    border-radius: 3px;
+    background: rgba(255,255,255,0.08);
+    transition: background 0.2s;
+}
+
+.segment.filled {
+    background: var(--segment-color, #25636A);
+    opacity: 0.95;
 }
 
 .main {
