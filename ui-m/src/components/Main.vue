@@ -6,42 +6,6 @@ import { useRouter } from 'vue-router'
 
 // --- API STUBS ---
 const fakeTasks = [
-  {
-    id: 1,
-    title: 'Book: Grokking Algorithms',
-    start: new Date(2025, 3, 2),
-    end: new Date(2025, 3, 18),
-    color: '#25636A',
-    steps: 9,
-    stepActive: 7,
-  },
-  {
-    id: 2,
-    title: 'LeetCode: 25 problems',
-    start: new Date(2025, 4, 5),
-    end: new Date(2025, 4, 30),
-    color: '#6B3B1A',
-    steps: 25,
-    stepActive: 19,
-  },
-  {
-    id: 3,
-    title: 'Interviews (5)',
-    start: new Date(2025, 3, 10),
-    end: new Date(2025, 3, 28),
-    color: '#25636A',
-    steps: 5,
-    stepActive: 2,
-  },
-  {
-    id: 4,
-    title: 'Hackathon Project',
-    start: new Date(2025, 2, 29),
-    end: new Date(2025, 3, 5),
-    color: '#3B3551',
-    steps: 6,
-    stepActive: 3,
-  },
 ]
 
 let idCounter = 5
@@ -240,6 +204,7 @@ function closeTaskDetails() {
 }
 
 function formatDate(date) {
+  // console.log(date)
   return date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', year: '2-digit' })
 }
 
