@@ -75,20 +75,39 @@ export async function fetchTasks() {
   // return [...fakeTasks];
 }
 export async function addTaskAPI(task) {
-  // Здесь будет POST на бэк
-  const newTask = { ...task, id: idCounter++ }
-  fakeTasks.push(newTask)
-  return newTask
+  console.log(task)
+  // const newTask = { ...task, id: idCounter++ }
+  const newTask = {
+    title: task.title,
+    start: task.start,
+    end: task.end,
+    steps: [],
+    color: task.color,
+  }
+  await fetch(`http://localhost:5005/api/v1/tasks`, {
+    method:'POST',
+    body: JSON.stringify(newTask),
+  });
+  // fakeTasks.push(newTask)
+  // return newTask
 }
 export async function deleteTaskAPI(id) {
   // Здесь будет DELETE на бэк
-  const idx = fakeTasks.findIndex(t => t.id === id)
-  if (idx !== -1) fakeTasks.splice(idx, 1)
-  return true
+  await fetch(`http://localhost:5005/api/v1/tasks/${id}`, {
+    method:'DELETE'
+  });
 }
 export async function updateTaskAPI(id, patch) {
   // Здесь будет PATCH/PUT на бэк
-  const idx = fakeTasks.findIndex(t => t.id === id)
-  if (idx !== -1) Object.assign(fakeTasks[idx], patch)
-  return fakeTasks[idx]
+  const updateTask = {
+    title: patch.title,
+    start: patch.start,
+    end: patch.end,
+    steps: [],
+    color: patch.color,
+  }
+  await fetch(`http://localhost:5005/api/v1/tasks/${id}`, {
+    method:'PUT',
+    body: JSON.stringify(updateTask)
+  })
 } 

@@ -70,7 +70,8 @@ const SEGMENT_GAP = 6
 const TASK_PADDING = 48 // 24px слева и справа
 const calendarRef = ref(null)
 const calendarWidth = ref(0)
-const MAX_TASK_WIDTH_PERC = 0.5
+// const MAX_TASK_WIDTH_PERC = 0.5
+const MAX_TASK_WIDTH_PERC = 1
 const MIN_TASK_WIDTH = 120
 
 function updateCalendarWidth() {
@@ -80,11 +81,15 @@ function updateCalendarWidth() {
 }
 
 function calcTaskWidth(task) {
+  console.log('calcTaskWidth', task)
   const days = task.endDay - task.startDay + 1
+  console.log('days', days)
   if (days <= 3) return MIN_TASK_WIDTH
   if (!calendarWidth.value || !daysInMonth.value) return 200
   const widthByDays = (calendarWidth.value / daysInMonth.value) * days
+  console.log('calcTaskWidth', widthByDays)
   const maxWidth = calendarWidth.value * MAX_TASK_WIDTH_PERC
+  console.log('maxWidth', maxWidth)
   return Math.min(widthByDays, maxWidth)
 }
 
@@ -439,6 +444,7 @@ async function doDeleteTask() {
                 <div class="tasks-container">
                     <template v-for="(task, index) in visibleTasks" :key="task.title">
                         <div v-if="dropIndex === index" class="drop-indicator" :style="{ top: `${TASKS_TOP_OFFSET + index * TASK_TOTAL_HEIGHT}px` }"></div>
+                        <!-- <div>{{ task }}</div> -->
                         <div
                             class="task-item"
                             :class="{ 'drag-over': dragOverTask === task, 'dragging': draggedTask === task }"
