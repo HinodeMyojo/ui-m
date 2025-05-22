@@ -4,10 +4,6 @@ import confetti from 'canvas-confetti'
 import { fetchTasks, addTaskAPI, deleteTaskAPI, updateTaskAPI } from './api.js'
 import { useRouter } from 'vue-router'
 
-// --- API STUBS ---
-const fakeTasks = [
-]
-
 let idCounter = 5
 
 const tasks = ref([])
@@ -32,6 +28,7 @@ const monthEnd = computed(() => new Date(currentYear.value, currentMonth.value, 
 const visibleTasks = computed(() => {
   const msMonthStart = monthStart.value.getTime()
   const msMonthEnd = monthEnd.value.getTime()
+  console.log(tasks.value)
   const result = tasks.value
     .map(task => {
       // Определяем границы задачи в текущем месяце
@@ -234,6 +231,7 @@ function closeAddModal() {
 }
 const showFirework = ref(false)
 
+
 function addTask() {
   if (!newTask.value.title || !newTask.value.end) return
   let startDate = newTask.value.start ? new Date(newTask.value.start) : new Date(currentYear.value, currentMonth.value, 1)
@@ -317,24 +315,6 @@ onBeforeUnmount(() => {
   window.removeEventListener('resize', updateCalendarWidth)
   window.removeEventListener('keydown', handleKeydown)
 })
-
-function getConfettiStyle(n) {
-  const angle = (360 / 22) * n
-  const colorList = ['#ffec3d','#ff85c0','#5cdbd3','#ffd666','#69c0ff','#b37feb','#ff7875','#95de64','#fffbe6','#ffadd2','#bae7ff','#ffd6e7']
-  const color = colorList[n % colorList.length]
-  const size = 12 + (n % 3) * 8
-  const isStar = n % 4 === 0
-  const rotate = Math.floor(Math.random() * 360)
-  return {
-    '--angle': `${angle}deg`,
-    '--confetti-color': color,
-    '--confetti-size': `${size}px`,
-    '--confetti-rotate': `${rotate}deg`,
-    '--confetti-glow': isStar ? '0 0 16px 4px #fff8' : '0 0 8px 2px #fff6',
-    '--confetti-shape': isStar ? 'polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%)' : 'circle(50% at 50% 50%)',
-    '--confetti-scale': isStar ? 1.2 : 1,
-  }
-}
 
 const router = useRouter()
 

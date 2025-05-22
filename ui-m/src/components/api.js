@@ -61,7 +61,18 @@ let idCounter = 6
 
 export async function fetchTasks() {
   // Здесь будет реальный запрос к бэку
-  return JSON.parse(JSON.stringify(fakeTasks))
+  const now = new Date();
+  const yyyy = now.getFullYear();
+  const mm = String(now.getMonth() + 1).padStart(2, '0');
+  const dd = String(now.getDate()).padStart(2, '0');
+  const formattedDate = `${yyyy}-${mm}-${dd}`;
+
+  const response = await fetch(`http://localhost:5005/api/v1/tasks?date=${formattedDate}`);
+  const data = await response.json();
+  return data;
+
+  // Возвращаем заглушку
+  // return [...fakeTasks];
 }
 export async function addTaskAPI(task) {
   // Здесь будет POST на бэк
