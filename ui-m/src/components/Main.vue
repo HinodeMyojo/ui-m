@@ -403,6 +403,11 @@ async function doDeleteTask() {
     openedTask.value = null
   }
 }
+
+function  getToday() {
+  var today = new Date();
+  return today
+}
 </script>
 
 <template>
@@ -438,7 +443,8 @@ async function doDeleteTask() {
                  @drop="handleDrop">
                 <div v-for="col in daysInMonth" 
                      :key="col" 
-                     class="column active">
+                     class="column active"
+                     :class="{  today: getToday().getFullYear() === currentYear && getToday().getMonth() === currentMonth && col === getToday().getDate() }">
                     <div class="column-number">{{ col }}</div>
                 </div>
                 <div class="tasks-container">
@@ -621,6 +627,11 @@ async function doDeleteTask() {
 
 .column.active {
     opacity: 1;
+}
+
+.column.active.today {
+    opacity: 1;
+    background-color: #2e26601f;
 }
 
 .column-number {
