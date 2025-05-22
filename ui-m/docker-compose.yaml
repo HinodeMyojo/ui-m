@@ -1,0 +1,13 @@
+
+services:
+  ui-m:
+    build: .
+    ports:
+      - "5173:8080"
+    networks:
+      - month_tracker
+
+networks:
+  month_tracker:
+    driver: bridge
+    external: true
