@@ -1,4 +1,21 @@
-@import './base.css';
+@import "./base.css";
+@import "tailwindcss";
+
+@theme {
+  --color-midnight: #121063;
+  --color-tahiti: #3ab7bf;
+  --color-bermuda: #78dcca;
+  --color-sunflower: #f2c464;
+  --color-night: #0b0f1a;
+  --color-deepPurple: #2e1a47;
+  --color-neonPink: #ff3ca6;
+  --color-neonBlue: #00ffff;
+  --color-neonPurple: #9b59b6;
+  --color-neonCyan: #00d9f5;
+  --color-starYellow: #ffd93d;
+  --color-starWhite: #e9f1f7;
+  --color-starBlack: #2e2660;
+}
 
 #app {
   width: 100%;

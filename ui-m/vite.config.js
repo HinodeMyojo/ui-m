@@ -1,28 +1,26 @@
-import { fileURLToPath, URL } from 'node:url'
+import { fileURLToPath, URL } from "node:url";
 
-import { defineConfig } from 'vite'
-import vue from '@vitejs/plugin-vue'
-import vueDevTools from 'vite-plugin-vue-devtools'
+import { defineConfig } from "vite";
+import vue from "@vitejs/plugin-vue";
+import vueDevTools from "vite-plugin-vue-devtools";
+import tailwindcss from "@tailwindcss/vite";
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [
-    vue(),
-    vueDevTools(),
-  ],
+  plugins: [vue(), vueDevTools(), tailwindcss()],
   resolve: {
     alias: {
-      '@': fileURLToPath(new URL('./src', import.meta.url)),
+      "@": fileURLToPath(new URL("./src", import.meta.url)),
       process: "process/browser",
       stream: "stream-browserify",
       zlib: "browserify-zlib",
-      util: 'util'
+      util: "util",
     },
   },
   ssr: {
-    noExternal: ['vuetify']
+    noExternal: ["vuetify"],
   },
   server: {
-    host: '0.0.0.0',
+    host: "0.0.0.0",
   },
-})
+});
