@@ -4,6 +4,8 @@ import confetti from 'canvas-confetti'
 import { fetchTasks, addTaskAPI, deleteTaskAPI, updateTaskAPI } from './api.js'
 import { useRouter } from 'vue-router'
 
+import TaskDetails from '@/components/modals/TaskDetails.vue'
+
 let idCounter = 5
 
 const tasks = ref([])
@@ -517,6 +519,12 @@ function  getToday() {
       </div>
     </transition>
     <transition name="modal-fade">
+      <div class="modal-overlay-2" >
+      <!-- <div v-if="openedTask" class="modal-overlay" @click.self="closeTaskDetails"> -->
+        <TaskDetails/>
+      </div>
+    </transition>
+    <transition name="modal-fade">
       <div v-if="showAddModal" class="modal-overlay" @click.self="closeAddModal">
         <div class="modal-card">
           <button class="modal-close" @click="closeAddModal">×</button>
@@ -902,6 +910,18 @@ function  getToday() {
   justify-content: center;
   animation: modal-bg-fade 0.25s;
 }
+.modal-overlay-2{
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  /* background: rgba(20, 24, 30, 0.82); */
+  z-index: 1000;
+  /* height: 90%; */
+  display: flex;
+  align-items: center;
+  justify-content: right;
+  animation: modal-bg-fade 0.25s;
+}
+
 .modal-card {
   background: #23232b;
   border-radius: 18px;
