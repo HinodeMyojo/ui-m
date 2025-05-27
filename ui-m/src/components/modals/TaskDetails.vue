@@ -403,6 +403,27 @@ const clickSubtask = async (id) => {
   width: 100%;
   max-height: 100%;
   overflow-y: auto;
+  scrollbar-width: thin; /* Для Firefox */
+  scrollbar-color: #888 #111; /* Цвет полосы и трека */
+}
+
+/* Chrome, Safari, Edge */
+.chat-main::-webkit-scrollbar {
+  width: 8px;
+}
+
+.chat-main::-webkit-scrollbar-track {
+  background: #111; /* Трек (фон) */
+}
+
+.chat-main::-webkit-scrollbar-thumb {
+  background-color: #888; /* Цвет полосы */
+  border-radius: 4px;
+  border: 2px solid #111; /* Отступ внутри трека */
+}
+
+.chat-main::-webkit-scrollbar-thumb:hover {
+  background-color: #aaa;
 }
 .chat-background {
   display: flex;
