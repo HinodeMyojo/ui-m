@@ -96,17 +96,22 @@
                       Array.isArray(message.images) && message.images.length
                     "
                   >
-                    <div class="chat-message-image">
+                    <div
+                      class="chat-message-image"
+                      :class="'count-' + message.images.length"
+                    >
                       <div
                         class="chat-thumbnails"
-                        v-for="img in message.images"
-                        :key="img.imageId"
+                        :class="'x' + index"
+                        v-for="(img, index) in message.images"
+                        :key="index"
                         @click="openImage(img.imageId)"
                       >
                         <img
                           :src="img.thumbnail"
                           alt="User Image"
                           v-if="img.thumbnail"
+                          :class="'img-' + index"
                         />
                       </div>
                     </div>
@@ -146,6 +151,7 @@
 import SvgIcon from "@jamescoyle/vue-icon";
 import { mdiSendCircleOutline } from "@mdi/js";
 import { useTemplateRef, onBeforeUnmount, onMounted, reactive, ref } from "vue";
+
 import chat from "./test.js";
 import bonfire from "../../assets/gif/bonfire-dark-souls.gif";
 
@@ -299,21 +305,16 @@ const clickSubtask = async (id) => {
 }
 
 .title {
-  /* flex: 1; */
   display: flex;
   justify-content: center;
   align-items: center;
-  /* background-color: #2E2660; */
   width: 100%;
   height: 100%;
 }
 .progres {
-  /* flex: 1.5; */
-  /* display: flex; */
   justify-content: center;
   align-items: center;
   gap: 10px;
-  /* background-color: #8d4c21; */
   width: 100%;
   flex-direction: column;
   height: 100%;
@@ -321,15 +322,6 @@ const clickSubtask = async (id) => {
 .today-progres,
 .need-progres {
   width: 100%;
-}
-.inner-menu {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  flex-direction: row;
-  flex: 10;
-  gap: 7px;
-  width: 100%;
-  max-height: 100%;
 }
 
 .subtasks {
@@ -339,7 +331,6 @@ const clickSubtask = async (id) => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  /* background-color: aquamarine; */
 }
 .subtask {
   cursor: grab;
@@ -358,10 +349,7 @@ const clickSubtask = async (id) => {
   height: 40px;
   gap: 15px;
   border-radius: 5px;
-  /* border-bottom-right-radius: 0px;
-  border-top-right-radius: 0px; */
   user-select: none;
-  /* background-color: aquamarine; */
 }
 .subtask :hover {
   background-color: #252139;
@@ -376,15 +364,23 @@ const clickSubtask = async (id) => {
   line-height: 29px;
   color: #ffffff;
 }
-.chat {
+
+.inner-menu {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  flex-direction: row;
+  gap: 7px;
   width: 100%;
   max-height: 100%;
+}
+
+.chat {
   display: grid;
+  height: 700px;
   grid-template-rows: 1fr 10fr 1fr;
   justify-content: center;
   align-items: center;
   border-radius: 20px;
-  /* border-top-left-radius: 0px; */
   background-color: #120e16;
   overflow: hidden;
 }
@@ -401,11 +397,9 @@ const clickSubtask = async (id) => {
   font-size: 22px;
   font-weight: 400;
   line-height: 29px;
-  /* color: #ffffff; */
 }
 .chat-main {
   display: grid;
-  /* flex: 10; */
   width: 100%;
   max-height: 100%;
   overflow-y: auto;
@@ -418,9 +412,7 @@ const clickSubtask = async (id) => {
   opacity: 0.4;
 }
 .chat-input {
-  /* display: flex; */
   flex-direction: column;
-  /* flex: 2; */
   width: 100%;
   gap: 10px;
   padding: 10px 10px 0px 10px;
@@ -453,20 +445,21 @@ const clickSubtask = async (id) => {
   background-color: #25213980;
   padding: 10px;
   width: 100%;
+  /* max-height: 210px; */
   display: flex;
   border-radius: 10px;
   flex-direction: column;
-  /* gap: 10px; */
 }
 .message hr {
   color: #ffffff0e;
 }
 .chat-main-inner {
   width: 100%;
+  height: 100%;
   display: grid;
-  grid-template-rows: repeat(auto-fit, minmax(100px, 1fr));
-  /* display: flex; */
-  /* flex-direction: column; */
+
+  /* grid-template-rows: repeat(auto-fit, minmax(100px, 1fr)); */
+  /* grid-template-columns: 1fr 60px; */
   align-items: flex-start;
   gap: 10px;
   padding: 10px 10px 10px 10px;
@@ -492,19 +485,14 @@ const clickSubtask = async (id) => {
   width: 100%;
   text-align: end;
   font-size: 12px;
-  /* line-height: 29px; */
-  /* color: #ffffff; */
 }
 .chat-thumbnails {
-  width: 100%;
   cursor: pointer;
-  display: flex;
-}
-.chat-message-image {
   display: grid;
-  /* grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); */
-  /* grid-auto-rows: minmax(10px, auto); */
-  gap: 10px;
+  padding: 3px;
+}
+.chat-thumbnails img {
+  border-radius: 10px;
 }
 
 .chat-inner-message {
@@ -512,6 +500,83 @@ const clickSubtask = async (id) => {
   gap: 10px;
   flex-direction: column;
 }
+/*  */
+.image-grid {
+  display: grid;
+  gap: 8px;
+}
+
+/* Один элемент */
+.count-1 {
+  grid-template-columns: 1fr;
+}
+
+/* Два элемента — две колонки */
+.count-2 {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.chat-message-image {
+  display: grid;
+}
+
+.count-3 {
+  grid-template-columns: 2fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  grid-template-areas:
+    "main img1"
+    "main img2";
+  /* gap: 8px; */
+}
+
+.count-3 .x0 {
+  grid-area: main;
+}
+.count-3 .x1 {
+  grid-area: img1;
+}
+.count-3 .x2 {
+  grid-area: img2;
+}
+
+/* Четыре элемента: равномерная сетка 2x2 */
+.count-4 {
+  grid-template-columns: repeat(2, 1fr);
+  grid-template-rows: repeat(2, 1fr);
+}
+
+.count-5 {
+  grid-template-areas:
+    "img0 img0"
+    "img1 img2"
+    "img3 img4";
+}
+.count-5 .x0 {
+  grid-area: img0;
+}
+.count-5 .x1 {
+  grid-area: img1;
+}
+.count-5 .x2 {
+  grid-area: img2;
+}
+.count-5 .x3 {
+  grid-area: img3;
+}
+.count-5 .x4 {
+  grid-area: img4;
+}
+
+/* Общие стили изображений */
+.image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 6px;
+}
+
+/*  */
+
 .title h3 {
   font-family: "Montserrat", 0;
   font-style: normal;
