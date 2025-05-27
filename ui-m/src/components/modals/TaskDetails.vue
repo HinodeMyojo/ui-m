@@ -35,18 +35,23 @@
               class="bg-neonPink h-3.5 rounded-full"
               :style="{
                 width: needProgress() === -1 ? '100%' : needProgress() + '%',
-                backgroundColor:
-                  needProgress() === -1 ? 'red' : 'rgb(255, 105, 180)',
+                backgroundColor: needProgress() === -1 ? 'red' : '#c14481',
               }"
             ></div>
           </div>
         </div>
       </div>
       <div class="inner-menu">
-        <div class="subtasks">
+        <div
+          class="subtasks"
+          @drop="onDrop($event, task.subtasks)"
+          @dragover="onDragOver"
+        >
           <div
             v-for="(subtask, index) in task.subtasks"
             :key="index"
+            draggable="true"
+            @dragstart="startDrag($event, subtask)"
             class="subtask"
           >
             <div class="subtask-boba">
@@ -56,7 +61,7 @@
                 :id="'subtask-' + index"
                 class="w-4 h-4 accent-blue"
               />
-              <label
+              <span
                 :for="'subtask-' + index"
                 :class="{ 'text-gray-500': subtask.completed }"
                 class="flex-1 overflow-hidden"
@@ -64,18 +69,44 @@
                 <h3 class="truncate block text-white" title="subtask.title">
                   {{ subtask.title }}
                 </h3>
-              </label>
+              </span>
             </div>
           </div>
         </div>
 
-        <div class="chat"></div>
+        <div class="chat">
+          <div class="chat-main">
+            <div class="chat-image">
+              <img :src="bonfire" alt="Bonfire GIF" />
+            </div>
+          </div>
+          <div class="chat-input"></div>
+        </div>
       </div>
     </div>
   </div>
 </template>
 <script setup>
-import { defineProps } from "vue";
+import { defineProps, reactive } from "vue";
+import bonfire from "../../assets/gif/bonfire-dark-souls.gif";
+
+// для начала перетаскивания
+function startDrag(evt, item, index) {
+  evt.dataTransfer.effectAllowed = "move";
+  evt.dataTransfer.setData("itemID", item.id);
+  evt.dataTransfer.setData("fromIndex", index);
+}
+
+// когда закинули объект
+function onDrop(evt, targetList) {
+  evt.preventDefault();
+  const itemID = parseInt(evt.dataTransfer.getData("text/plain"));
+  const item = targetList.find((i) => i.id === itemID);
+}
+
+function onDragOver(evt) {
+  evt.preventDefault();
+}
 
 function computeProgres() {
   var persent = Math.round((task.completed / task.total) * 100);
@@ -105,7 +136,7 @@ function checkNeedPersentText() {
   return "Нужно брат";
 }
 
-const task = {
+const task = reactive({
   id: 0,
   title: "Тестовая задача",
   description: "Нужно сделать очень много всего",
@@ -139,7 +170,7 @@ const task = {
       completed: false,
     },
   ],
-};
+});
 
 const chat = {
   id: 0,
@@ -236,6 +267,13 @@ const chat = {
   white-space: nowrap;
   /* background-color: aquamarine; */
 }
+.subtask {
+  cursor: grab;
+  user-select: none;
+}
+.subtask :active {
+  cursor: grabbing;
+}
 .subtask-boba {
   display: flex;
   padding-left: 10px;
@@ -263,8 +301,27 @@ const chat = {
   height: 100%;
   display: flex;
   flex-direction: column;
-  justify-content: flex-start;
-  /* background-color: aqua; */
+  justify-content: center;
+  align-items: center;
+  /* border: #3b2e4b solid 1px; */
+  border-radius: 20px;
+  border-top-left-radius: 0px;
+  background-color: #120e16;
+}
+.chat-main {
+  display: flex;
+  flex: 2;
+}
+.chat-image {
+  display: flex;
+  flex: 1;
+  justify-content: center;
+  align-items: center;
+  opacity: 0.4;
+}
+.chat-input {
+  display: flex;
+  flex: 1;
 }
 
 .title h3 {
