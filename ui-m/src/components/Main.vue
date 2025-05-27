@@ -648,7 +648,12 @@ function getToday() {
       </div>
     </div>
   </transition>
-
+  <transition name="modal-fade">
+    <div class="modal-overlay-2">
+      <!-- <div v-if="openedTask" class="modal-overlay" @click.self="closeTaskDetails"> -->
+      <TaskDetails />
+    </div>
+  </transition>
   <transition name="modal-fade">
     <div v-if="showAddModal" class="modal-overlay" @click.self="closeAddModal">
       <div class="modal-card">
