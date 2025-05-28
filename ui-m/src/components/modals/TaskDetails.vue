@@ -92,7 +92,16 @@
 
         <div class="chat" ref="chatRef">
           <div class="chat-header">
-            <h3>{{ chatValue?.name || "Общий чат" }}</h3>
+            <div class="chat-header-content">
+              <button
+                v-if="chatValue?.id !== task.chatId"
+                class="back-button"
+                @click="openTaskChat"
+              >
+                <svg-icon type="mdi" :path="mdiArrowLeft" size="20"></svg-icon>
+              </button>
+              <h3>{{ chatValue?.name || task.title }}</h3>
+            </div>
           </div>
           <div
             class="chat-main"
@@ -362,10 +371,7 @@ import {
   mdiPencil,
   mdiCheck,
   mdiFileDocument,
-  // mdiFilePdfBox,
-  // mdiFileWord,
-  // mdiFileExcel,
-  // mdiFileText,
+  mdiArrowLeft,
 } from "@mdi/js";
 import {
   useTemplateRef,
@@ -461,6 +467,7 @@ const task = reactive({
   total: 3,
   completed: 1,
   required: 2,
+  chatId: 0, // Добавляем ID чата для задачи
   subtasks: [
     {
       id: 0,
@@ -524,6 +531,16 @@ const clickSubtask = async (subtask) => {
   }
 };
 
+// Добавляем функцию для открытия общего чата задачи
+const openTaskChat = () => {
+  chatValue.value = { name: task.title, id: task.chatId };
+  const chatR = chat[chatValue.value.id];
+  if (chatR) {
+    messagesVar.value = chatR.messages;
+    setTimeout(scrollToBottom, 100);
+  }
+};
+
 // Прокрутка при отправке сообщения
 async function sendMessage() {
   const chatMessageRef = ref(null);
@@ -535,12 +552,24 @@ async function sendMessage() {
     id: Date.now(),
     text: messageText,
     date: new Date().toLocaleTimeString(),
-    images: previewFiles.value
-      .filter((file) => file.type.startsWith("image/"))
-      .map((file) => ({
-        imageId: Date.now() + Math.random(),
-        thumbnail: file.preview,
-      })),
+    attachments: {
+      images: previewFiles.value
+        .filter((file) => file.type.startsWith("image/"))
+        .map((file) => ({
+          id: Date.now() + Math.random(),
+          original: file.preview,
+          thumbnail: file.preview,
+        })),
+      files: previewFiles.value
+        .filter((file) => !file.type.startsWith("image/"))
+        .map((file) => ({
+          id: Date.now() + Math.random(),
+          name: file.name,
+          type: file.type,
+          size: file.file.size,
+          url: URL.createObjectURL(file.file),
+        })),
+    },
   };
 
   // Добавляем сообщение в чат
@@ -554,8 +583,9 @@ async function sendMessage() {
   setTimeout(scrollToBottom, 100);
 }
 
-// Добавляем обработчик изменения размера окна
+// Инициализируем общий чат задачи при монтировании компонента
 onMounted(() => {
+  openTaskChat();
   window.addEventListener("resize", scrollToBottom);
 });
 
@@ -994,13 +1024,15 @@ function getFileIcon(type) {
 .chat-header h3 {
   padding-left: 8px;
   font-size: 18px;
-  max-width: 100%;
   font-weight: 500;
   line-height: 1.4;
+  color: #ffffff;
+  margin: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: #ffffff;
+  flex: 1;
+  min-width: 0;
 }
 .chat-main {
   display: grid;
@@ -1656,5 +1688,85 @@ function getFileIcon(type) {
 
 .chat-thumbnails .remove-attachment:hover {
   background: rgba(218, 54, 51, 0.7);
+}
+
+.chat-header-content {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 0 8px;
+  min-width: 0;
+}
+
+.back-button {
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.6);
+  padding: 4px;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.back-button:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.chat-switch-button {
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.6);
+  padding: 4px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+}
+
+.chat-switch-button:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.chat-switch-button.active {
+  color: #6e4aff;
+  background: rgba(110, 74, 255, 0.1);
+}
+
+.chat-divider {
+  color: rgba(255, 255, 255, 0.3);
+  font-size: 14px;
+}
+
+.subtask-chats {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.subtask-chats::-webkit-scrollbar {
+  height: 4px;
+}
+
+.subtask-chats::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+}
+
+.subtask-chats::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 2px;
+}
+
+.subtask-chats::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
 }
 </style>
