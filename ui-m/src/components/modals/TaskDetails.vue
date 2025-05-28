@@ -134,7 +134,11 @@
           </div>
           <div class="chat-input">
             <div class="chat-input-inner">
-              <input type="text" placeholder="Введите сообщение..." />
+              <!-- <textarea
+                id="auto-resize"
+                placeholder="Введите сообщение..."
+              ></textarea> -->
+              <chat-message></chat-message>
             </div>
             <div class="chat-input-buttoms">
               <div class="send-icon">
@@ -154,6 +158,7 @@ import { useTemplateRef, onBeforeUnmount, onMounted, reactive, ref } from "vue";
 
 import chat from "./test.js";
 import bonfire from "../../assets/gif/bonfire-dark-souls.gif";
+import ChatMessage from "../extension/ChatMessage.vue";
 
 // icons
 const path = mdiSendCircleOutline;
@@ -377,7 +382,7 @@ const clickSubtask = async (id) => {
 .chat {
   display: grid;
   height: 700px;
-  grid-template-rows: 1fr 10fr 1fr;
+  grid-template-rows: repeat(auto-fit minmax(50px, 500px));
   justify-content: center;
   align-items: center;
   border-radius: 20px;
@@ -387,7 +392,8 @@ const clickSubtask = async (id) => {
 .chat-header {
   display: grid;
   width: 100%;
-  height: 100%;
+  /* height: 100%; */
+  min-height: 40px;
   background-color: #252139;
   align-content: center;
   justify-items: flex-start;
@@ -436,13 +442,16 @@ const clickSubtask = async (id) => {
   flex-direction: column;
   width: 100%;
   gap: 10px;
-  padding: 10px 10px 0px 10px;
+  padding: 10px 10px 10px 10px;
+  display: grid;
+  grid-template-rows: 1fr auto;
   height: 100%;
   background-color: #252139;
 }
 .chat-input-inner {
   align-self: center;
   width: 100%;
+  height: 100%;
   display: flex;
   flex-direction: row;
   justify-content: space-between;
@@ -452,11 +461,12 @@ const clickSubtask = async (id) => {
   background-color: #3d375a8a;
   color: #ffffff;
 }
-.chat-input-inner input {
+.chat-input-inner textarea {
   width: 100%;
   height: 100%;
   box-sizing: border-box;
-
+  resize: none;
+  overflow-y: hidden;
   -webkit-transition: 0.5s;
   transition: 0.5s;
   outline: none;
@@ -568,9 +578,8 @@ const clickSubtask = async (id) => {
 
 .count-5 {
   grid-template-areas:
-    "img0 img0"
-    "img1 img2"
-    "img3 img4";
+    "img0 img0 img0 img1 img1 img1"
+    "img2 img2 img3 img3 img4 img4";
 }
 .count-5 .x0 {
   grid-area: img0;
