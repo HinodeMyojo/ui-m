@@ -7,14 +7,29 @@ const chat = {
         id: 0,
         userId: 0,
         userName: "HinodeMyojo",
-        image: null,
+        image: [],
         text: "Привет",
         date: "12.05.2025 12:12:12",
+        files: [],
       },
       {
         id: 1,
         userId: 1,
         userName: "Z0371",
+        files: [
+          {
+            name: "test.txt",
+            size: 100,
+            type: "text/plain",
+            fileId: "1a309bb3-275e-4a95-94f4-924762457658",
+          },
+          {
+            name: "test.xml",
+            size: 100,
+            type: "text/plain",
+            fileId: "1a309bb3-275e-4a95-94f4-924762457657",
+          },
+        ],
         images: [
           {
             thumbnail: imgTest,
@@ -26,7 +41,7 @@ const chat = {
           },
         ],
         text: "Привет",
-        date: "12.05.2025 12:12:12",
+        date: "12.05.2025 12:13:12",
       },
       {
         id: 2,
@@ -47,12 +62,14 @@ const chat = {
           },
         ],
         text: "Привет",
-        date: "12.05.2025 12:12:12",
+        date: "12.05.2025 12:14:12",
+        files: [],
       },
       {
         id: 3,
         userId: 1,
         userName: "Z0371",
+        files: [],
         images: [
           {
             thumbnail: imgTest,
@@ -72,12 +89,13 @@ const chat = {
           },
         ],
         text: "Привет",
-        date: "12.05.2025 12:12:12",
+        date: "12.05.2025 12:15:12",
       },
       {
         id: 4,
         userId: 1,
         userName: "Z0371",
+        files: [],
         images: [
           {
             thumbnail: imgTest,
@@ -101,7 +119,7 @@ const chat = {
           },
         ],
         text: "Привет",
-        date: "12.05.2025 12:12:12",
+        date: "12.05.2025 12:16:12",
       },
     ],
   },
@@ -112,6 +130,7 @@ const chat = {
         userId: 0,
         userName: "HinodeMyojo",
         image: null,
+        files: [],
         text: "Билибоба",
         date: "12.05.2025 12:12:12",
       },
@@ -119,6 +138,7 @@ const chat = {
         id: 1,
         userId: 1,
         userName: "Z0371",
+        files: [],
         images: [
           {
             thumbnail: imgTest,
@@ -136,6 +156,7 @@ const chat = {
         id: 2,
         userId: 1,
         userName: "Z0371",
+        files: [],
         images: [
           {
             thumbnail: imgTest,
@@ -157,6 +178,7 @@ const chat = {
         id: 3,
         userId: 1,
         userName: "Z0371",
+        files: [],
         images: [
           {
             thumbnail: imgTest,
@@ -182,6 +204,7 @@ const chat = {
         id: 4,
         userId: 1,
         userName: "Z0371",
+        files: [],
         images: [
           {
             thumbnail: imgTest,
