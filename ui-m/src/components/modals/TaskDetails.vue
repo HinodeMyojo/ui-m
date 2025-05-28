@@ -79,7 +79,9 @@
 
         <div class="chat" ref="chatRef">
           <div class="chat-header">
-            <h3>{{ chatValue.name }}</h3>
+            <h3>
+              {{ chatValue && chatValue.name ? chatValue.name : "Общий чат" }}
+            </h3>
           </div>
           <div class="chat-main">
             <div class="chat-main-inner">
