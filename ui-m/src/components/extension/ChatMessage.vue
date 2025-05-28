@@ -5,7 +5,7 @@
       @input="adjustTextarea"
       ref="textarea"
       class="autoresize"
-      placeholder="Type a message..."
+      placeholder="Введите текст..."
     ></textarea>
   </div>
 </template>
