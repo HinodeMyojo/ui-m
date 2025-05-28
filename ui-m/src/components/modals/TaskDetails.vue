@@ -1,5 +1,18 @@
 <template>
   <div class="modal-cntnt">
+    <!-- Добавляем модальное окно для просмотра изображения -->
+    <div
+      v-if="selectedImage"
+      class="image-preview-modal"
+      @click="closeImagePreview"
+    >
+      <div class="image-preview-content" @click.stop>
+        <img :src="selectedImage" alt="Preview" />
+        <button class="close-button" @click="closeImagePreview">
+          <svg-icon type="mdi" :path="mdiClose" size="24"></svg-icon>
+        </button>
+      </div>
+    </div>
     <div class="content">
       <div class="title">
         <h3>{{ task.title }}</h3>
@@ -127,31 +140,123 @@
                 class="message"
               >
                 <div class="chat-inner-message">
-                  <template
-                    v-if="
-                      Array.isArray(message.images) && message.images.length
-                    "
-                  >
+                  <!-- Изображения -->
+                  <template v-if="message.attachments?.images?.length">
                     <div
                       class="chat-message-image"
-                      :class="'count-' + message.images.length"
+                      :class="'count-' + message.attachments.images.length"
                     >
                       <div
                         class="chat-thumbnails"
                         :class="'x' + index"
-                        v-for="(img, index) in message.images"
-                        :key="index"
-                        @click="openImage(img.imageId)"
+                        v-for="(img, index) in message.attachments.images"
+                        :key="img.id"
+                        @click="openImage(img.original)"
                       >
                         <img
                           :src="img.thumbnail"
-                          alt="User Image"
-                          v-if="img.thumbnail"
+                          :alt="'Image ' + (index + 1)"
                           :class="'img-' + index"
                         />
-                      </div></div
-                  ></template>
-                  {{ message.text }}
+                        <button
+                          v-if="isEditing(message.id)"
+                          class="remove-attachment"
+                          @click.stop="removeImage(message.id, index)"
+                        >
+                          <svg-icon
+                            type="mdi"
+                            :path="mdiClose"
+                            size="16"
+                          ></svg-icon>
+                        </button>
+                      </div>
+                    </div>
+                  </template>
+
+                  <!-- Файлы -->
+                  <template v-if="message.attachments?.files?.length">
+                    <div class="chat-message-files">
+                      <div
+                        v-for="(file, index) in message.attachments.files"
+                        :key="file.id"
+                        class="file-item"
+                      >
+                        <div class="file-info">
+                          <svg-icon
+                            type="mdi"
+                            :path="getFileIcon(file.type)"
+                            size="20"
+                          ></svg-icon>
+                          <a
+                            :href="file.url"
+                            class="file-name"
+                            target="_blank"
+                            >{{ file.name }}</a
+                          >
+                          <span class="file-size">{{
+                            formatFileSize(file.size)
+                          }}</span>
+                        </div>
+                        <button
+                          v-if="isEditing(message.id)"
+                          class="remove-attachment"
+                          @click="removeMessageFile(message.id, index)"
+                        >
+                          <svg-icon
+                            type="mdi"
+                            :path="mdiClose"
+                            size="16"
+                          ></svg-icon>
+                        </button>
+                      </div>
+                    </div>
+                  </template>
+
+                  <div class="message-content">
+                    <div class="message-text" v-if="!isEditing(message.id)">
+                      {{ message.text }}
+                    </div>
+                    <textarea
+                      v-else
+                      v-model="editingText"
+                      class="message-edit-input"
+                      @keydown.enter.prevent="saveEdit(message.id)"
+                      @keydown.esc="cancelEdit"
+                      ref="editInput"
+                    ></textarea>
+                    <div class="message-actions">
+                      <button
+                        v-if="!isEditing(message.id)"
+                        class="edit-button"
+                        @click="startEdit(message)"
+                      >
+                        <svg-icon
+                          type="mdi"
+                          :path="mdiPencil"
+                          size="16"
+                        ></svg-icon>
+                      </button>
+                      <template v-else>
+                        <button
+                          class="save-button"
+                          @click="saveEdit(message.id)"
+                        >
+                          <svg-icon
+                            type="mdi"
+                            :path="mdiCheck"
+                            size="16"
+                          ></svg-icon>
+                        </button>
+                        <button class="cancel-button" @click="cancelEdit">
+                          <svg-icon
+                            type="mdi"
+                            :path="mdiClose"
+                            size="16"
+                          ></svg-icon>
+                        </button>
+                      </template>
+                    </div>
+                  </div>
                 </div>
                 <hr />
                 <div class="chat-time">
@@ -254,6 +359,13 @@ import {
   mdiImage,
   mdiFile,
   mdiClose,
+  mdiPencil,
+  mdiCheck,
+  mdiFileDocument,
+  // mdiFilePdfBox,
+  // mdiFileWord,
+  // mdiFileExcel,
+  // mdiFileText,
 } from "@mdi/js";
 import {
   useTemplateRef,
@@ -262,6 +374,7 @@ import {
   reactive,
   ref,
   computed,
+  nextTick,
 } from "vue";
 
 import chat from "./test.js";
@@ -380,8 +493,17 @@ const subtasksRef = useTemplateRef("subtasksRef");
 const chatRef = useTemplateRef("chatRef");
 const chatMainRef = ref(null);
 
-const openImage = async (imageId) => {
-  console.log(imageId);
+// Добавляем состояние для выбранного изображения
+const selectedImage = ref(null);
+
+// Обновляем функцию открытия изображения
+const openImage = async (imageUrl) => {
+  selectedImage.value = imageUrl;
+};
+
+// Добавляем функцию закрытия превью
+const closeImagePreview = () => {
+  selectedImage.value = null;
 };
 
 // Функция для прокрутки чата вниз
@@ -587,6 +709,96 @@ function onSubtaskDrop(event, subtasks) {
     subtasks.splice(toIndex, 0, removed);
   }
   event.stopPropagation(); // Предотвращаем всплытие события
+}
+
+// Состояние для редактирования
+const editingMessageId = ref(null);
+const editingText = ref("");
+
+// Функции для редактирования
+function isEditing(messageId) {
+  return editingMessageId.value === messageId;
+}
+
+function startEdit(message) {
+  editingMessageId.value = message.id;
+  editingText.value = message.text;
+  editingAttachments.value = {
+    images: [...(message.attachments?.images || [])],
+    files: [...(message.attachments?.files || [])],
+  };
+  nextTick(() => {
+    if (editInput.value) {
+      editInput.value.focus();
+    }
+  });
+}
+
+function saveEdit(messageId) {
+  const messageIndex = messagesVar.value.findIndex((m) => m.id === messageId);
+  if (messageIndex !== -1) {
+    messagesVar.value[messageIndex].text = editingText.value;
+    messagesVar.value[messageIndex].date = new Date().toLocaleTimeString();
+    // Сохраняем текущие вложения
+    messagesVar.value[messageIndex].attachments = {
+      images: [...(editingAttachments.value?.images || [])],
+      files: [...(editingAttachments.value?.files || [])],
+    };
+  }
+  cancelEdit();
+}
+
+function cancelEdit() {
+  const messageIndex = messagesVar.value.findIndex(
+    (m) => m.id === editingMessageId.value
+  );
+  if (messageIndex !== -1 && editingAttachments.value) {
+    // Восстанавливаем оригинальные вложения
+    messagesVar.value[messageIndex].attachments = {
+      images: [...editingAttachments.value.images],
+      files: [...editingAttachments.value.files],
+    };
+  }
+  editingMessageId.value = null;
+  editingText.value = "";
+  editingAttachments.value = null;
+}
+
+// Добавляем состояние для хранения копии вложений при редактировании
+const editingAttachments = ref(null);
+
+// Функция для форматирования размера файла
+function formatFileSize(bytes) {
+  if (bytes === 0) return "0 Bytes";
+  const k = 1024;
+  const sizes = ["Bytes", "KB", "MB", "GB"];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
+}
+
+// Функции для удаления вложений
+function removeImage(messageId, imageIndex) {
+  const messageIndex = messagesVar.value.findIndex((m) => m.id === messageId);
+  if (messageIndex !== -1) {
+    messagesVar.value[messageIndex].attachments.images.splice(imageIndex, 1);
+  }
+}
+
+function removeMessageFile(messageId, fileIndex) {
+  const messageIndex = messagesVar.value.findIndex((m) => m.id === messageId);
+  if (messageIndex !== -1) {
+    messagesVar.value[messageIndex].attachments.files.splice(fileIndex, 1);
+  }
+}
+
+// Функция для определения иконки файла по типу
+function getFileIcon(type) {
+  if (type.startsWith("image/")) return mdiImage;
+  // if (type === "application/pdf") return mdiFilePdfBox;
+  // if (type.includes("word")) return mdiFileWord;
+  // if (type.includes("excel") || type.includes("sheet")) return mdiFileExcel;
+  // if (type === "text/plain") return mdiFileText;
+  return mdiFileDocument;
 }
 </script>
 <style scoped>
@@ -1216,5 +1428,233 @@ function onSubtaskDrop(event, subtasks) {
 
 .remove-preview:hover {
   background: #ff6666;
+}
+
+/* Стили для модального окна просмотра изображения */
+.image-preview-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.9);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 9999;
+  cursor: pointer;
+}
+
+.image-preview-content {
+  position: relative;
+  max-width: 90vw;
+  max-height: 90vh;
+  cursor: default;
+}
+
+.image-preview-content img {
+  max-width: 100%;
+  max-height: 90vh;
+  object-fit: contain;
+  border-radius: 8px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.3);
+}
+
+.close-button {
+  position: absolute;
+  top: -40px;
+  right: -40px;
+  background: rgba(37, 33, 57, 0.8);
+  border: none;
+  color: white;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.close-button:hover {
+  background: rgba(37, 33, 57, 1);
+  transform: scale(1.1);
+}
+
+.close-button:active {
+  transform: scale(0.95);
+}
+
+.message-content {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  width: 100%;
+}
+
+.message-text {
+  flex: 1;
+  word-break: break-word;
+}
+
+.message-edit-input {
+  flex: 1;
+  min-height: 60px;
+  padding: 8px;
+  border-radius: 8px;
+  background: rgba(37, 33, 57, 0.5);
+  border: 1px solid rgba(110, 74, 255, 0.3);
+  color: white;
+  font-size: 14px;
+  resize: vertical;
+  outline: none;
+  transition: all 0.2s ease;
+}
+
+.message-edit-input:focus {
+  border-color: #6e4aff;
+  background: rgba(37, 33, 57, 0.8);
+}
+
+.message-actions {
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.message:hover .message-actions {
+  opacity: 1;
+}
+
+.edit-button,
+.save-button,
+.cancel-button {
+  padding: 4px;
+  border: none;
+  border-radius: 4px;
+  background: rgba(37, 33, 57, 0.5);
+  color: white;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.edit-button:hover {
+  background: rgba(110, 74, 255, 0.3);
+}
+
+.save-button {
+  background: rgba(46, 160, 67, 0.3);
+}
+
+.save-button:hover {
+  background: rgba(46, 160, 67, 0.5);
+}
+
+.cancel-button {
+  background: rgba(218, 54, 51, 0.3);
+}
+
+.cancel-button:hover {
+  background: rgba(218, 54, 51, 0.5);
+}
+
+.edit-button:active,
+.save-button:active,
+.cancel-button:active {
+  transform: scale(0.95);
+}
+
+.chat-message-files {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 8px 0;
+}
+
+.file-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px;
+  background: rgba(37, 33, 57, 0.3);
+  border-radius: 8px;
+  transition: all 0.2s ease;
+}
+
+.file-item:hover {
+  background: rgba(37, 33, 57, 0.5);
+}
+
+.file-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: white;
+  flex: 1;
+  min-width: 0;
+}
+
+.file-name {
+  font-size: 14px;
+  color: #6e4aff;
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: color 0.2s ease;
+}
+
+.file-name:hover {
+  color: #8a6eff;
+  text-decoration: underline;
+}
+
+.file-size {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.6);
+  white-space: nowrap;
+}
+
+.remove-attachment {
+  padding: 4px;
+  border: none;
+  border-radius: 4px;
+  background: rgba(218, 54, 51, 0.3);
+  color: white;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.remove-attachment:hover {
+  background: rgba(218, 54, 51, 0.5);
+  transform: scale(1.1);
+}
+
+.remove-attachment:active {
+  transform: scale(0.95);
+}
+
+.chat-thumbnails {
+  position: relative;
+}
+
+.chat-thumbnails .remove-attachment {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  background: rgba(0, 0, 0, 0.7);
+}
+
+.chat-thumbnails .remove-attachment:hover {
+  background: rgba(218, 54, 51, 0.7);
 }
 </style>
