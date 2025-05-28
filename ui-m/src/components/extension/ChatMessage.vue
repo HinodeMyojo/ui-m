@@ -27,11 +27,9 @@ const adjustTextarea = () => {
   width: 100%;
 }
 .autoresize {
-  /* overflow: hidden; */
   min-height: 40px;
   width: 100%;
   max-height: 120px;
-  /* width: 100%; */
   box-sizing: border-box;
   resize: none;
   -webkit-transition: 0.5s;

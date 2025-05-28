@@ -84,9 +84,7 @@
           <div class="chat-main">
             <div class="chat-main-inner">
               <div
-                v-for="message in Array.isArray(chat.messages)
-                  ? chat.messages
-                  : []"
+                v-for="message in messagesVar"
                 :key="message.id"
                 class="message"
               >
@@ -113,24 +111,23 @@
                           v-if="img.thumbnail"
                           :class="'img-' + index"
                         />
-                      </div>
-                    </div>
-                  </template>
+                      </div></div
+                  ></template>
                   {{ message.text }}
                 </div>
-                <!-- <hr /> -->
+                <hr />
                 <div class="chat-time">
                   {{ message.date }}
                 </div>
               </div>
             </div>
-            <div class="chat-background">
+            <!-- <div class="chat-background">
               <img
                 :src="bonfire"
                 alt="Bonfire GIF"
                 :style="{ userSelect: 'none', pointerEvents: 'none' }"
               />
-            </div>
+            </div> -->
           </div>
           <div class="chat-input">
             <div class="chat-input-inner">
@@ -159,6 +156,9 @@ import { useTemplateRef, onBeforeUnmount, onMounted, reactive, ref } from "vue";
 import chat from "./test.js";
 import bonfire from "../../assets/gif/bonfire-dark-souls.gif";
 import ChatMessage from "../extension/ChatMessage.vue";
+
+// Загрузка подзадач в чат
+const messagesVar = ref(null);
 
 // icons
 const path = mdiSendCircleOutline;
@@ -259,12 +259,12 @@ const isSubtaskChatOpen = ref(false);
 // Обработчик клика по подзадаче
 const clickSubtask = async (id) => {
   //   const chat = await fetch("/chat/" + id);
-  const chatVal = chat.find((chat) => chat.id === id);
+  const chatVal = chat[id];
   if (chatVal) {
     isSubtaskChatOpen.value = true;
+    messagesVar.value = chatVal.messages;
+    console.log(messagesVar.value);
   }
-
-  console.log(id);
 };
 
 // const handleClickOutside = (event) => {
@@ -330,8 +330,10 @@ const clickSubtask = async (id) => {
 }
 
 .subtasks {
+  /* display: grid; */
   display: flex;
   flex-direction: column;
+  /* grid-template-columns: 1fr 1fr; */
   justify-content: flex-start;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -381,9 +383,11 @@ const clickSubtask = async (id) => {
 
 .chat {
   display: grid;
+  grid-template-rows: 1fr 10fr 1fr;
   height: 700px;
-  grid-template-rows: repeat(auto-fit minmax(50px, 500px));
-  justify-content: center;
+  width: 100%;
+  /* grid-template-rows: repeat(auto-fit minmax(50px, 500px)); */
+  /* justify-content: center; */
   align-items: center;
   border-radius: 20px;
   background-color: #120e16;
@@ -391,9 +395,11 @@ const clickSubtask = async (id) => {
 }
 .chat-header {
   display: grid;
-  width: 100%;
+  /* min-width: 400px; */
   /* height: 100%; */
-  min-height: 40px;
+  width: 100%;
+  height: 100%;
+  /* min-height: 40px; */
   background-color: #252139;
   align-content: center;
   justify-items: flex-start;
