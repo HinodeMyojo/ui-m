@@ -53,7 +53,7 @@
               :key="index"
               draggable="true"
               @dragstart="startDrag($event, subtask)"
-              @click="clickSubtask(subtask.id)"
+              @click="clickSubtask(subtask)"
               class="subtask"
             >
               <div class="subtask-boba">
@@ -79,7 +79,7 @@
 
         <div class="chat" ref="chatRef">
           <div class="chat-header">
-            <h3>Чат</h3>
+            <h3>{{ chatValue.name }}</h3>
           </div>
           <div class="chat-main">
             <div class="chat-main-inner">
@@ -158,6 +158,7 @@ import bonfire from "../../assets/gif/bonfire-dark-souls.gif";
 import ChatMessage from "../extension/ChatMessage.vue";
 
 // Загрузка подзадач в чат
+// {name: , messages: []}
 const messagesVar = ref(null);
 
 // icons
@@ -257,12 +258,16 @@ const isSubtaskClicked = ref(false);
 const isSubtaskChatOpen = ref(false);
 
 // Обработчик клика по подзадаче
-const clickSubtask = async (id) => {
+const chatValue = ref(null);
+const clickSubtask = async (sbtsk) => {
   //   const chat = await fetch("/chat/" + id);
-  const chatVal = chat[id];
-  if (chatVal) {
+  console.log(sbtsk);
+  // Example: get chat by subtask's chatId
+  chatValue.value = { name: sbtsk.title, id: sbtsk.chatId };
+  const chatR = chat[chatValue.value.id];
+  if (chatR) {
     isSubtaskChatOpen.value = true;
-    messagesVar.value = chatVal.messages;
+    messagesVar.value = chatR.messages;
     console.log(messagesVar.value);
   }
 };
@@ -406,9 +411,13 @@ const clickSubtask = async (id) => {
 }
 .chat-header h3 {
   padding-left: 10px;
-  font-size: 22px;
+  font-size: 20px;
+  max-width: 100%;
   font-weight: 400;
   line-height: 29px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .chat-main {
   display: grid;
