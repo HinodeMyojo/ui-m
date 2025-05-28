@@ -89,7 +89,8 @@
             @drop.prevent="handleDrop"
           >
             <!-- Зоны загрузки внутри чата, но перед сообщениями -->
-            <div v-if="isDragging" class="drop-zones">
+            <div class="drop-zones">
+              <!-- v-if="isDragging" -->
               <!-- Показываем зону для изображений только если перетаскивается изображение -->
               <div
                 v-if="isDraggingImage"
@@ -1036,13 +1037,18 @@ function onSubtaskDrop(event, subtasks) {
 }
 
 .drop-zones {
-  position: fixed;
-  top: 50%;
+  /* position: fixed; */
+  width: 100%;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 100%;
+  /* top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
   width: calc(100% - 32px);
-  height: calc(100% - 32px);
-  display: flex;
+  height: calc(100% - 32px); */
   flex-direction: column;
   align-items: center;
   justify-content: center;
@@ -1056,7 +1062,7 @@ function onSubtaskDrop(event, subtasks) {
 }
 
 .dropzone {
-  width: 80%;
+  /* width: 80%; */
   max-width: 400px;
   min-height: 100px;
   border: 2px dashed rgba(255, 255, 255, 0.3);
