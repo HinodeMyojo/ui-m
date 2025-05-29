@@ -90,8 +90,14 @@
           </div>
         </div>
 
-        <div class="chat" ref="chatRef">
-          <div class="chat-header">
+        <div
+          class="chat"
+          ref="chatRef"
+          @dragover.prevent="handleDragOver"
+          @dragleave="handleDragLeave"
+          @drop.prevent="handleDrop"
+        >
+          <div class="chat-header" ref="chatHeaderRef">
             <div class="chat-header-content">
               <button
                 v-if="chatValue?.id !== task.chatId"
@@ -103,45 +109,39 @@
               <h3>{{ chatValue?.name || task.title }}</h3>
             </div>
           </div>
-          <div
-            class="chat-main"
-            ref="chatMainRef"
-            @dragover.prevent="handleDragOver"
-            @dragleave="handleDragLeave"
-            @drop.prevent="handleDrop"
-          >
-            <!-- Зоны загрузки внутри чата, но перед сообщениями -->
-            <div class="drop-zones" :class="{ active: isDragging }">
-              <!-- Показываем зону для изображений только если перетаскивается изображение -->
-              <div
-                v-if="isDraggingImage"
-                class="dropzone image-dropzone"
-                :class="{ active: isDraggingImage }"
-                @dragover.prevent="handleImageDragOver"
-                @dragleave="handleImageDragLeave"
-                @drop.prevent="handleImageDrop"
-              >
-                <div class="dropzone-content">
-                  <svg-icon type="mdi" :path="mdiImage" size="35"></svg-icon>
-                  <span>Отправить как изображение</span>
-                </div>
-              </div>
-              <!-- Зона для файлов показывается всегда -->
-              <div
-                class="dropzone file-dropzone"
-                :class="{ active: isDraggingFile }"
-                @dragover.prevent="handleFileDragOver"
-                @dragleave="handleFileDragLeave"
-                @drop.prevent="handleFileDrop"
-              >
-                <div class="dropzone-content">
-                  <svg-icon type="mdi" :path="mdiFile" size="35"></svg-icon>
-                  <span>{{
-                    isDraggingImage ? "Отправить как файл" : "Перетащите файл"
-                  }}</span>
-                </div>
+          <!-- Зоны загрузки внутри чата, но перед сообщениями -->
+          <div class="drop-zones" :class="{ active: isDragging }">
+            <!-- Показываем зону для изображений только если перетаскивается изображение -->
+            <div
+              v-if="isDraggingImage"
+              class="dropzone image-dropzone"
+              :class="{ active: isDraggingImage }"
+              @dragover.prevent="handleImageDragOver"
+              @dragleave="handleImageDragLeave"
+              @drop.prevent="handleImageDrop"
+            >
+              <div class="dropzone-content">
+                <svg-icon type="mdi" :path="mdiImage" size="35"></svg-icon>
+                <span>Отправить как изображение</span>
               </div>
             </div>
+            <!-- Зона для файлов показывается всегда -->
+            <div
+              class="dropzone file-dropzone"
+              :class="{ active: isDraggingFile }"
+              @dragover.prevent="handleFileDragOver"
+              @dragleave="handleFileDragLeave"
+              @drop.prevent="handleFileDrop"
+            >
+              <div class="dropzone-content">
+                <svg-icon type="mdi" :path="mdiFile" size="35"></svg-icon>
+                <span>{{
+                  isDraggingImage ? "Отправить как файл" : "Перетащите файл"
+                }}</span>
+              </div>
+            </div>
+          </div>
+          <div class="chat-main" ref="chatMainRef">
             <div class="chat-main-inner">
               <div
                 v-for="message in messagesVar"
@@ -473,21 +473,21 @@ const task = reactive({
       id: 0,
       title: "Подзадача_1",
       description: "Нужно сделать всё",
-      chatId: 0,
+      chatId: 1,
       completed: true,
     },
     {
       id: 1,
       title: "БИЛИБАОваовраоуцакерцуолароатуклравапшщзасвапщшшрпмарощшлорми",
       description: "Нужно сделать всё",
-      chatId: 1,
+      chatId: 2,
       completed: true,
     },
     {
       id: 2,
       title: "Подзадача_2",
       description: "Нужно сделать всё",
-      chatId: 2,
+      chatId: 3,
       completed: false,
     },
   ],
@@ -496,9 +496,8 @@ const task = reactive({
 // Chat functionality
 const messagesVar = ref(null);
 const chatValue = ref(null);
-const subtasksRef = useTemplateRef("subtasksRef");
-const chatRef = useTemplateRef("chatRef");
 const chatMainRef = ref(null);
+const chatMessageRef = ref(null);
 
 // Добавляем состояние для выбранного изображения
 const selectedImage = ref(null);
@@ -1042,7 +1041,6 @@ function getFileIcon(type) {
   overflow-y: auto;
   scrollbar-width: thin;
   scrollbar-color: #6e4aff #111;
-  position: relative;
   padding: 16px;
 }
 
@@ -1072,6 +1070,7 @@ function getFileIcon(type) {
   opacity: 0.4;
 }
 .chat-input {
+  position: relative;
   flex-direction: column;
   width: 100%;
   /* gap: 12px; */
@@ -1280,13 +1279,14 @@ function getFileIcon(type) {
 }
 
 .drop-zones {
-  position: sticky;
-  top: 0;
+  position: absolute;
+  /* top: v-bind('chatHeaderRef?.clientHeight + "px"'); */
+  top: 48px;
   left: 0;
   right: 0;
   bottom: 0;
   width: 100%;
-  height: 100%;
+  height: v-bind('chatMainRef?.clientHeight + "px"');
   display: flex;
   flex-direction: column;
   align-items: center;
