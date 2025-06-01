@@ -1,11 +1,32 @@
 {
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
   "dependencies": {
     "@fullcalendar/core": "^6.1.17",
     "@fullcalendar/daygrid": "^6.1.17",
     "@fullcalendar/vue3": "^6.1.17",
+    "@jamescoyle/vue-icon": "^0.1.2",
+    "@mdi/font": "^7.4.47",
+    "@mdi/js": "^7.4.47",
     "canvas-confetti": "^1.9.3",
+    "pinia": "^3.0.2",
     "three": "^0.176.0",
     "vanta": "^0.5.24",
-    "vue-datepicker-next": "^1.0.3"
+    "vue-datepicker-next": "^1.0.3",
+    "vue-router": "^4.5.1",
+    "vuetify": "^3.8.7"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.1.8",
+    "@vitejs/plugin-vue": "^5.2.4",
+    "browserify-zlib": "^0.2.0",
+    "process": "^0.11.10",
+    "stream-browserify": "^3.0.0",
+    "util": "^0.12.5",
+    "vite": "^6.3.5",
+    "vite-plugin-vue-devtools": "^7.7.6"
   }
 }
