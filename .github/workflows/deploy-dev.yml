@@ -31,7 +31,7 @@ jobs:
           host: ${{ secrets.DEV_SERVER_HOST }}
           username: ${{ secrets.DEV_SERVER_USER }}
           key: ${{ secrets.DEV_SSH_PRIVATE_KEY }}
-          source: "dist/*,docker-compose.yaml,Dockerfile"
+          source: "dist/*,docker-compose.yaml,Dockerfile,package.json,package-lock.json,src/*,public/*,index.html,vite.config.js,tailwind.config.js,jsconfig.json"
           target: "/home/hinode/planner/ui"
           strip_components: 0
 
