@@ -1,7 +1,13 @@
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount } from "vue";
 import confetti from "canvas-confetti";
-import { fetchTasks, addTaskAPI, deleteTaskAPI, updateTaskAPI } from "./api.js";
+import {
+  fetchTasks,
+  addTaskAPI,
+  deleteTaskAPI,
+  updateTaskAPI,
+  fetchTask,
+} from "./api.js";
 import { useRouter } from "vue-router";
 
 import TaskDetails from "@/components/modals/TaskDetails.vue";
@@ -13,9 +19,12 @@ const tasks = ref([]);
 async function loadTasks() {
   tasks.value = (await fetchTasks()).map((t) => ({
     ...t,
-    start: new Date(t.start),
-    end: new Date(t.end),
+    start: DateToRealUtc(t.start),
+    end: DateToRealUtc(t.end),
+    // start: new Date(2025, 5, 1),
+    // end: new Date(2025, 5, 30),
   }));
+  console.log(tasks.value);
 }
 
 const currentDate = ref(new Date());
@@ -37,12 +46,16 @@ const monthEnd = computed(
 
 const visibleTasks = computed(() => {
   const msMonthStart = monthStart.value.getTime();
+  console.log("msMonthStart:", msMonthStart);
   const msMonthEnd = monthEnd.value.getTime();
+  console.log("msMonthEnd:", msMonthEnd);
   const result = tasks.value
     .map((task) => {
       // Определяем границы задачи в текущем месяце
       const msTaskStart = task.start.getTime();
+      console.log("msTaskStart:", msTaskStart);
       const msTaskEnd = task.end.getTime();
+      console.log("msTaskEnd:", msTaskEnd);
       const start = msTaskStart < msMonthStart ? monthStart.value : task.start;
       const end = msTaskEnd > msMonthEnd ? monthEnd.value : task.end;
       // Если задача не пересекается с месяцем — не показываем
@@ -59,6 +72,15 @@ const visibleTasks = computed(() => {
   // Для отладки
   return result;
 });
+
+console.log(visibleTasks.value);
+
+function DateToRealUtc(date) {
+  var date = new Date(date);
+  var userTimezoneOffset = date.getTimezoneOffset() * 60000;
+  return new Date(date.getTime() + userTimezoneOffset);
+  // console.log(result);
+}
 
 const columns = Array.from({ length: 31 }, (_, i) => i + 1);
 const draggedTask = ref(null);
@@ -206,7 +228,8 @@ const getMonthName = (month) => {
     .toUpperCase();
 };
 
-function openTaskDetails(task) {
+async function openTaskDetails(task) {
+  var task = await fetchTask(task.id);
   openedTask.value = task;
 }
 function closeTaskDetails() {
@@ -476,7 +499,8 @@ function getToday() {
 </script>
 
 <template>
-  <div class="main" :class="{ 'calendar-dimmed': calendarDimmed }">
+  <!-- <div class="main" :class="{ 'calendar-dimmed': calendarDimmed }"> -->
+  <div class="main">
     <div class="header">
       <div class="header-left"></div>
       <div class="header-center">
@@ -560,7 +584,7 @@ function getToday() {
             >
               <div class="task-inner">
                 <div class="task-row">
-                  <span class="task-icon">📚</span>
+                  <!-- <span class="task-icon">📚</span> -->
                   <span class="task-title">{{ task.title }}</span>
                 </div>
                 <div class="task-down">
@@ -602,13 +626,12 @@ function getToday() {
       </div>
     </div>
   </div>
-  <transition name="modal-fade">
+  <!-- <transition name="modal-fade">
     <div v-if="openedTask" class="modal-overlay" @click.self="closeTaskDetails">
       <div class="modal-card">
         <button class="modal-close" @click="closeTaskDetails">×</button>
         <div class="modal-content">
           <div class="modal-row">
-            <span class="modal-icon">📚</span>
             <span class="modal-title">{{ openedTask.title }}</span>
             <button
               class="edit-task-btn"
@@ -647,11 +670,14 @@ function getToday() {
         </div>
       </div>
     </div>
-  </transition>
+  </transition> -->
   <transition name="modal-fade">
-    <div class="modal-overlay-2">
-      <!-- <div v-if="openedTask" class="modal-overlay" @click.self="closeTaskDetails"> -->
-      <TaskDetails />
+    <div
+      class="modal-overlay-2"
+      v-if="openedTask"
+      @click.self="closeTaskDetails"
+    >
+      <TaskDetails :task="openedTask" />
     </div>
   </transition>
   <transition name="modal-fade">
@@ -909,6 +935,7 @@ function getToday() {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
+  justify-content: center;
   gap: 8px;
   /* white-space: nowrap; */
   overflow: hidden;

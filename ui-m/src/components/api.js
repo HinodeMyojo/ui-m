@@ -10,10 +10,19 @@ export async function fetchTasks() {
     `http://localhost:5005/api/v1/tasks?date=${formattedDate}`
   );
   const data = await response.json();
+  console.log(data);
   return data;
 
   // Возвращаем заглушку
   // return [...fakeTasks];
+}
+
+export async function fetchTask(id) {
+  // Здесь будет реальный запрос к бэку
+  const response = await fetch(`http://localhost:5005/api/v1/tasks/${id}`);
+  const data = await response.json();
+  console.log(data);
+  return data;
 }
 export async function addTaskAPI(task) {
   // const newTask = { ...task, id: idCounter++ }

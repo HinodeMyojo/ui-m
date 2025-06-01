@@ -100,7 +100,7 @@
           <div class="chat-header" ref="chatHeaderRef">
             <div class="chat-header-content">
               <button
-                v-if="chatValue?.id !== task.chatId"
+                v-if="chatValue?.id !== null"
                 class="back-button"
                 @click="openTaskChat"
               >
@@ -143,6 +143,9 @@
           </div>
           <div class="chat-main" ref="chatMainRef">
             <div class="chat-main-inner">
+              <div v-if="messagesVar == null" class="empty-chat">
+                <img src="@/assets/gif/bonfire-dark-souls.gif" alt="" />
+              </div>
               <div
                 v-for="message in messagesVar"
                 :key="message.id"
@@ -440,14 +443,15 @@ function removeFile(file) {
 
 // Task progress calculations
 function computeProgres() {
-  return Math.round((task.completed / task.total) * 100);
+  return Math.round((task.completedSubtasks / task.totalSubtasks) * 100);
 }
 
 function needProgress() {
   if (task.currentDay === -1) return -1;
   if (task.currentDay === 0) return 0;
-  const desiredCompletedTasks = (task.total / task.totalDays) * task.currentDay;
-  return Math.round((desiredCompletedTasks / task.total) * 100);
+  const desiredCompletedTasks =
+    (task.totalSubtasks / task.totalDays) * task.currentDay;
+  return Math.round((desiredCompletedTasks / task.totalSubtasks) * 100);
 }
 
 function checkNeedPersentText() {
@@ -456,42 +460,50 @@ function checkNeedPersentText() {
   return "Нужно брат";
 }
 
-const task = reactive({
-  id: 0,
-  title: "Тестовая задача",
-  description: "Нужно сделать очень много всего",
-  start_date: "20.05.2025",
-  end_date: "31.05.2025",
-  totalDays: 11,
-  currentDay: 2, // если -1 = то срок проёбан
-  total: 3,
-  completed: 1,
-  required: 2,
-  chatId: 0, // Добавляем ID чата для задачи
-  subtasks: [
-    {
-      id: 0,
-      title: "Подзадача_1",
-      description: "Нужно сделать всё",
-      chatId: 1,
-      completed: true,
-    },
-    {
-      id: 1,
-      title: "БИЛИБАОваовраоуцакерцуолароатуклравапшщзасвапщшшрпмарощшлорми",
-      description: "Нужно сделать всё",
-      chatId: 2,
-      completed: true,
-    },
-    {
-      id: 2,
-      title: "Подзадача_2",
-      description: "Нужно сделать всё",
-      chatId: 3,
-      completed: false,
-    },
-  ],
+const props = defineProps({
+  task: Object,
 });
+
+const task = props.task;
+
+console.log(task);
+
+// const task = reactive({
+//   id: 0,
+//   title: "Тестовая задача",
+//   description: "Нужно сделать очень много всего",
+//   start_date: "20.05.2025",
+//   end_date: "31.05.2025",
+//   totalDays: 11,
+//   currentDay: 2, // если -1 = то срок проёбан
+//   total: 3,
+//   completed: 1,
+//   required: 2,
+//   chatId: 0, // Добавляем ID чата для задачи
+//   subtasks: [
+//     {
+//       id: 0,
+//       title: "Подзадача_1",
+//       description: "Нужно сделать всё",
+//       chatId: 1,
+//       completed: true,
+//     },
+//     {
+//       id: 1,
+//       title: "БИЛИБАОваовраоуцакерцуолароатуклравапшщзасвапщшшрпмарощшлорми",
+//       description: "Нужно сделать всё",
+//       chatId: 2,
+//       completed: true,
+//     },
+//     {
+//       id: 2,
+//       title: "Подзадача_2",
+//       description: "Нужно сделать всё",
+//       chatId: 3,
+//       completed: false,
+//     },
+//   ],
+// });
 
 // Chat functionality
 const messagesVar = ref(null);
@@ -519,9 +531,10 @@ function scrollToBottom() {
   }
 }
 
+// TODO
 // Прокрутка при открытии чата
 const clickSubtask = async (subtask) => {
-  chatValue.value = { name: subtask.title, id: subtask.chatId };
+  chatValue.value = { name: subtask.title, id: subtask.chat.id };
   const chatR = chat[chatValue.value.id];
   if (chatR) {
     messagesVar.value = chatR.messages;
@@ -530,14 +543,14 @@ const clickSubtask = async (subtask) => {
   }
 };
 
-// Добавляем функцию для открытия общего чата задачи
+// Функция для открытия общего чата задачи
 const openTaskChat = () => {
-  chatValue.value = { name: task.title, id: task.chatId };
-  const chatR = chat[chatValue.value.id];
-  if (chatR) {
-    messagesVar.value = chatR.messages;
-    setTimeout(scrollToBottom, 100);
-  }
+  chatValue.value = task.chat;
+  // для того, чтобы было видно, что это родительский чат
+  chatValue.value.id = null;
+  console.log(chatValue.value);
+  messagesVar.value = chatValue.value.messages;
+  setTimeout(scrollToBottom, 100);
 };
 
 // Прокрутка при отправке сообщения
@@ -862,7 +875,7 @@ function getFileIcon(type) {
   display: grid;
   grid-template-rows: 1fr 1.5fr 10fr;
   gap: 20px;
-  justify-content: center;
+  /* justify-content: center; */
   flex-direction: column;
   align-items: center;
 }
@@ -1015,6 +1028,7 @@ function getFileIcon(type) {
   display: grid;
   width: 100%;
   height: 100%;
+  min-height: 48px;
   background-color: #252139;
   align-content: center;
   justify-items: flex-start;
@@ -1121,6 +1135,20 @@ function getFileIcon(type) {
   background-color: rgba(255, 255, 255, 0.1);
   margin: 8px 0;
 }
+.empty-chat {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  color: #ffffff;
+  opacity: 0.6;
+  font-size: 14px;
+  user-select: none;
+}
+
 .chat-main-inner {
   width: 100%;
   height: 100%;
