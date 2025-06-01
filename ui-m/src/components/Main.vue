@@ -82,6 +82,15 @@ function DateToRealUtc(date) {
   // console.log(result);
 }
 
+// добавление подзадач в модалке
+function addSubtask(title) {
+  newTask.value.subtasks.push({ title: title, completed: false });
+}
+
+function removeSubtask(idx) {
+  newTask.value.subtasks.splice(idx, 1);
+}
+
 const columns = Array.from({ length: 31 }, (_, i) => i + 1);
 const draggedTask = ref(null);
 const dragOffset = ref(0);
@@ -251,8 +260,7 @@ const newTask = ref({
   start: "",
   end: "",
   color: "#25636A",
-  steps: 1,
-  stepActive: 0,
+  subtasks: [],
 });
 
 function openAddModal() {
@@ -262,8 +270,7 @@ function openAddModal() {
     start: "",
     end: "",
     color: "#25636A",
-    steps: 1,
-    stepActive: 0,
+    subtasks: [],
   };
 }
 function closeAddModal() {
@@ -288,8 +295,7 @@ function addTask() {
     start: startDate,
     end: endDate,
     color: newTask.value.color,
-    steps,
-    stepActive,
+    subtasks: newTask.value.subtasks,
   };
   addTaskAPI(taskToAdd).then((added) => {
     loadTasks();
@@ -681,7 +687,7 @@ function getToday() {
     </div>
   </transition>
   <transition name="modal-fade">
-    <div v-if="showAddModal" class="modal-overlay" @click.self="closeAddModal">
+    <div v-if="showAddModal" class="modal-overlay">
       <div class="modal-card">
         <button class="modal-close" @click="closeAddModal">×</button>
         <div class="modal-content">
@@ -712,17 +718,41 @@ function getToday() {
                 class="color-fullwidth"
               />
             </label>
-            <label
-              >Всего шагов
-              <input
-                v-model.number="newTask.steps"
-                type="number"
-                name="steps"
-                min="0"
-                max="25"
-              />
+            <label>
+              Подзадачи
+              <div class="subtasks-label">
+                <input
+                  v-model="newTask.subtaskInput"
+                  type="text"
+                  name="subtasks"
+                  placeholder="Введите подзадачу"
+                  @keyup.enter="addSubtask"
+                />
+                <button
+                  class="add-subtask"
+                  type="button"
+                  @click="addSubtask(newTask.subtaskInput)"
+                >
+                  +
+                </button>
+              </div>
+              <ul v-if="newTask.subtasks && newTask.subtasks.length">
+                <li v-for="(sub, idx) in newTask.subtasks" :key="idx">
+                  <div class="added-subtask">
+                    {{ idx }}.
+                    {{ sub.title }}
+                    <button
+                      type="button"
+                      @click="removeSubtask(idx)"
+                      style="margin-left: 8px"
+                    >
+                      ×
+                    </button>
+                  </div>
+                </li>
+              </ul>
             </label>
-            <label
+            <!-- <label
               >Выполнено шагов
               <input
                 v-model.number="newTask.stepActive"
@@ -732,7 +762,7 @@ function getToday() {
                 :disabled="!newTask.steps"
                 :class="{ 'steps-disabled': !newTask.steps }"
               />
-            </label>
+            </label> -->
             <button class="add-task-submit" type="submit">Добавить</button>
           </form>
         </div>
@@ -776,15 +806,15 @@ function getToday() {
               />
             </label>
             <label
-              >Всего шагов
+              >Подзадачи
               <input
-                v-model.number="editTaskForm.steps"
+                v-model.number="editTaskForm.subtasks"
                 type="number"
                 min="0"
                 max="25"
               />
             </label>
-            <label
+            <!-- <label
               >Выполнено шагов
               <input
                 v-model.number="editTaskForm.stepActive"
@@ -794,7 +824,7 @@ function getToday() {
                 :disabled="!editTaskForm.steps"
                 :class="{ 'steps-disabled': !editTaskForm.steps }"
               />
-            </label>
+            </label> -->
             <div v-if="editError" class="form-error">{{ editError }}</div>
             <button class="add-task-submit" type="submit">Сохранить</button>
           </form>
@@ -1153,6 +1183,41 @@ function getToday() {
   align-items: center;
   justify-content: right;
   animation: modal-bg-fade 0.25s;
+}
+
+.subtasks-label {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+}
+.added-subtask {
+  display: flex;
+  flex-direction: row;
+  margin-left: 5px;
+}
+
+.add-subtask {
+  background: #18191f;
+  /* border: #2e2660 1px solid; */
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 1.1rem;
+  font-weight: 700;
+  padding: 0 14px;
+  margin-left: 8px;
+  cursor: pointer;
+  box-shadow: 0 2px 8px 0 rgba(44, 47, 54, 0.12);
+  transition: 0.1s ease-in-out;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.add-subtask:hover {
+  background: #232b33;
+  box-shadow: 0 4px 16px 0 rgba(44, 47, 54, 0.18);
 }
 
 .modal-card {

@@ -25,21 +25,35 @@ export async function fetchTask(id) {
   return data;
 }
 export async function addTaskAPI(task) {
-  // const newTask = { ...task, id: idCounter++ }
+  console.log("raw task:", task);
+
   const newTask = {
     title: task.title,
+    description: task.description ?? "", // если описание не указано — будет пустым
     start: task.start,
     end: task.end,
-    steps: [],
     color: task.color,
+    parentId: null,
+    subtasks: (task.subtasks || []).map((subtask) => ({
+      title: subtask.title,
+      description: subtask.description ?? "", // опционально
+      color: task.color, // наследуем цвет от родительской задачи
+      parentId: null,
+      subtasks: [], // пока без вложенности
+    })),
   };
+
+  console.log("newTask to send:", newTask);
+
   await fetch(`http://localhost:5005/api/v1/tasks`, {
     method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
     body: JSON.stringify(newTask),
   });
-  // fakeTasks.push(newTask)
-  // return newTask
 }
+
 export async function deleteTaskAPI(id) {
   // Здесь будет DELETE на бэк
   await fetch(`http://localhost:5005/api/v1/tasks/${id}`, {
