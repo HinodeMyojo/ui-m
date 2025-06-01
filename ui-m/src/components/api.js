@@ -56,7 +56,7 @@ export async function addTaskAPI(task) {
 
 export async function deleteTaskAPI(id) {
   // Здесь будет DELETE на бэк
-  await fetch(`http://localhost:5005/api/v1/tasks/${id}`, {
+  await fetch(`http://localhost:5005/api/v1/tasks/?id=${id}`, {
     method: "DELETE",
   });
 }

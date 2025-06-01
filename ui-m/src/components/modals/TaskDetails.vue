@@ -14,8 +14,15 @@
       </div>
     </div>
     <div class="content">
-      <div class="title">
-        <h3>{{ task.title }}</h3>
+      <div class="content-header">
+        <div class="title">
+          <h3>{{ task.title }}</h3>
+        </div>
+        <div class="icons">
+          <div class="trash-icon" @click="deleteTask(task)">
+            <svg-icon type="mdi" :path="trash" size="24"></svg-icon>
+          </div>
+        </div>
       </div>
       <div class="progres">
         <div class="today-progres">
@@ -365,6 +372,15 @@
 </template>
 <script setup>
 import SvgIcon from "@jamescoyle/vue-icon";
+
+import {
+  fetchTasks,
+  addTaskAPI,
+  deleteTaskAPI,
+  updateTaskAPI,
+  fetchTask,
+} from "../api.js";
+
 import {
   mdiSendCircleOutline,
   mdiPaperclip,
@@ -375,6 +391,7 @@ import {
   mdiCheck,
   mdiFileDocument,
   mdiArrowLeft,
+  mdiTrashCanOutline,
 } from "@mdi/js";
 import {
   useTemplateRef,
@@ -393,6 +410,7 @@ import ChatMessage from "../extension/ChatMessage.vue";
 // Icons
 const path = mdiSendCircleOutline;
 const path1 = mdiPaperclip;
+const trash = mdiTrashCanOutline;
 
 // Drag and drop functionality
 const images = ref([]);
@@ -552,6 +570,11 @@ const openTaskChat = () => {
   messagesVar.value = chatValue.value.messages;
   setTimeout(scrollToBottom, 100);
 };
+
+async function deleteTask(task) {
+  await deleteTaskAPI(task.id);
+  location.reload();
+}
 
 // Прокрутка при отправке сообщения
 async function sendMessage() {
@@ -884,9 +907,41 @@ function getFileIcon(type) {
   display: flex;
   justify-content: center;
   align-items: center;
+  width: 50%;
+  height: 100%;
+  position: absolute;
+}
+.content-header {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
   width: 100%;
   height: 100%;
 }
+.icons {
+  display: flex;
+  flex-direction: row;
+  /* justify-content: space-between; */
+  position: relative;
+  align-items: center;
+  justify-content: flex-end;
+  width: 100%;
+  height: 100%;
+}
+.trash-icon {
+  opacity: 0.5;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.trash-icon:hover {
+  opacity: 1;
+  color: #ff4444;
+}
+.trash-icon:active {
+  transform: scale(0.9);
+}
+
 .progres {
   justify-content: center;
   align-items: center;
