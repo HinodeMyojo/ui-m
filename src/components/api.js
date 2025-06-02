@@ -1,3 +1,5 @@
+const API_BASE_URL = `${window.location.protocol}//${window.location.hostname}:5005`;
+
 export async function fetchTasks() {
   // Здесь будет реальный запрос к бэку
   const now = new Date();
@@ -7,7 +9,7 @@ export async function fetchTasks() {
   const formattedDate = `${yyyy}-${mm}-${dd}`;
 
   const response = await fetch(
-    `http://localhost:5005/api/v1/tasks?date=${formattedDate}`
+    `${API_BASE_URL}/api/v1/tasks?date=${formattedDate}`
   );
   const data = await response.json();
   console.log(data);
@@ -19,7 +21,7 @@ export async function fetchTasks() {
 
 export async function fetchTask(id) {
   // Здесь будет реальный запрос к бэку
-  const response = await fetch(`http://localhost:5005/api/v1/tasks/${id}`);
+  const response = await fetch(`${API_BASE_URL}/api/v1/tasks/${id}`);
   const data = await response.json();
   console.log(data);
   return data;
@@ -45,7 +47,7 @@ export async function addTaskAPI(task) {
 
   console.log("newTask to send:", newTask);
 
-  await fetch(`http://localhost:5005/api/v1/tasks`, {
+  await fetch(`${API_BASE_URL}/api/v1/tasks`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -56,7 +58,7 @@ export async function addTaskAPI(task) {
 
 export async function deleteTaskAPI(id) {
   // Здесь будет DELETE на бэк
-  await fetch(`http://localhost:5005/api/v1/tasks/?id=${id}`, {
+  await fetch(`${API_BASE_URL}/api/v1/tasks/?id=${id}`, {
     method: "DELETE",
   });
 }
@@ -69,7 +71,7 @@ export async function updateTaskAPI(id, patch) {
     steps: [],
     color: patch.color,
   };
-  await fetch(`http://localhost:5005/api/v1/tasks/${id}`, {
+  await fetch(`${API_BASE_URL}/api/v1/tasks/${id}`, {
     method: "PUT",
     body: JSON.stringify(updateTask),
   });
