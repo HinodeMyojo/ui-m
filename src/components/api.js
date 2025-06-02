@@ -47,7 +47,7 @@ export async function addTaskAPI(task) {
 
   console.log("newTask to send:", newTask);
 
-  await fetch(`${API_BASE_URL}/api/v1/tasks`, {
+  await fetch(`${API_BASE_URL}/api/v1/tasks/`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
