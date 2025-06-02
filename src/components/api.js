@@ -9,7 +9,7 @@ export async function fetchTasks() {
   const formattedDate = `${yyyy}-${mm}-${dd}`;
 
   const response = await fetch(
-    `${API_BASE_URL}/api/v1/tasks?date=${formattedDate}`
+    `${API_BASE_URL}/api/v1/tasks/?date=${formattedDate}`
   );
   const data = await response.json();
   console.log(data);
