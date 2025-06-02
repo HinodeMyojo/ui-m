@@ -579,7 +579,7 @@ function getToday() {
                 background:
                   hoveredTask === task
                     ? `linear-gradient(120deg, ${task.color}ee 90%, #18343b 100%)`
-                    : `linear-gradient(120deg, ${task.color}cc 85%, #18343b 100%)`,
+                    : `linear-gradient(120deg, ${task.color}cc 25%, #18343b 100%)`,
               }"
               draggable="true"
               @dragstart="handleDragStart(task, $event)"
