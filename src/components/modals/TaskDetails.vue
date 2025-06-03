@@ -1059,7 +1059,7 @@ function getFileIcon(type) {
   display: grid;
   grid-template-columns: 1fr 1fr;
   flex-direction: row;
-  gap: 7px;
+  gap: 11px;
   width: 100%;
   height: 100%;
   overflow: hidden;
