@@ -19,6 +19,26 @@ export async function fetchTasks() {
   // return [...fakeTasks];
 }
 
+export async function checkTask(id, isCompleted) {
+  console.log("checkTask", id, isCompleted);
+  const response = await fetch(`${API_BASE_URL}/api/v1/tasks/check`, {
+    method: "POST",
+    body: JSON.stringify({
+      taskId: id,
+      isCompleted: isCompleted,
+    }),
+  });
+}
+
+export async function fetchProgress(taskId) {
+  const response = await fetch(
+    `${API_BASE_URL}/api/v1/tasks/progress/${taskId}`
+  );
+  const data = await response.json();
+  console.log(data);
+  return data;
+}
+
 export async function fetchTask(id) {
   // Здесь будет реальный запрос к бэку
   const response = await fetch(`${API_BASE_URL}/api/v1/tasks/${id}`);

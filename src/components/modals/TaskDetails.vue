@@ -31,13 +31,14 @@
               >Текущий прогресс:
             </span>
             <span class="text-sm font-medium text-blue-700 dark:text-white"
-              >{{ computeProgres() }}%</span
+              >{{ progressObj.CompletedTasks }} /
+              {{ progressObj.TotalTasks }}</span
             >
           </div>
           <div class="w-full bg-gray-200 rounded-full h-3.5 dark:bg-gray-700">
             <div
               class="bg-indigo-500 h-3.5 rounded-full"
-              :style="{ width: computeProgres() + '%' }"
+              :style="{ width: progressPercentage + '%' }"
             ></div>
           </div>
         </div>
@@ -47,14 +48,18 @@
               >{{ checkNeedPersentText() }}:
             </span>
             <span class="text-sm font-medium text-blue-700 dark:text-white"
-              >{{ needProgress() }}%</span
+              >{{ progressObj.RequiredTasks }} /
+              {{ progressObj.TotalTasks }}</span
             >
           </div>
           <div class="w-full bg-gray-200 rounded-full h-3.5 dark:bg-gray-700">
             <div
               class="bg-neonPink h-3.5 rounded-full"
               :style="{
-                width: needProgress() === -1 ? '100%' : needProgress() + '%',
+                width:
+                  needProgressPercentage === -1
+                    ? '100%'
+                    : needProgressPercentage + '%',
                 backgroundColor: needProgress() === -1 ? 'red' : '#c14481',
               }"
             ></div>
@@ -79,13 +84,15 @@
             <div class="subtask-boba">
               <input
                 type="checkbox"
-                v-model="subtask.completed"
+                v-model="subtask.done"
                 :id="'subtask-' + index"
                 class="w-4 h-4 accent-blue"
+                @change="updateSubtask(subtask.id, subtask.done)"
               />
+              <!-- {{ subtask.id }} -->
               <span
                 :for="'subtask-' + index"
-                :class="{ 'text-gray-500': subtask.completed }"
+                :class="{ 'text-gray-500': subtask.done }"
                 class="flex-1 overflow-hidden"
               >
                 <h3 class="truncate block text-white" :title="subtask.title">
@@ -378,6 +385,8 @@ import {
   deleteTaskAPI,
   updateTaskAPI,
   fetchTask,
+  checkTask,
+  fetchProgress,
 } from "../api.js";
 
 import {
@@ -460,15 +469,17 @@ function removeFile(file) {
 
 // Task progress calculations
 function computeProgres() {
-  return Math.round((task.completedSubtasks / task.totalSubtasks) * 100);
+  return Math.round(
+    (progressObj.value.CompletedTasks / progressObj.value.TotalTasks) * 100
+  );
 }
 
 function needProgress() {
-  if (task.currentDay === -1) return -1;
-  if (task.currentDay === 0) return 0;
-  const desiredCompletedTasks =
-    (task.totalSubtasks / task.totalDays) * task.currentDay;
-  return Math.round((desiredCompletedTasks / task.totalSubtasks) * 100);
+  if (progressObj.CurrentDay === -1) return -1;
+  if (progressObj.CurrentDay === 0) return 0;
+  return Math.round(
+    (progressObj.value.RequiredTasks / progressObj.value.TotalTasks) * 100
+  );
 }
 
 function checkNeedPersentText() {
@@ -551,7 +562,7 @@ function scrollToBottom() {
 // TODO
 // Прокрутка при открытии чата
 const clickSubtask = async (subtask) => {
-  chatValue.value = { name: subtask.title, id: subtask.chat.id };
+  chatValue.value = { name: subtask.title };
   const chatR = chat[chatValue.value.id];
   if (chatR) {
     messagesVar.value = chatR.messages;
@@ -620,6 +631,7 @@ async function sendMessage() {
 // Инициализируем общий чат задачи при монтировании компонента
 onMounted(() => {
   openTaskChat();
+  getProgress();
   window.addEventListener("resize", scrollToBottom);
 });
 
@@ -826,6 +838,39 @@ function cancelEdit() {
   editingMessageId.value = null;
   editingText.value = "";
   editingAttachments.value = null;
+}
+
+async function updateSubtask(taskId, state) {
+  console.log(
+    "Вызов функции updateSubtask с taskId:",
+    taskId,
+    "и state:",
+    state
+  );
+  await checkTask(taskId, state);
+  await getProgress();
+}
+
+const progressObj = ref({
+  TotalDays: 0,
+  CurrentDay: 0,
+  TotalTasks: 0,
+  CompletedTasks: 0,
+  RequiredTasks: 0,
+});
+
+const progressPercentage = ref(0);
+const needProgressPercentage = ref(0);
+
+async function getProgress() {
+  var result = await fetchProgress(task.id);
+  console.log("Прогресс:", result);
+  progressObj.value = result.progress;
+  console.log("Прогресс:", progressObj.value);
+  progressPercentage.value = computeProgres();
+  needProgressPercentage.value = needProgress();
+  console.log("Процент выполнения:", progressPercentage);
+  console.log("Процент выполнения_1:", needProgressPercentage);
 }
 
 // Добавляем состояние для хранения копии вложений при редактировании
