@@ -1,4 +1,4 @@
-const API_BASE_URL = `${window.location.protocol}//${window.location.hostname}:5005`;
+const API_BASE_URL = `http://82.202.136.167:5005`;
 
 export async function fetchTasks() {
   // Здесь будет реальный запрос к бэку

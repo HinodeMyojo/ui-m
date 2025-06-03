@@ -28,8 +28,8 @@
         <div class="today-progres">
           <div class="flex justify-between mb-1">
             <span class="text-base font-medium text-blue-700 dark:text-white"
-              >Текущий прогресс</span
-            >
+              >Текущий прогресс:
+            </span>
             <span class="text-sm font-medium text-blue-700 dark:text-white"
               >{{ computeProgres() }}%</span
             >
@@ -43,9 +43,9 @@
         </div>
         <div class="need-progres">
           <div class="flex justify-between mb-1">
-            <span class="text-base font-medium text-blue-700 dark:text-white">{{
-              checkNeedPersentText()
-            }}</span>
+            <span class="text-base font-medium text-blue-700 dark:text-white"
+              >{{ checkNeedPersentText() }}:
+            </span>
             <span class="text-sm font-medium text-blue-700 dark:text-white"
               >{{ needProgress() }}%</span
             >
@@ -903,31 +903,31 @@ function getFileIcon(type) {
   align-items: center;
 }
 
-.title {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  width: 50%;
-  height: 100%;
-  position: absolute;
-}
 .content-header {
-  display: flex;
+  display: grid;
+  grid-template-columns: 95% auto;
   flex-direction: row;
   justify-content: space-between;
   align-items: center;
   width: 100%;
   height: 100%;
 }
+
+.title {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  height: 100%;
+  text-align: center;
+}
+
 .icons {
   display: flex;
   flex-direction: row;
-  /* justify-content: space-between; */
-  position: relative;
   align-items: center;
   justify-content: flex-end;
-  width: 100%;
-  height: 100%;
+  width: auto;
 }
 .trash-icon {
   opacity: 0.5;
@@ -950,7 +950,7 @@ function getFileIcon(type) {
   display: flex;
   flex-direction: column;
   height: 100%;
-  padding: 0 16px;
+  /* padding: 0 0 0 16px; */
 }
 .today-progres,
 .need-progres {
@@ -1000,7 +1000,7 @@ function getFileIcon(type) {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  padding: 0 16px;
+  /* padding: 0 16px; */
 }
 .subtask {
   cursor: grab;
