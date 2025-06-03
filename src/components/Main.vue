@@ -1178,7 +1178,7 @@ function getToday() {
   bottom: 0;
   /* background: rgba(20, 24, 30, 0.82); */
   z-index: 1000;
-  /* height: 90%; */
+  height: 100vh;
   display: flex;
   align-items: center;
   justify-content: right;

@@ -63,36 +63,35 @@
       </div>
       <div class="inner-menu">
         <div
-          class="subtasks"
+          class="subtasks overflow-y-scroll"
           @drop="onSubtaskDrop($event, task.subtasks)"
           @dragover.prevent
+          ref="subtasksRef"
         >
-          <div ref="subtasksRef">
-            <div
-              v-for="(subtask, index) in task.subtasks"
-              :key="index"
-              draggable="true"
-              @dragstart="startDrag($event, subtask)"
-              @click="clickSubtask(subtask)"
-              class="subtask"
-            >
-              <div class="subtask-boba">
-                <input
-                  type="checkbox"
-                  v-model="subtask.completed"
-                  :id="'subtask-' + index"
-                  class="w-4 h-4 accent-blue"
-                />
-                <span
-                  :for="'subtask-' + index"
-                  :class="{ 'text-gray-500': subtask.completed }"
-                  class="flex-1 overflow-hidden"
-                >
-                  <h3 class="truncate block text-white" :title="subtask.title">
-                    {{ subtask.title }}
-                  </h3>
-                </span>
-              </div>
+          <div
+            v-for="(subtask, index) in task.subtasks"
+            :key="index"
+            draggable="true"
+            @dragstart="startDrag($event, subtask)"
+            @click="clickSubtask(subtask)"
+            class="subtask"
+          >
+            <div class="subtask-boba">
+              <input
+                type="checkbox"
+                v-model="subtask.completed"
+                :id="'subtask-' + index"
+                class="w-4 h-4 accent-blue"
+              />
+              <span
+                :for="'subtask-' + index"
+                :class="{ 'text-gray-500': subtask.completed }"
+                class="flex-1 overflow-hidden"
+              >
+                <h3 class="truncate block text-white" :title="subtask.title">
+                  {{ subtask.title }}
+                </h3>
+              </span>
             </div>
           </div>
         </div>
@@ -884,7 +883,7 @@ function getFileIcon(type) {
 .modal-cntnt {
   display: flex;
   justify-content: center;
-  height: 100vh;
+  height: 100%;
   width: 50%;
   background-color: #18141d;
   border-top-left-radius: 30px;
@@ -894,13 +893,13 @@ function getFileIcon(type) {
 .content {
   width: 100%;
   height: 100%;
-  padding: 3% 5% 3% 5%;
+  padding: 1.5% 5% 3% 5%;
   display: grid;
   grid-template-rows: 1fr 1.5fr 10fr;
-  gap: 20px;
-  /* justify-content: center; */
+  gap: 15px;
   flex-direction: column;
   align-items: center;
+  overflow: hidden;
 }
 
 .content-header {
@@ -997,10 +996,9 @@ function getFileIcon(type) {
   display: flex;
   flex-direction: column;
   justify-content: flex-start;
-  overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  /* padding: 0 16px; */
+  height: 100%;
 }
 .subtask {
   cursor: grab;
@@ -1063,13 +1061,14 @@ function getFileIcon(type) {
   flex-direction: row;
   gap: 7px;
   width: 100%;
-  max-height: 100%;
+  height: 100%;
+  overflow: hidden;
 }
 
 .chat {
   display: grid;
   grid-template-rows: 1fr 10fr 1fr;
-  height: 700px;
+  height: 100%;
   width: 100%;
   align-items: center;
   border-radius: 20px;
