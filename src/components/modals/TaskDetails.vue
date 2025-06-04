@@ -68,7 +68,7 @@
       </div>
       <div class="inner-menu">
         <div
-          class="subtasks overflow-y-scroll"
+          class="subtasks"
           @drop="onSubtaskDrop($event, task.subtasks)"
           @dragover.prevent
           ref="subtasksRef"
@@ -1044,6 +1044,9 @@ function getFileIcon(type) {
   text-overflow: ellipsis;
   white-space: nowrap;
   height: 100%;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #6e4aff #111;
 }
 .subtask {
   cursor: grab;
@@ -1479,6 +1482,8 @@ function getFileIcon(type) {
   border-radius: 8px;
   max-height: 120px;
   overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #6e4aff #111;
 }
 
 .preview-header {

@@ -25,6 +25,8 @@ const adjustTextarea = () => {
 <style scoped>
 .chat-message {
   width: 100%;
+  scrollbar-width: thin;
+  scrollbar-color: #6e4aff #11111100;
 }
 .autoresize {
   min-height: 40px;
