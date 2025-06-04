@@ -84,7 +84,16 @@ function DateToRealUtc(date) {
 
 // добавление подзадач в модалке
 function addSubtask(title) {
-  newTask.value.subtasks.push({ title: title, completed: false });
+  if (!title) return;
+
+  const position = newTask.value.subtasks.length;
+  newTask.value.subtasks.push({
+    title: title,
+    completed: false,
+    position: position,
+  });
+
+  newTask.value.subtaskInput = ""; // очистка поля ввода, если нужно
 }
 
 function removeSubtask(idx) {

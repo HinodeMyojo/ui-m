@@ -100,6 +100,7 @@ export async function addTaskAPI(task) {
       color: task.color, // наследуем цвет от родительской задачи
       parentId: null,
       subtasks: [], // пока без вложенности
+      position: subtask.position,
     })),
   };
 
