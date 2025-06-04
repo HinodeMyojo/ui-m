@@ -400,7 +400,7 @@ onBeforeUnmount(() => {
 const router = useRouter();
 
 function logout() {
-  localStorage.removeItem("auth");
+  localStorage.removeItem("token");
   router.push("/login");
 }
 

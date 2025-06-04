@@ -1,27 +1,65 @@
-const API_BASE_URL = `http://82.202.136.167:5005`;
+const API_BASE_URL = `http://192.168.1.226:5005`;
+
+async function authorizedFetch(url, options = {}) {
+  const token = localStorage.getItem("token");
+
+  // Создаем объект с заголовками, добавляя Authorization, если токен есть
+  const headers = {
+    "Content-Type": "application/json", // по умолчанию
+    ...options.headers, // кастомные заголовки сверху
+    ...(token ? { Authorization: `Bearer ${token}` } : {}), // Authorization сверху
+  };
+
+  const response = await fetch(url, {
+    ...options,
+    headers,
+  });
+
+  return response;
+}
+
+export async function login(password) {
+  let response;
+  try {
+    response = await fetch(`${API_BASE_URL}/api/v1/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        login: "hinode",
+        password: password,
+      }),
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      throw data.error;
+    }
+    localStorage.setItem("token", data.token.accessToken);
+    return;
+  } catch (error) {
+    console.log(error);
+    throw error;
+  }
+}
 
 export async function fetchTasks() {
-  // Здесь будет реальный запрос к бэку
   const now = new Date();
   const yyyy = now.getFullYear();
   const mm = String(now.getMonth() + 1).padStart(2, "0");
   const dd = String(now.getDate()).padStart(2, "0");
   const formattedDate = `${yyyy}-${mm}-${dd}`;
 
-  const response = await fetch(
+  const response = await authorizedFetch(
     `${API_BASE_URL}/api/v1/tasks/?date=${formattedDate}`
   );
   const data = await response.json();
   console.log(data);
   return data;
-
-  // Возвращаем заглушку
-  // return [...fakeTasks];
 }
 
 export async function checkTask(id, isCompleted) {
   console.log("checkTask", id, isCompleted);
-  const response = await fetch(`${API_BASE_URL}/api/v1/tasks/check`, {
+  const response = await authorizedFetch(`${API_BASE_URL}/api/v1/tasks/check`, {
     method: "POST",
     body: JSON.stringify({
       taskId: id,
@@ -31,7 +69,7 @@ export async function checkTask(id, isCompleted) {
 }
 
 export async function fetchProgress(taskId) {
-  const response = await fetch(
+  const response = await authorizedFetch(
     `${API_BASE_URL}/api/v1/tasks/progress/${taskId}`
   );
   const data = await response.json();
@@ -41,7 +79,7 @@ export async function fetchProgress(taskId) {
 
 export async function fetchTask(id) {
   // Здесь будет реальный запрос к бэку
-  const response = await fetch(`${API_BASE_URL}/api/v1/tasks/${id}`);
+  const response = await authorizedFetch(`${API_BASE_URL}/api/v1/tasks/${id}`);
   const data = await response.json();
   console.log(data);
   return data;
@@ -67,7 +105,7 @@ export async function addTaskAPI(task) {
 
   console.log("newTask to send:", newTask);
 
-  await fetch(`${API_BASE_URL}/api/v1/tasks/`, {
+  await authorizedFetch(`${API_BASE_URL}/api/v1/tasks/`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -78,7 +116,7 @@ export async function addTaskAPI(task) {
 
 export async function deleteTaskAPI(id) {
   // Здесь будет DELETE на бэк
-  await fetch(`${API_BASE_URL}/api/v1/tasks/?id=${id}`, {
+  await authorizedFetch(`${API_BASE_URL}/api/v1/tasks/?id=${id}`, {
     method: "DELETE",
   });
 }
@@ -91,7 +129,7 @@ export async function updateTaskAPI(id, patch) {
     steps: [],
     color: patch.color,
   };
-  await fetch(`${API_BASE_URL}/api/v1/tasks/${id}`, {
+  await authorizedFetch(`${API_BASE_URL}/api/v1/tasks/${id}`, {
     method: "PUT",
     body: JSON.stringify(updateTask),
   });

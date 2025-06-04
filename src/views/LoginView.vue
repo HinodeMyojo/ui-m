@@ -1,25 +1,24 @@
 <script setup>
-import { ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref } from "vue";
+import { useRouter } from "vue-router";
+import { login } from "../components/api";
 
-const password = ref('')
-const error = ref('')
-const loading = ref(false)
-const router = useRouter()
-const showPassword = ref(false)
+const password = ref("");
+const error = ref("");
+const loading = ref(false);
+const router = useRouter();
+const showPassword = ref(false);
 
-function handleLogin() {
-  error.value = ''
-  loading.value = true
-  setTimeout(() => {
-    if (password.value === 'admin') {
-      localStorage.setItem('auth', '1')
-      router.push('/')
-    } else {
-      error.value = 'Неверный пароль'
-      loading.value = false
-    }
-  }, 500)
+async function handleLogin() {
+  try {
+    loading.value = true;
+    await login(password.value);
+    error.value = "";
+    router.push("/");
+  } catch (err) {
+    error.value = err;
+    loading.value = false;
+  }
 }
 </script>
 
@@ -27,6 +26,7 @@ function handleLogin() {
   <div class="login-bg">
     <form class="login-form" @submit.prevent="handleLogin">
       <h2>Вход</h2>
+
       <div class="input-eye-wrap">
         <input
           v-model="password"
@@ -36,13 +36,38 @@ function handleLogin() {
           :disabled="loading"
           class="login-input"
         />
-        <button type="button" class="eye-btn" @click="showPassword = !showPassword" tabindex="-1">
-          <svg v-if="showPassword" width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M1 11C2.73 6.61 6.64 3.5 11 3.5C15.36 3.5 19.27 6.61 21 11C19.27 15.39 15.36 18.5 11 18.5C6.64 18.5 2.73 15.39 1 11Z" stroke="#7e8a99" stroke-width="2"/><circle cx="11" cy="11" r="3.5" stroke="#7e8a99" stroke-width="2"/></svg>
-          <svg v-else width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M1 11C2.73 6.61 6.64 3.5 11 3.5C15.36 3.5 19.27 6.61 21 11C19.27 15.39 15.36 18.5 11 18.5C6.64 18.5 2.73 15.39 1 11Z" stroke="#7e8a99" stroke-width="2"/><path d="M4 4L18 18" stroke="#7e8a99" stroke-width="2"/></svg>
+        <button
+          type="button"
+          class="eye-btn"
+          @click="showPassword = !showPassword"
+          tabindex="-1"
+        >
+          <svg
+            v-if="showPassword"
+            width="22"
+            height="22"
+            viewBox="0 0 22 22"
+            fill="none"
+          >
+            <path
+              d="M1 11C2.73 6.61 6.64 3.5 11 3.5C15.36 3.5 19.27 6.61 21 11C19.27 15.39 15.36 18.5 11 18.5C6.64 18.5 2.73 15.39 1 11Z"
+              stroke="#7e8a99"
+              stroke-width="2"
+            />
+            <circle cx="11" cy="11" r="3.5" stroke="#7e8a99" stroke-width="2" />
+          </svg>
+          <svg v-else width="22" height="22" viewBox="0 0 22 22" fill="none">
+            <path
+              d="M1 11C2.73 6.61 6.64 3.5 11 3.5C15.36 3.5 19.27 6.61 21 11C19.27 15.39 15.36 18.5 11 18.5C6.64 18.5 2.73 15.39 1 11Z"
+              stroke="#7e8a99"
+              stroke-width="2"
+            />
+            <path d="M4 4L18 18" stroke="#7e8a99" stroke-width="2" />
+          </svg>
         </button>
       </div>
       <button type="submit" class="login-btn" :disabled="loading || !password">
-        {{ loading ? '...' : 'Войти' }}
+        {{ loading ? "..." : "Войти" }}
       </button>
       <div v-if="error" class="login-error">{{ error }}</div>
     </form>
@@ -52,7 +77,7 @@ function handleLogin() {
 <style scoped>
 .login-bg {
   min-height: 100vh;
-  background: #18191F;
+  background: #18191f;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -85,8 +110,8 @@ function handleLogin() {
   width: 100%;
   padding: 10px 38px 10px 14px;
   border-radius: 8px;
-  border: 1px solid #2E2660;
-  background: #18191F;
+  border: 1px solid #2e2660;
+  background: #18191f;
   color: #fff;
   font-size: 1.08rem;
   margin-bottom: 4px;
@@ -120,7 +145,7 @@ function handleLogin() {
   padding: 10px 0;
   border-radius: 8px;
   border: none;
-  background: linear-gradient(90deg, #2E2660 60%, #18191F 100%);
+  background: linear-gradient(90deg, #2e2660 60%, #18191f 100%);
   color: #fff;
   font-size: 1.08rem;
   font-weight: 600;
@@ -138,4 +163,4 @@ function handleLogin() {
   margin-top: 2px;
   min-height: 22px;
 }
-</style> 
+</style>
