@@ -1,4 +1,4 @@
-const API_BASE_URL = `http://192.168.1.226:5005`;
+const API_BASE_URL = `${window.location.protocol}//${window.location.hostname}:5005`;
 
 async function authorizedFetch(url, options = {}) {
   const token = localStorage.getItem("token");
