@@ -67,38 +67,55 @@
         </div>
       </div>
       <div class="inner-menu">
-        <div
-          class="subtasks"
-          @drop="onSubtaskDrop($event, task.subtasks)"
-          @dragover.prevent
-          ref="subtasksRef"
-        >
+        <div class="inner-menu-content">
           <div
-            v-for="(subtask, index) in task.subtasks"
-            :key="index"
-            draggable="true"
-            @dragstart="startDrag($event, subtask)"
-            @click="clickSubtask(subtask)"
-            class="subtask"
+            class="subtasks"
+            @drop="onSubtaskDrop($event, task.subtasks)"
+            @dragover.prevent
+            ref="subtasksRef"
           >
-            <div class="subtask-boba">
-              <input
-                type="checkbox"
-                v-model="subtask.done"
-                :id="'subtask-' + index"
-                class="w-4 h-4 accent-blue"
-                @change="updateSubtask(subtask.id, subtask.done)"
-              />
-              <!-- {{ subtask.id }} -->
-              <span
-                :for="'subtask-' + index"
-                :class="{ 'text-gray-500': subtask.done }"
-                class="flex-1 overflow-hidden"
-              >
-                <h3 class="truncate block text-white" :title="subtask.title">
-                  {{ subtask.title }}
-                </h3>
-              </span>
+            <div
+              v-for="(subtask, index) in task.subtasks"
+              :key="index"
+              draggable="true"
+              @dragstart="startDrag($event, subtask)"
+              @click="clickSubtask(subtask)"
+              :class="['subtask', { selected: isSelected(subtask) }]"
+            >
+              <div class="subtask-boba">
+                <input
+                  type="checkbox"
+                  v-model="subtask.done"
+                  :id="'subtask-' + index"
+                  class="w-4 h-4 accent-blue"
+                  @change="updateSubtask(subtask.id, subtask.done)"
+                />
+                <!-- {{ subtask.id }} -->
+                <span
+                  :for="'subtask-' + index"
+                  :class="{ 'text-gray-500': subtask.done }"
+                  class="flex-1 overflow-hidden"
+                >
+                  <h3 class="truncate block text-white" :title="subtask.title">
+                    {{ subtask.title }}
+                  </h3>
+                </span>
+              </div>
+            </div>
+          </div>
+          <div class="subtask-buttons">
+            <button class="subtask-btn add-btn" @click="addSubtask">
+              <span>Добавить</span>
+            </button>
+            <div v-if="chatValue?.id !== null" style="display: contents">
+              <button class="subtask-btn edit-btn" @click="editSubtask">
+                Редактировать
+              </button>
+            </div>
+            <div v-if="chatValue?.id !== null" style="display: contents">
+              <button class="subtask-btn delete-btn" @click="editSubtask">
+                Удалить
+              </button>
             </div>
           </div>
         </div>
@@ -561,7 +578,15 @@ function scrollToBottom() {
 
 // TODO
 // Прокрутка при открытии чата
+
+const selectedSubtaskId = ref(null);
+
+const isSelected = function (subtask) {
+  return selectedSubtaskId.value === subtask.id;
+};
+
 const clickSubtask = async (subtask) => {
+  selectedSubtaskId.value = subtask.id;
   chatValue.value = { name: subtask.title };
   const chatR = chat[chatValue.value.id];
   if (chatR) {
@@ -632,6 +657,7 @@ async function sendMessage() {
 onMounted(() => {
   openTaskChat();
   getProgress();
+  console.log(chatValue.value);
   window.addEventListener("resize", scrollToBottom);
 });
 
@@ -1037,6 +1063,60 @@ function getFileIcon(type) {
   color: #c14481;
 }
 
+.inner-menu-content {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  grid-template-rows: 10fr 1fr;
+}
+
+.subtask-buttons {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.subtask-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 50%;
+  border-radius: 8px;
+  border: 2px solid transparent;
+  padding: 10px 20px;
+  color: white;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+/* Индивидуальные цвета */
+.add-btn {
+  /* background-color: #4caf50; */
+  border-color: #6e4aff;
+}
+
+.edit-btn {
+  /* background-color: #2196f3; */
+  border-color: #6e4aff;
+}
+
+.delete-btn {
+  /* background-color: #f44336; */
+  border-color: #c14481;
+}
+
+.subtask-btn:hover {
+  opacity: 0.85;
+  /* scale: 1.05; */
+}
+
+.subtask-btn:active {
+  transform: scale(0.95);
+}
+
 .subtasks {
   display: flex;
   flex-direction: column;
@@ -1051,10 +1131,22 @@ function getFileIcon(type) {
 .subtask {
   cursor: grab;
   user-select: none;
+  display: grid;
+  grid-template-columns: 10fr 1fr;
 }
+.subtask-actions {
+}
+
 .subtask :active {
   cursor: grabbing;
 }
+.subtask.selected {
+  background-color: rgba(61, 55, 90, 0.5);
+}
+.subtask:hover {
+  background-color: rgba(61, 55, 90, 0.5);
+}
+
 .subtask-boba {
   display: flex;
   padding: 8px 0;
@@ -1066,10 +1158,8 @@ function getFileIcon(type) {
   gap: 15px;
   border-radius: 8px;
   user-select: none;
+  overflow: hidden;
   transition: background-color 0.2s ease;
-}
-.subtask-boba:hover {
-  background-color: #252139;
 }
 
 .subtask-boba input[type="checkbox"] {
