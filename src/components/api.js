@@ -1,3 +1,5 @@
+import router from "@/router";
+
 const API_BASE_URL = `${window.location.protocol}//${window.location.hostname}:5005`;
 
 async function authorizedFetch(url, options = {}) {
@@ -14,6 +16,12 @@ async function authorizedFetch(url, options = {}) {
     ...options,
     headers,
   });
+
+  if (response.status === 401) {
+    localStorage.removeItem("token");
+    router.push("/login");
+    throw new Error("Unauthorized");
+  }
 
   return response;
 }
