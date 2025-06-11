@@ -517,7 +517,12 @@ function getToday() {
   <!-- <div class="main" :class="{ 'calendar-dimmed': calendarDimmed }"> -->
   <div class="main">
     <div class="header">
-      <div class="header-left"></div>
+      <div class="header-left">
+        <div class="biliboba">
+          <div class="biliboba-left"></div>
+          <div class="biliboba-right"></div>
+        </div>
+      </div>
       <div class="header-center">
         <v-icon
           icon="mdi-chevron-left"
@@ -1074,6 +1079,29 @@ function getToday() {
 
 .header-left {
   flex: 1;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* background-color: #6e4aff; */
+}
+
+.biliboba {
+  width: 90%;
+  height: 80%;
+  /* background-color: #25636a; */
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #fff3;
+}
+
+.biliboba-left {
+}
+
+.biliboba-right {
 }
 
 .header-center {
