@@ -1096,12 +1096,20 @@ function getToday() {
   align-items: center;
   justify-content: center;
   border: 1px solid #fff3;
+  display: flex;
+  flex-direction: row;
+  overflow: hidden;
 }
 
 .biliboba-left {
+  flex: 1;
 }
 
 .biliboba-right {
+  width: 100%;
+  height: 100%;
+  flex: 1;
+  background-color: #25636a;
 }
 
 .header-center {
