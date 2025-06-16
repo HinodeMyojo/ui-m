@@ -98,10 +98,10 @@ export async function addTaskAPI(task) {
   const newTask = {
     title: task.title,
     description: task.description ?? "", // если описание не указано — будет пустым
-    start: task.start,
-    end: task.end,
-    color: task.color,
-    parentId: null,
+    start: task.start || null,
+    end: task.end || null,
+    color: task.color || null,
+    parentId: task.parentId || null,
     subtasks: (task.subtasks || []).map((subtask) => ({
       title: subtask.title,
       description: subtask.description ?? "", // опционально

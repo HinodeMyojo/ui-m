@@ -1,4 +1,11 @@
 <template>
+  <div v-if="addSubtaskModal">
+    <AddSubtaskModal
+      :task="task"
+      @close="closeAddSubtaskModal"
+      @created="handleCreatedSubtask"
+    />
+  </div>
   <div class="modal-cntnt">
     <!-- Добавляем модальное окно для просмотра изображения -->
     <div
@@ -395,6 +402,7 @@
 </template>
 <script setup>
 import SvgIcon from "@jamescoyle/vue-icon";
+import AddSubtaskModal from "./addSubtask.vue";
 
 import {
   fetchTasks,
@@ -511,44 +519,11 @@ const props = defineProps({
 
 const task = props.task;
 
-console.log(task);
+const reloadTask = () => {
+  location.reload();
+};
 
-// const task = reactive({
-//   id: 0,
-//   title: "Тестовая задача",
-//   description: "Нужно сделать очень много всего",
-//   start_date: "20.05.2025",
-//   end_date: "31.05.2025",
-//   totalDays: 11,
-//   currentDay: 2, // если -1 = то срок проёбан
-//   total: 3,
-//   completed: 1,
-//   required: 2,
-//   chatId: 0, // Добавляем ID чата для задачи
-//   subtasks: [
-//     {
-//       id: 0,
-//       title: "Подзадача_1",
-//       description: "Нужно сделать всё",
-//       chatId: 1,
-//       completed: true,
-//     },
-//     {
-//       id: 1,
-//       title: "БИЛИБАОваовраоуцакерцуолароатуклравапшщзасвапщшшрпмарощшлорми",
-//       description: "Нужно сделать всё",
-//       chatId: 2,
-//       completed: true,
-//     },
-//     {
-//       id: 2,
-//       title: "Подзадача_2",
-//       description: "Нужно сделать всё",
-//       chatId: 3,
-//       completed: false,
-//     },
-//   ],
-// });
+console.log(task);
 
 // Chat functionality
 const messagesVar = ref(null);
@@ -558,6 +533,23 @@ const chatMessageRef = ref(null);
 
 // Добавляем состояние для выбранного изображения
 const selectedImage = ref(null);
+
+const addSubtaskModal = ref(false);
+
+// Открытие модалки
+const addSubtask = () => {
+  console.log("Добавляем подзадачу");
+  addSubtaskModal.value = true;
+};
+
+// Закрытие модалки
+const closeAddSubtaskModal = () => {
+  addSubtaskModal.value = false;
+};
+
+const handleCreatedSubtask = (subtask) => {
+  reloadTask();
+};
 
 // Обновляем функцию открытия изображения
 const openImage = async (imageUrl) => {
