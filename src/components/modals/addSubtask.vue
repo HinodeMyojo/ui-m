@@ -1,5 +1,5 @@
 <template>
-  <div class="modal-overlay" @click.self="closeAddModal">
+  <div class="modal-overlay">
     <div class="modal-card">
       <button class="modal-close" @click="closeAddModal">×</button>
 
