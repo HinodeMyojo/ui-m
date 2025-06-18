@@ -874,6 +874,9 @@ function getToday() {
   display: flex;
   flex-direction: column;
   align-items: center;
+  overflow-y: auto;
+  scrollbar-width: auto;
+  scrollbar-color: #6e4aff #111;
 }
 
 .columns-container {
