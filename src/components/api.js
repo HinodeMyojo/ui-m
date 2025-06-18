@@ -45,7 +45,6 @@ export async function login(password) {
     localStorage.setItem("token", data.token.accessToken);
     return;
   } catch (error) {
-    console.log(error);
     throw error;
   }
 }
@@ -61,12 +60,10 @@ export async function fetchTasks() {
     `${API_BASE_URL}/api/v1/tasks/?date=${formattedDate}`
   );
   const data = await response.json();
-  console.log(data);
   return data;
 }
 
 export async function checkTask(id, isCompleted) {
-  console.log("checkTask", id, isCompleted);
   const response = await authorizedFetch(`${API_BASE_URL}/api/v1/tasks/check`, {
     method: "POST",
     body: JSON.stringify({
@@ -81,7 +78,6 @@ export async function fetchProgress(taskId) {
     `${API_BASE_URL}/api/v1/tasks/progress/${taskId}`
   );
   const data = await response.json();
-  console.log(data);
   return data;
 }
 
@@ -89,12 +85,9 @@ export async function fetchTask(id) {
   // Здесь будет реальный запрос к бэку
   const response = await authorizedFetch(`${API_BASE_URL}/api/v1/tasks/${id}`);
   const data = await response.json();
-  console.log(data);
   return data;
 }
 export async function addTaskAPI(task) {
-  console.log("raw task:", task);
-
   const newTask = {
     title: task.title,
     description: task.description ?? "", // если описание не указано — будет пустым
@@ -111,8 +104,6 @@ export async function addTaskAPI(task) {
       position: subtask.position,
     })),
   };
-
-  console.log("newTask to send:", newTask);
 
   await authorizedFetch(`${API_BASE_URL}/api/v1/tasks/`, {
     method: "POST",
@@ -138,7 +129,7 @@ export async function updateTaskAPI(id, patch) {
     steps: [],
     color: patch.color,
   };
-  await authorizedFetch(`${API_BASE_URL}/api/v1/tasks/${id}`, {
+  await authorizedFetch(`${API_BASE_URL}/api/v1/tasks/?id=${id}`, {
     method: "PUT",
     body: JSON.stringify(updateTask),
   });
