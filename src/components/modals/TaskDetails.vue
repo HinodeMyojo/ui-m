@@ -75,38 +75,43 @@
       </div>
       <div class="inner-menu">
         <div class="inner-menu-content">
-          <div
-            class="subtasks"
-            @drop="onSubtaskDrop($event, task.subtasks)"
-            @dragover.prevent
-            ref="subtasksRef"
-          >
+          <div style="overflow: hidden">
             <div
-              v-for="(subtask, index) in task.subtasks"
-              :key="index"
-              draggable="true"
-              @dragstart="startDrag($event, subtask)"
-              @click="clickSubtask(subtask)"
-              :class="['subtask', { selected: isSelected(subtask) }]"
+              class="subtasks"
+              @drop="onSubtaskDrop($event, task.subtasks)"
+              @dragover.prevent
+              ref="subtasksRef"
             >
-              <div class="subtask-boba">
-                <input
-                  type="checkbox"
-                  v-model="subtask.done"
-                  :id="'subtask-' + index"
-                  class="w-4 h-4 accent-blue"
-                  @change="updateSubtask(subtask.id, subtask.done)"
-                />
-                <!-- {{ subtask.id }} -->
-                <span
-                  :for="'subtask-' + index"
-                  :class="{ 'text-gray-500': subtask.done }"
-                  class="flex-1 overflow-hidden"
-                >
-                  <h3 class="truncate block text-white" :title="subtask.title">
-                    {{ subtask.title }}
-                  </h3>
-                </span>
+              <div
+                v-for="(subtask, index) in task.subtasks"
+                :key="index"
+                draggable="true"
+                @dragstart="startDrag($event, subtask)"
+                @click="clickSubtask(subtask)"
+                :class="['subtask', { selected: isSelected(subtask) }]"
+              >
+                <div class="subtask-boba">
+                  <input
+                    type="checkbox"
+                    v-model="subtask.done"
+                    :id="'subtask-' + index"
+                    class="w-4 h-4 accent-blue"
+                    @change="updateSubtask(subtask.id, subtask.done)"
+                  />
+                  <!-- {{ subtask.id }} -->
+                  <span
+                    :for="'subtask-' + index"
+                    :class="{ 'text-gray-500': subtask.done }"
+                    class="flex-1 overflow-hidden"
+                  >
+                    <h3
+                      class="truncate block text-white"
+                      :title="subtask.title"
+                    >
+                      {{ subtask.title }}
+                    </h3>
+                  </span>
+                </div>
               </div>
             </div>
           </div>
@@ -519,8 +524,9 @@ const props = defineProps({
 
 const task = props.task;
 
-const reloadTask = () => {
-  location.reload();
+const reloadTask = async () => {
+  var taskResponse = await fetchTask(task.id);
+  task.subtask = taskResponse.subtasks;
 };
 
 console.log(task);
@@ -1056,13 +1062,16 @@ function getFileIcon(type) {
 }
 
 .inner-menu-content {
-  display: grid;
+  display: flex;
   width: 100%;
   height: 100%;
-  grid-template-rows: 10fr 1fr;
+  min-height: 100%;
+  flex-grow: 1;
+  flex-direction: column;
 }
 
 .subtask-buttons {
+  flex: 1;
   width: 100%;
   display: flex;
   align-items: center;
@@ -1110,13 +1119,16 @@ function getFileIcon(type) {
 }
 
 .subtasks {
+  flex: 10;
   display: flex;
   flex-direction: column;
   justify-content: flex-start;
   text-overflow: ellipsis;
   white-space: nowrap;
   height: 100%;
-  overflow-y: auto;
+  gap: 5px;
+  overflow-y: scroll;
+  overflow-x: hidden;
   scrollbar-width: thin;
   scrollbar-color: #6e4aff #111;
 }
