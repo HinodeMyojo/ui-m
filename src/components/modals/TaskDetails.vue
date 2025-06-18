@@ -80,43 +80,38 @@
       </div>
       <div class="inner-menu">
         <div class="inner-menu-content">
-          <div style="overflow: hidden">
+          <div
+            class="subtasks"
+            @drop="onSubtaskDrop($event, task.subtasks)"
+            @dragover.prevent
+            ref="subtasksRef"
+          >
             <div
-              class="subtasks"
-              @drop="onSubtaskDrop($event, task.subtasks)"
-              @dragover.prevent
-              ref="subtasksRef"
+              v-for="(subtask, index) in task.subtasks"
+              :key="index"
+              draggable="true"
+              @dragstart="startDrag($event, subtask)"
+              @click="clickSubtask(subtask)"
+              :class="['subtask', { selected: isSelected(subtask) }]"
             >
-              <div
-                v-for="(subtask, index) in task.subtasks"
-                :key="index"
-                draggable="true"
-                @dragstart="startDrag($event, subtask)"
-                @click="clickSubtask(subtask)"
-                :class="['subtask', { selected: isSelected(subtask) }]"
-              >
-                <div class="subtask-boba">
-                  <input
-                    type="checkbox"
-                    v-model="subtask.done"
-                    :id="'subtask-' + index"
-                    class="w-4 h-4 accent-blue"
-                    @change="updateSubtask(subtask.id, subtask.done)"
-                  />
-                  <!-- {{ subtask.id }} -->
-                  <span
-                    :for="'subtask-' + index"
-                    :class="{ 'text-gray-500': subtask.done }"
-                    class="flex-1 overflow-hidden"
-                  >
-                    <h3
-                      class="truncate block text-white"
-                      :title="subtask.title"
-                    >
-                      {{ subtask.title }}
-                    </h3>
-                  </span>
-                </div>
+              <div class="subtask-boba">
+                <input
+                  type="checkbox"
+                  v-model="subtask.done"
+                  :id="'subtask-' + index"
+                  class="w-4 h-4 accent-blue"
+                  @change="updateSubtask(subtask.id, subtask.done)"
+                />
+                <!-- {{ subtask.id }} -->
+                <span
+                  :for="'subtask-' + index"
+                  :class="{ 'text-gray-500': subtask.done }"
+                  class="flex-1 overflow-hidden"
+                >
+                  <h3 class="truncate block text-white" :title="subtask.title">
+                    {{ subtask.title }}
+                  </h3>
+                </span>
               </div>
             </div>
           </div>
@@ -1146,7 +1141,7 @@ function getFileIcon(type) {
   white-space: nowrap;
   height: 100%;
   gap: 5px;
-  overflow-y: scroll;
+  overflow-y: auto;
   overflow-x: hidden;
   scrollbar-width: thin;
   scrollbar-color: #6e4aff #111;
