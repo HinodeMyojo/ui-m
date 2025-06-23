@@ -24,7 +24,6 @@ async function loadTasks() {
     // start: new Date(2025, 5, 1),
     // end: new Date(2025, 5, 30),
   }));
-  console.log(tasks.value);
 }
 
 const currentDate = ref(new Date());
@@ -46,16 +45,12 @@ const monthEnd = computed(
 
 const visibleTasks = computed(() => {
   const msMonthStart = monthStart.value.getTime();
-  console.log("msMonthStart:", msMonthStart);
   const msMonthEnd = monthEnd.value.getTime();
-  console.log("msMonthEnd:", msMonthEnd);
   const result = tasks.value
     .map((task) => {
       // Определяем границы задачи в текущем месяце
       const msTaskStart = task.start.getTime();
-      console.log("msTaskStart:", msTaskStart);
       const msTaskEnd = task.end.getTime();
-      console.log("msTaskEnd:", msTaskEnd);
       const start = msTaskStart < msMonthStart ? monthStart.value : task.start;
       const end = msTaskEnd > msMonthEnd ? monthEnd.value : task.end;
       // Если задача не пересекается с месяцем — не показываем
@@ -73,13 +68,10 @@ const visibleTasks = computed(() => {
   return result;
 });
 
-console.log(visibleTasks.value);
-
 function DateToRealUtc(date) {
   var date = new Date(date);
   var userTimezoneOffset = date.getTimezoneOffset() * 60000;
   return new Date(date.getTime() + userTimezoneOffset);
-  // console.log(result);
 }
 
 // добавление подзадач в модалке
@@ -255,7 +247,6 @@ function closeTaskDetails() {
 }
 
 function formatDate(date) {
-  // console.log(date)
   return date.toLocaleDateString("ru-RU", {
     day: "numeric",
     month: "short",
@@ -905,6 +896,9 @@ function checkProgress(task) {
   display: flex;
   flex-direction: column;
   align-items: center;
+  overflow-y: auto;
+  scrollbar-width: auto;
+  scrollbar-color: #6e4aff #111;
 }
 
 .columns-container {

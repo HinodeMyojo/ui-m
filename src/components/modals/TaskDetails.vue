@@ -1,9 +1,14 @@
 <template>
-  <div v-if="addSubtaskModal">
-    <AddSubtaskModal
+  <div v-if="modalState.active">
+    <UniversalSubtaskModal
+      :key="modalState.mode + (modalState.subtask?.id || '')"
       :task="task"
-      @close="closeAddSubtaskModal"
+      :mode="modalState.mode"
+      :subtask="modalState.subtask"
+      @close="closeModal"
       @created="handleCreatedSubtask"
+      @updated="handleUpdatedSubtask"
+      @deleted="handleDeletedSubtask"
     />
   </div>
   <div class="modal-cntnt">
@@ -111,16 +116,22 @@
             </div>
           </div>
           <div class="subtask-buttons">
-            <button class="subtask-btn add-btn" @click="addSubtask">
+            <button class="subtask-btn add-btn" @click="openAddSubtaskModal">
               <span>Добавить</span>
             </button>
             <div v-if="chatValue?.id !== null" style="display: contents">
-              <button class="subtask-btn edit-btn" @click="editSubtask">
+              <button
+                class="subtask-btn edit-btn"
+                @click="openEditSubtaskModal(selectedSubtask)"
+              >
                 Редактировать
               </button>
             </div>
             <div v-if="chatValue?.id !== null" style="display: contents">
-              <button class="subtask-btn delete-btn" @click="editSubtask">
+              <button
+                class="subtask-btn delete-btn"
+                @click="openDeleteSubtaskModal(selectedSubtask)"
+              >
                 Удалить
               </button>
             </div>
@@ -402,7 +413,7 @@
 </template>
 <script setup>
 import SvgIcon from "@jamescoyle/vue-icon";
-import AddSubtaskModal from "./addSubtask.vue";
+import UniversalSubtaskModal from "./UniversalSubtaskModal.vue";
 
 import {
   fetchTasks,
@@ -517,13 +528,13 @@ const props = defineProps({
   task: Object,
 });
 
-const task = props.task;
+const task = ref(props.task);
 
-const reloadTask = () => {
-  location.reload();
+const reloadTask = async () => {
+  var taskResponse = await fetchTask(task.value.id);
+  await getProgress();
+  task.value.subtasks = taskResponse.subtasks;
 };
-
-console.log(task);
 
 // Chat functionality
 const messagesVar = ref(null);
@@ -534,20 +545,38 @@ const chatMessageRef = ref(null);
 // Добавляем состояние для выбранного изображения
 const selectedImage = ref(null);
 
-const addSubtaskModal = ref(false);
+const modalState = ref({
+  active: false,
+  mode: "add", // "add", "edit" или "delete"
+  subtask: null,
+});
 
 // Открытие модалки
-const addSubtask = () => {
-  console.log("Добавляем подзадачу");
-  addSubtaskModal.value = true;
+const openAddSubtaskModal = () => {
+  modalState.value = { active: true, mode: "add", subtask: null };
 };
 
-// Закрытие модалки
-const closeAddSubtaskModal = () => {
-  addSubtaskModal.value = false;
+const openEditSubtaskModal = (subtask) => {
+  modalState.value = { active: true, mode: "edit", subtask };
+};
+
+const openDeleteSubtaskModal = (subtask) => {
+  modalState.value = { active: true, mode: "delete", subtask };
+};
+
+const closeModal = () => {
+  modalState.value.active = false;
 };
 
 const handleCreatedSubtask = (subtask) => {
+  reloadTask();
+};
+
+const handleUpdatedSubtask = (updatedSubtask) => {
+  reloadTask();
+};
+
+const handleDeletedSubtask = (subtask) => {
   reloadTask();
 };
 
@@ -571,6 +600,7 @@ function scrollToBottom() {
 // TODO
 // Прокрутка при открытии чата
 
+const selectedSubtask = ref(null);
 const selectedSubtaskId = ref(null);
 
 const isSelected = function (subtask) {
@@ -578,6 +608,7 @@ const isSelected = function (subtask) {
 };
 
 const clickSubtask = async (subtask) => {
+  selectedSubtask.value = subtask;
   selectedSubtaskId.value = subtask.id;
   chatValue.value = { name: subtask.title };
   const chatR = chat[chatValue.value.id];
@@ -590,10 +621,9 @@ const clickSubtask = async (subtask) => {
 
 // Функция для открытия общего чата задачи
 const openTaskChat = () => {
-  chatValue.value = task.chat;
+  chatValue.value = task.value.chat;
   // для того, чтобы было видно, что это родительский чат
   chatValue.value.id = null;
-  console.log(chatValue.value);
   messagesVar.value = chatValue.value.messages;
   setTimeout(scrollToBottom, 100);
 };
@@ -649,7 +679,6 @@ async function sendMessage() {
 onMounted(() => {
   openTaskChat();
   getProgress();
-  console.log(chatValue.value);
   window.addEventListener("resize", scrollToBottom);
 });
 
@@ -859,12 +888,7 @@ function cancelEdit() {
 }
 
 async function updateSubtask(taskId, state) {
-  console.log(
-    "Вызов функции updateSubtask с taskId:",
-    taskId,
-    "и state:",
-    state
-  );
+  "Вызов функции updateSubtask с taskId:", taskId, "и state:", state;
   await checkTask(taskId, state);
   await getProgress();
 }
@@ -881,14 +905,10 @@ const progressPercentage = ref(0);
 const needProgressPercentage = ref(0);
 
 async function getProgress() {
-  var result = await fetchProgress(task.id);
-  console.log("Прогресс:", result);
+  var result = await fetchProgress(task.value.id);
   progressObj.value = result.progress;
-  console.log("Прогресс:", progressObj.value);
   progressPercentage.value = computeProgres();
   needProgressPercentage.value = needProgress();
-  console.log("Процент выполнения:", progressPercentage);
-  console.log("Процент выполнения_1:", needProgressPercentage);
 }
 
 // Добавляем состояние для хранения копии вложений при редактировании
@@ -1056,13 +1076,16 @@ function getFileIcon(type) {
 }
 
 .inner-menu-content {
-  display: grid;
+  display: flex;
   width: 100%;
   height: 100%;
-  grid-template-rows: 10fr 1fr;
+  min-height: 100%;
+  flex-grow: 1;
+  flex-direction: column;
 }
 
 .subtask-buttons {
+  flex: 1;
   width: 100%;
   display: flex;
   align-items: center;
@@ -1110,13 +1133,16 @@ function getFileIcon(type) {
 }
 
 .subtasks {
+  flex: 10;
   display: flex;
   flex-direction: column;
   justify-content: flex-start;
   text-overflow: ellipsis;
   white-space: nowrap;
   height: 100%;
+  gap: 5px;
   overflow-y: auto;
+  overflow-x: hidden;
   scrollbar-width: thin;
   scrollbar-color: #6e4aff #111;
 }
