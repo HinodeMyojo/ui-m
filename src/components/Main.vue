@@ -112,7 +112,7 @@ const calendarRef = ref(null);
 const calendarWidth = ref(0);
 // const MAX_TASK_WIDTH_PERC = 0.5
 const MAX_TASK_WIDTH_PERC = 1;
-const MIN_TASK_WIDTH = 120;
+const MIN_TASK_WIDTH = ref(120);
 
 function updateCalendarWidth() {
   if (calendarRef.value) {
@@ -121,8 +121,9 @@ function updateCalendarWidth() {
 }
 
 function calcTaskWidth(task) {
+  MIN_TASK_WIDTH.value = getColumnWidth();
   const days = task.endDay - task.startDay + 1;
-  if (days <= 3) return MIN_TASK_WIDTH;
+  if (days <= 1) return MIN_TASK_WIDTH.value;
   if (!calendarWidth.value || !daysInMonth.value) return 200;
   const widthByDays = (calendarWidth.value / daysInMonth.value) * days;
   const maxWidth = calendarWidth.value * MAX_TASK_WIDTH_PERC;
@@ -230,6 +231,17 @@ const handleNextMonth = () => {
     }
     return task;
   });
+};
+
+// Секция для получения ширины column
+const columnRef = ref([]);
+
+const getColumnWidth = () => {
+  if (columnRef.value.length > 0) {
+    const width = columnRef.value[0].getBoundingClientRect().width;
+    return width;
+  }
+  return 0;
 };
 
 const getMonthName = (month) => {
@@ -600,6 +612,7 @@ function getTaskOverdueRatio(task) {
         <div
           v-for="col in daysInMonth"
           :key="col"
+          ref="columnRef"
           class="column active"
           :class="{
             today:
@@ -631,6 +644,7 @@ function getTaskOverdueRatio(task) {
                 left: `${(task.startDay - 1) * (100 / daysInMonth)}%`,
                 width: calcTaskWidth(task) + 'px',
                 height: `${TASK_HEIGHT}px`,
+                // minWidth: getColumnWidth() + 'px',
                 marginBottom: `${TASK_MARGIN}px`,
                 background:
                   hoveredTask === task
@@ -646,7 +660,9 @@ function getTaskOverdueRatio(task) {
             >
               <div class="task-inner">
                 <div class="task-row">
-                  <span class="task-title">{{ task.title }}</span>
+                  <span class="task-title" v-if="task.totalDays >= 2">{{
+                    task.title
+                  }}</span>
                   <!-- <span class="task-icon">📚</span> -->
                   <div class="task-progres">
                     <div
@@ -659,35 +675,37 @@ function getTaskOverdueRatio(task) {
                     >
                       {{ task.completedSubtasks }} / {{ task.totalSubtasks }}
                     </div>
-                    <div
-                      class="progress-icon"
-                      v-if="checkProgress(task) === PROGRESS_DONE"
-                    >
-                      ✅
-                    </div>
-                    <div
-                      class="progress-icon"
-                      v-if="checkProgress(task) === PROGRESS_NORMAL"
-                    >
-                      💨
-                    </div>
-                    <div
-                      class="progress-icon"
-                      v-if="checkProgress(task) === PROGRESS_WARN"
-                    >
-                      ⚠️
-                    </div>
-                    <div
-                      class="progress-icon"
-                      v-if="checkProgress(task) === PROGRESS_URGENT"
-                    >
-                      ♨️
-                    </div>
-                    <div
-                      class="progress-icon"
-                      v-if="checkProgress(task) === PROGRESS_FAILED"
-                    >
-                      🤡
+                    <div v-if="task.totalDays >= 2">
+                      <div
+                        class="progress-icon"
+                        v-if="checkProgress(task) === PROGRESS_DONE"
+                      >
+                        ✅
+                      </div>
+                      <div
+                        class="progress-icon"
+                        v-if="checkProgress(task) === PROGRESS_NORMAL"
+                      >
+                        💨
+                      </div>
+                      <div
+                        class="progress-icon"
+                        v-if="checkProgress(task) === PROGRESS_WARN"
+                      >
+                        ⚠️
+                      </div>
+                      <div
+                        class="progress-icon"
+                        v-if="checkProgress(task) === PROGRESS_URGENT"
+                      >
+                        ♨️
+                      </div>
+                      <div
+                        class="progress-icon"
+                        v-if="checkProgress(task) === PROGRESS_FAILED"
+                      >
+                        🤡
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1036,7 +1054,6 @@ function getTaskOverdueRatio(task) {
   z-index: 1;
   box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.18);
   padding: 5px 24px 16px 24px;
-  min-width: 120px;
   max-width: 100vw;
   display: flex;
   align-items: flex-start;
@@ -1078,6 +1095,8 @@ function getTaskOverdueRatio(task) {
   align-items: center;
   gap: 10px;
   height: 30px;
+  width: auto;
+  max-width: 100%;
 }
 
 .task-icon {
@@ -1094,6 +1113,7 @@ function getTaskOverdueRatio(task) {
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 100%;
+  flex: 1;
 }
 
 .task-progres {
