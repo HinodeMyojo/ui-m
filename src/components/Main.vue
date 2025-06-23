@@ -549,6 +549,8 @@ function checkProgressBackgroundColor(progressValue) {
 function checkProgress(task) {
   if (task.totalSubtasks === task.completedSubtasks) {
     return PROGRESS_DONE;
+  } else if (task.currentDay === PROGRESS_FAILED) {
+    return PROGRESS_FAILED;
   } else if (
     task.requiredSubtasks === 0 ||
     getTaskOverdueRatio(task) <= MAXIMUM_NORMAL_OVERDUE_RATIO
@@ -556,8 +558,6 @@ function checkProgress(task) {
     return PROGRESS_NORMAL;
   } else if (getTaskOverdueRatio(task) <= MAXIMUM_WARN_OVERDUE_RATIO) {
     return PROGRESS_WARN;
-  } else if (task.currentDay === PROGRESS_FAILED) {
-    return PROGRESS_FAILED;
   } else {
     return PROGRESS_URGENT;
   }
