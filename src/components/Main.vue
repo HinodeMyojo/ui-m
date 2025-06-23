@@ -508,18 +508,50 @@ function getToday() {
 // 1 - надо поторопиться (жёлтый цвет?)
 // 2 - надо порвать жопу (оранджевый цвет?)
 // -1 - проебал деделайн (красный цвет?)
+const PROGRESS_DONE = 999; // завершено (зеленый цвет)
+const PROGRESS_NORMAL = 0; // нормальный прогресс (зелёный/бирюзовый цвет)
+const PROGRESS_WARN = 1; // надо поторопиться (жёлтый цвет)
+const PROGRESS_URGENT = 2; // надо порвать жопу (оранджевый цвет)
+const PROGRESS_FAILED = -1; // проебал дедлайн (красный цвет)
+
+const MAXIMUM_NORMAL_OVERDUE_RATIO = 0.125;
+const MAXIMUM_WARN_OVERDUE_RATIO = 0.25;
+
+function checkProgressBackgroundColor(progressValue) {
+  switch (progressValue) {
+    case PROGRESS_DONE:
+      return "#00ff8099";
+    case PROGRESS_NORMAL:
+      return "#00ffff99";
+    case PROGRESS_WARN:
+      return "#ffa50099";
+    case PROGRESS_FAILED:
+      return "#00000099";
+    case PROGRESS_URGENT:
+      return "#b2222299";
+    default:
+      return "#00ffff99";
+  }
+}
+
 function checkProgress(task) {
-  // if (task.requiredSubtasks - task.completedSubtasks === 0) {
-  //   return 0;
-  // } else if (
-  //   task.completedSubtasks - task.totalSubtasks === 0 &&
-  //   task.requiredSubtasks - task.completedSubtasks === 0
-  // ) {
-  //   return 999;
-  // } else if (
-  //   task.requiredSubtasks - task.completedSubtasks > 0 &&
-  // ) {
-  // }
+  if (task.totalSubtasks === task.completedSubtasks) {
+    return PROGRESS_DONE;
+  } else if (
+    task.requiredSubtasks === 0 ||
+    getTaskOverdueRatio(task) <= MAXIMUM_NORMAL_OVERDUE_RATIO
+  ) {
+    return PROGRESS_NORMAL;
+  } else if (getTaskOverdueRatio(task) <= MAXIMUM_WARN_OVERDUE_RATIO) {
+    return PROGRESS_WARN;
+  } else if (task.currentDay === PROGRESS_FAILED) {
+    return PROGRESS_FAILED;
+  } else {
+    return PROGRESS_URGENT;
+  }
+}
+function getTaskOverdueRatio(task) {
+  return (task.requiredSubtasks - task.completedSubtasks) / task.totalSubtasks;
 }
 </script>
 
@@ -616,8 +648,47 @@ function checkProgress(task) {
                 <div class="task-row">
                   <span class="task-title">{{ task.title }}</span>
                   <!-- <span class="task-icon">📚</span> -->
-                  <div class="task-progress">
-                    <!-- <div v-if="task."></div> -->
+                  <div class="task-progres">
+                    <div
+                      class="progress-thing"
+                      :style="{
+                        backgroundColor: checkProgressBackgroundColor(
+                          checkProgress(task)
+                        ),
+                      }"
+                    >
+                      {{ task.completedSubtasks }} / {{ task.totalSubtasks }}
+                    </div>
+                    <div
+                      class="progress-icon"
+                      v-if="checkProgress(task) === PROGRESS_DONE"
+                    >
+                      ✅
+                    </div>
+                    <div
+                      class="progress-icon"
+                      v-if="checkProgress(task) === PROGRESS_NORMAL"
+                    >
+                      💨
+                    </div>
+                    <div
+                      class="progress-icon"
+                      v-if="checkProgress(task) === PROGRESS_WARN"
+                    >
+                      ⚠️
+                    </div>
+                    <div
+                      class="progress-icon"
+                      v-if="checkProgress(task) === PROGRESS_URGENT"
+                    >
+                      ♨️
+                    </div>
+                    <div
+                      class="progress-icon"
+                      v-if="checkProgress(task) === PROGRESS_FAILED"
+                    >
+                      🤡
+                    </div>
                   </div>
                 </div>
                 <div class="task-down">
@@ -1005,7 +1076,7 @@ function checkProgress(task) {
 .task-row {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: 10px;
   height: 30px;
 }
 
@@ -1023,6 +1094,24 @@ function checkProgress(task) {
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 100%;
+}
+
+.task-progres {
+  display: flex;
+  flex-direction: row;
+  gap: 2px;
+}
+
+.progress-thing {
+  color: white;
+  font-weight: 500;
+  padding-left: 5px;
+  padding-right: 5px;
+  border-radius: 9px;
+}
+
+.progress-icon {
+  color: white;
 }
 
 .task-down {
