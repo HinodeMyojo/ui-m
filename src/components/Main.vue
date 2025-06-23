@@ -511,6 +511,25 @@ function getToday() {
   var today = new Date();
   return today;
 }
+
+// 999 - завершено (зеленый цвет)
+// 0 - нормальный прогрес (зелёный/бирюзовый цвет?)
+// 1 - надо поторопиться (жёлтый цвет?)
+// 2 - надо порвать жопу (оранджевый цвет?)
+// -1 - проебал деделайн (красный цвет?)
+function checkProgress(task) {
+  // if (task.requiredSubtasks - task.completedSubtasks === 0) {
+  //   return 0;
+  // } else if (
+  //   task.completedSubtasks - task.totalSubtasks === 0 &&
+  //   task.requiredSubtasks - task.completedSubtasks === 0
+  // ) {
+  //   return 999;
+  // } else if (
+  //   task.requiredSubtasks - task.completedSubtasks > 0 &&
+  // ) {
+  // }
+}
 </script>
 
 <template>
@@ -604,8 +623,11 @@ function getToday() {
             >
               <div class="task-inner">
                 <div class="task-row">
-                  <!-- <span class="task-icon">📚</span> -->
                   <span class="task-title">{{ task.title }}</span>
+                  <!-- <span class="task-icon">📚</span> -->
+                  <div class="task-progress">
+                    <!-- <div v-if="task."></div> -->
+                  </div>
                 </div>
                 <div class="task-down">
                   <div
@@ -980,7 +1002,7 @@ function getToday() {
   flex-direction: column;
   align-items: flex-start;
   justify-content: center;
-  gap: 8px;
+  /* gap: 8px; */
   /* white-space: nowrap; */
   overflow: hidden;
   text-overflow: ellipsis;
@@ -989,7 +1011,8 @@ function getToday() {
 .task-row {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 2px;
+  height: 30px;
 }
 
 .task-icon {
