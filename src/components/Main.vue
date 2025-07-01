@@ -603,6 +603,11 @@ function getTaskOverdueRatio(task) {
       </div>
     </div>
     <div class="body">
+      <div class="taks-types-main-menu">
+        <div class="taks-types-word">
+          <h3>Home</h3>
+        </div>
+      </div>
       <div
         class="columns-container"
         ref="calendarRef"
@@ -977,19 +982,64 @@ function getTaskOverdueRatio(task) {
 </template>
 
 <style scoped>
+.main {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  /* overflow: hidden; */
+}
+
 .body {
   width: 100%;
   flex: 5;
   position: relative;
-  overflow: hidden;
+  /* overflow: hidden; */
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
-  overflow-y: auto;
+  /* overflow-y: auto; */
   scrollbar-width: auto;
   scrollbar-color: #6e4aff #111;
 }
 
+.taks-types-main-menu {
+  position: absolute;
+  background-color: #6200ff52;
+  height: 170px;
+  max-width: 35px;
+  left: -30px;
+  top: 0px;
+  border-top-left-radius: 15px;
+  border-bottom-left-radius: 15px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.taks-types-main-menu:active {
+  transform: scale(0.95);
+}
+
+.taks-types-word {
+  display: flex;
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  align-items: center;
+  justify-content: center;
+}
+.taks-types-word h3 {
+  transform: rotate(270deg);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: #fff;
+  opacity: 0.8;
+}
 .columns-container {
   width: 100%;
   height: 100%;
@@ -1179,18 +1229,6 @@ function getTaskOverdueRatio(task) {
   opacity: 0.98;
   border: 1.5px solid #fff3;
   box-shadow: 0 2px 6px 0 rgba(0, 0, 0, 0.1);
-}
-
-.main {
-  flex: 1;
-  width: 100%;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  position: relative;
-  overflow: hidden;
 }
 
 .header {
