@@ -820,7 +820,7 @@ function getTaskOverdueRatio(task) {
                 v-model="newTask.title"
                 type="text"
                 required
-                maxlength="60"
+                maxlength="200"
               />
             </label>
             <label
@@ -907,7 +907,7 @@ function getTaskOverdueRatio(task) {
                 v-model="editTaskForm.title"
                 type="text"
                 required
-                maxlength="60"
+                maxlength="200"
               />
             </label>
             <label
