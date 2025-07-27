@@ -12,6 +12,10 @@ body {
   margin: 0;
   padding: 0;
   overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: auto;
+  scrollbar-color: #6e4aff #111;
   background-color: #18191f;
 }
 #app {
