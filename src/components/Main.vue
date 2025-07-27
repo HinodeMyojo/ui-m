@@ -391,6 +391,10 @@ async function updateTask(id, patch) {
 }
 
 function handleKeydown(e) {
+  if (showAddModal.value || showEditModal.value || openedTask.value != null) {
+    return;
+  }
+
   if (e.key === "ArrowLeft") {
     handlePrevMonth();
   } else if (e.key === "ArrowRight") {
