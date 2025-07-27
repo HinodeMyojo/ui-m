@@ -117,7 +117,7 @@
           </div>
           <div class="subtask-buttons">
             <button class="subtask-btn add-btn" @click="openAddSubtaskModal">
-              <span>Добавить</span>
+              Добавить
             </button>
             <div v-if="chatValue?.id !== null" style="display: contents">
               <button
