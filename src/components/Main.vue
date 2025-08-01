@@ -16,14 +16,8 @@ let idCounter = 5;
 
 const tasks = ref([]);
 
-async function loadTasks() {
-  tasks.value = (await fetchTasks()).map((t) => ({
-    ...t,
-    start: DateToRealUtc(t.start),
-    end: DateToRealUtc(t.end),
-    // start: new Date(2025, 5, 1),
-    // end: new Date(2025, 5, 30),
-  }));
+async function loadTasks(date) {
+  tasks.value = await fetchTasks(date);
 }
 
 const currentDate = ref(new Date());
@@ -44,28 +38,30 @@ const monthEnd = computed(
 );
 
 const visibleTasks = computed(() => {
+  if (!Array.isArray(tasks.value)) {
+    return [];
+  }
+
   const msMonthStart = monthStart.value.getTime();
   const msMonthEnd = monthEnd.value.getTime();
-  const result = tasks.value
+
+  return tasks.value
     .map((task) => {
-      // Определяем границы задачи в текущем месяце
-      const msTaskStart = task.start.getTime();
-      const msTaskEnd = task.end.getTime();
+      const msTaskStart = new Date(task.start).getTime();
+      const msTaskEnd = new Date(task.end).getTime();
       const start = msTaskStart < msMonthStart ? monthStart.value : task.start;
       const end = msTaskEnd > msMonthEnd ? monthEnd.value : task.end;
-      // Если задача не пересекается с месяцем — не показываем
+
       if (msTaskEnd < msMonthStart || msTaskStart > msMonthEnd) return null;
-      // Для позиционирования
+
       return {
         ...task,
-        startDay: start.getDate(),
-        endDay: end.getDate(),
+        startDay: new Date(start).getDate(),
+        endDay: new Date(end).getDate(),
         progress: (task.stepActive / task.steps) * 100,
       };
     })
     .filter(Boolean);
-  // Для отладки
-  return result;
 });
 
 function DateToRealUtc(date) {
@@ -197,18 +193,10 @@ const handlePrevMonth = () => {
   }
   daysInMonth.value = getDaysInMonth(currentMonth.value, currentYear.value);
 
-  // Adjust tasks that are outside the new month's range
-  tasks.value = tasks.value.map((task) => {
-    if (task.endDate > daysInMonth.value) {
-      const duration = task.endDate - task.startDate;
-      return {
-        ...task,
-        startDate: Math.max(1, daysInMonth.value - duration),
-        endDate: Math.max(1, daysInMonth.value - duration) + duration,
-      };
-    }
-    return task;
-  });
+  currentDate.value = new Date(currentYear.value, currentMonth.value, 10);
+
+  loadTasks(currentDate);
+  updateCalendarWidth();
 };
 
 const handleNextMonth = () => {
@@ -219,18 +207,10 @@ const handleNextMonth = () => {
   }
   daysInMonth.value = getDaysInMonth(currentMonth.value, currentYear.value);
 
-  // Adjust tasks that are outside the new month's range
-  tasks.value = tasks.value.map((task) => {
-    if (task.endDate > daysInMonth.value) {
-      const duration = task.endDate - task.startDate;
-      return {
-        ...task,
-        startDate: Math.max(1, daysInMonth.value - duration),
-        endDate: Math.max(1, daysInMonth.value - duration) + duration,
-      };
-    }
-    return task;
-  });
+  currentDate.value = new Date(currentYear.value, currentMonth.value, 10);
+
+  loadTasks(currentDate);
+  updateCalendarWidth();
 };
 
 // Секция для получения ширины column
@@ -259,7 +239,7 @@ function closeTaskDetails() {
 }
 
 function formatDate(date) {
-  return date.toLocaleDateString("ru-RU", {
+  return new Date(date).toLocaleDateString("ru-RU", {
     day: "numeric",
     month: "short",
     year: "2-digit",
@@ -310,7 +290,7 @@ function addTask() {
     subtasks: newTask.value.subtasks,
   };
   addTaskAPI(taskToAdd).then((added) => {
-    loadTasks();
+    loadTasks(currentDate);
     showAddModal.value = false;
     setTimeout(() => {
       confetti({
@@ -382,12 +362,12 @@ function addTask() {
 
 async function deleteTask(id) {
   await deleteTaskAPI(id);
-  loadTasks();
+  loadTasks(currentDate);
 }
 
 async function updateTask(id, patch) {
   await updateTaskAPI(id, patch);
-  loadTasks();
+  loadTasks(currentDate);
 }
 
 function handleKeydown(e) {
@@ -403,7 +383,7 @@ function handleKeydown(e) {
 }
 
 onMounted(() => {
-  loadTasks();
+  loadTasks(currentDate);
   window.addEventListener("resize", updateCalendarWidth);
   updateCalendarWidth();
   window.addEventListener("keydown", handleKeydown);
@@ -422,6 +402,9 @@ function logout() {
 
 function formatShortDateRange(start, end) {
   if (!start || !end) return "";
+  start = new Date(start);
+  end = new Date(end);
+
   const sameMonth =
     start.getMonth() === end.getMonth() &&
     start.getFullYear() === end.getFullYear();
@@ -1000,6 +983,7 @@ function getTaskOverdueRatio(task) {
 
 .body {
   width: 100%;
+  height: 100%;
   flex: 5;
   position: relative;
   /* overflow: hidden; */

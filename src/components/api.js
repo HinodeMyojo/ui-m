@@ -49,12 +49,8 @@ export async function login(password) {
   }
 }
 
-export async function fetchTasks() {
-  const now = new Date();
-  const yyyy = now.getFullYear();
-  const mm = String(now.getMonth() + 1).padStart(2, "0");
-  const dd = String(now.getDate()).padStart(2, "0");
-  const formattedDate = `${yyyy}-${mm}-${dd}`;
+export async function fetchTasks(date) {
+  const formattedDate = date.value.toISOString().substring(0, 10);
 
   const response = await authorizedFetch(
     `${API_BASE_URL}/api/v1/tasks/?date=${formattedDate}`

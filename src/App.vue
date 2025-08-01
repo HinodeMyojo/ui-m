@@ -11,6 +11,7 @@ html,
 body {
   margin: 0;
   padding: 0;
+  height: 100%;
   overflow: hidden;
   overflow-y: auto;
   overflow-x: hidden;
@@ -19,8 +20,8 @@ body {
   background-color: #18191f;
 }
 #app {
-  width: 100vw;
-  height: 100vh;
+  /* width: 100vw;
+  height: 100%; */
   display: flex;
   justify-content: center;
   align-items: center;
