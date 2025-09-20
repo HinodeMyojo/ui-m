@@ -49,8 +49,25 @@ export async function login(password) {
   }
 }
 
+function normalizeDate(date) {
+  if (date instanceof Date) {
+    return date;
+  }
+
+  if (date && typeof date === "object" && "value" in date) {
+    return normalizeDate(date.value);
+  }
+
+  if (typeof date === "string") {
+    return new Date(date);
+  }
+
+  return new Date();
+}
+
 export async function fetchTasks(date) {
-  const formattedDate = date.value.toISOString().substring(0, 10);
+  const normalizedDate = normalizeDate(date);
+  const formattedDate = normalizedDate.toISOString().substring(0, 10);
 
   const response = await authorizedFetch(
     `${API_BASE_URL}/api/v1/tasks/?date=${formattedDate}`
