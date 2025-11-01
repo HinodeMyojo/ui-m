@@ -13,7 +13,75 @@ import { useRouter } from "vue-router";
 
 import TaskDetails from "@/components/modals/TaskDetails.vue";
 
-let idCounter = 5;
+const DEFAULT_TASK_COLOR = "#25636A";
+const CONFETTI_DELAY_MS = 200;
+const CONFETTI_COLORS = [
+  "#ffec3d",
+  "#ff85c0",
+  "#5cdbd3",
+  "#ffd666",
+  "#69c0ff",
+  "#b37feb",
+  "#ff7875",
+  "#95de64",
+  "#fffbe6",
+  "#ffadd2",
+  "#bae7ff",
+  "#ffd6e7",
+];
+const CONFETTI_PRESETS = [
+  {
+    particleCount: 90,
+    spread: 80,
+    startVelocity: 38,
+    origin: { y: 0.35 },
+    scalar: 1.1,
+    gravity: 0.85,
+    ticks: 180,
+  },
+  {
+    particleCount: 60,
+    angle: 120,
+    spread: 100,
+    startVelocity: 32,
+    origin: { x: 0.2, y: 0.45 },
+    scalar: 0.9,
+    gravity: 0.95,
+    ticks: 140,
+  },
+  {
+    particleCount: 60,
+    angle: 60,
+    spread: 100,
+    startVelocity: 32,
+    origin: { x: 0.8, y: 0.45 },
+    scalar: 0.9,
+    gravity: 0.95,
+    ticks: 140,
+  },
+];
+
+const createEmptyTaskForm = () => ({
+  title: "",
+  start: "",
+  end: "",
+  color: DEFAULT_TASK_COLOR,
+  subtasks: [],
+  subtaskInput: "",
+  steps: 0,
+  stepActive: 0,
+});
+
+function celebrateTaskCreation() {
+  setTimeout(() => {
+    CONFETTI_PRESETS.forEach((preset) =>
+      confetti({
+        ...preset,
+        colors: CONFETTI_COLORS,
+      })
+    );
+  }, CONFETTI_DELAY_MS);
+}
 
 const tasks = ref([]);
 
@@ -30,6 +98,7 @@ const getDaysInMonth = (month, year) => {
 };
 
 const daysInMonth = ref(getDaysInMonth(currentMonth.value, currentYear.value));
+const reloadTasksForCurrentDate = () => loadTasks(currentDate);
 
 const monthStart = computed(
   () => new Date(currentYear.value, currentMonth.value, 1)
@@ -65,33 +134,7 @@ const visibleTasks = computed(() => {
     .filter(Boolean);
 });
 
-function DateToRealUtc(date) {
-  var date = new Date(date);
-  var userTimezoneOffset = date.getTimezoneOffset() * 60000;
-  return new Date(date.getTime() + userTimezoneOffset);
-}
-
-// добавление подзадач в модалке
-function addSubtask(title) {
-  if (!title) return;
-
-  const position = newTask.value.subtasks.length;
-  newTask.value.subtasks.push({
-    title: title,
-    completed: false,
-    position: position,
-  });
-
-  newTask.value.subtaskInput = ""; // очистка поля ввода, если нужно
-}
-
-function removeSubtask(idx) {
-  newTask.value.subtasks.splice(idx, 1);
-}
-
-const columns = Array.from({ length: 31 }, (_, i) => i + 1);
 const draggedTask = ref(null);
-const dragOffset = ref(0);
 const dragOverTask = ref(null);
 const dropIndex = ref(null);
 const hoveredTask = ref(null);
@@ -101,10 +144,6 @@ const TASK_HEIGHT = 75;
 const TASK_MARGIN = 24;
 const TASK_TOTAL_HEIGHT = TASK_HEIGHT + TASK_MARGIN;
 const TASKS_TOP_OFFSET = 50;
-
-const SEGMENT_WIDTH = 24;
-const SEGMENT_GAP = 6;
-const TASK_PADDING = 48; // 24px слева и справа
 const calendarRef = ref(null);
 const calendarWidth = ref(0);
 // const MAX_TASK_WIDTH_PERC = 0.5
@@ -129,7 +168,6 @@ function calcTaskWidth(task) {
 
 const handleDragStart = (task, event) => {
   draggedTask.value = task;
-  dragOffset.value = event.clientY - event.target.getBoundingClientRect().top;
   event.dataTransfer.effectAllowed = "move";
   event.target.style.opacity = "0.5";
 };
@@ -186,33 +224,25 @@ const handleDrop = (event) => {
   dragOverTask.value = null;
 };
 
-const handlePrevMonth = () => {
-  currentMonth.value--;
-  if (currentMonth.value < 0) {
-    currentMonth.value = 11;
-    currentYear.value--;
-  }
+function changeMonth(offset) {
+  const targetDate = new Date(
+    currentYear.value,
+    currentMonth.value + offset,
+    10
+  );
+
+  currentYear.value = targetDate.getFullYear();
+  currentMonth.value = targetDate.getMonth();
   daysInMonth.value = getDaysInMonth(currentMonth.value, currentYear.value);
+  currentDate.value = targetDate;
 
-  currentDate.value = new Date(currentYear.value, currentMonth.value, 10);
-
-  loadTasks(currentDate);
+  reloadTasksForCurrentDate();
   updateCalendarWidth();
-};
+}
 
-const handleNextMonth = () => {
-  currentMonth.value++;
-  if (currentMonth.value > 11) {
-    currentMonth.value = 0;
-    currentYear.value++;
-  }
-  daysInMonth.value = getDaysInMonth(currentMonth.value, currentYear.value);
+const handlePrevMonth = () => changeMonth(-1);
 
-  currentDate.value = new Date(currentYear.value, currentMonth.value, 10);
-
-  loadTasks(currentDate);
-  updateCalendarWidth();
-};
+const handleNextMonth = () => changeMonth(1);
 
 // Секция для получения ширины column
 const columnRef = ref([]);
@@ -248,127 +278,71 @@ function formatDate(date) {
 }
 
 const showAddModal = ref(false);
-const newTask = ref({
-  title: "",
-  start: "",
-  end: "",
-  color: "#25636A",
-  subtasks: [],
-});
+const newTask = ref(createEmptyTaskForm());
+
+function resetNewTaskForm() {
+  newTask.value = createEmptyTaskForm();
+}
+
+function addSubtask(title) {
+  if (!title) return;
+
+  const position = newTask.value.subtasks.length;
+  newTask.value.subtasks.push({
+    title: title,
+    completed: false,
+    position: position,
+  });
+
+  newTask.value.subtaskInput = ""; // очистка поля ввода, если нужно
+}
+
+function removeSubtask(idx) {
+  newTask.value.subtasks.splice(idx, 1);
+}
 
 function openAddModal() {
   showAddModal.value = true;
-  newTask.value = {
-    title: "",
-    start: "",
-    end: "",
-    color: "#25636A",
-    subtasks: [],
-  };
+  resetNewTaskForm();
 }
 function closeAddModal() {
   showAddModal.value = false;
 }
-const showFirework = ref(false);
 
 function addTask() {
-  if (!newTask.value.title || !newTask.value.end) return;
-  let startDate = newTask.value.start
-    ? new Date(newTask.value.start)
+  const { title, start, end, color, subtasks } = newTask.value;
+  if (!title || !end) return;
+
+  const startDate = start
+    ? new Date(start)
     : new Date(currentYear.value, currentMonth.value, 1);
-  const endDate = new Date(newTask.value.end);
+  const endDate = new Date(end);
   if (isNaN(startDate) || isNaN(endDate) || endDate < startDate) return;
-  const steps = Math.max(0, Number(newTask.value.steps));
-  const stepActive =
-    steps === 0
-      ? 0
-      : Math.max(0, Math.min(Number(newTask.value.stepActive), steps));
+
   const taskToAdd = {
-    title: newTask.value.title,
+    title,
     start: startDate,
     end: endDate,
-    color: newTask.value.color,
-    subtasks: newTask.value.subtasks,
+    color,
+    subtasks,
   };
-  addTaskAPI(taskToAdd).then((added) => {
-    loadTasks(currentDate);
+
+  addTaskAPI(taskToAdd).then(() => {
+    reloadTasksForCurrentDate();
     showAddModal.value = false;
-    setTimeout(() => {
-      confetti({
-        particleCount: 90,
-        spread: 80,
-        startVelocity: 38,
-        origin: { y: 0.35 },
-        colors: [
-          "#ffec3d",
-          "#ff85c0",
-          "#5cdbd3",
-          "#ffd666",
-          "#69c0ff",
-          "#b37feb",
-          "#ff7875",
-          "#95de64",
-          "#fffbe6",
-          "#ffadd2",
-          "#bae7ff",
-          "#ffd6e7",
-        ],
-        scalar: 1.1,
-        gravity: 0.85,
-        ticks: 180,
-      });
-      confetti({
-        particleCount: 60,
-        angle: 120,
-        spread: 100,
-        startVelocity: 32,
-        origin: { x: 0.2, y: 0.45 },
-        colors: [
-          "#ffec3d",
-          "#ff85c0",
-          "#5cdbd3",
-          "#ffd666",
-          "#69c0ff",
-          "#b37feb",
-          "#ff7875",
-          "#95de64",
-        ],
-        scalar: 0.9,
-        gravity: 0.95,
-        ticks: 140,
-      });
-      confetti({
-        particleCount: 60,
-        angle: 60,
-        spread: 100,
-        startVelocity: 32,
-        origin: { x: 0.8, y: 0.45 },
-        colors: [
-          "#ffec3d",
-          "#ff85c0",
-          "#5cdbd3",
-          "#ffd666",
-          "#69c0ff",
-          "#b37feb",
-          "#ff7875",
-          "#95de64",
-        ],
-        scalar: 0.9,
-        gravity: 0.95,
-        ticks: 140,
-      });
-    }, 200);
+    celebrateTaskCreation();
+    resetNewTaskForm();
   });
 }
 
 async function deleteTask(id) {
   await deleteTaskAPI(id);
-  loadTasks(currentDate);
+  reloadTasksForCurrentDate();
 }
 
 async function updateTask(id, patch) {
   await updateTaskAPI(id, patch);
-  loadTasks(currentDate);
+  reloadTasksForCurrentDate();
 }
 
 function handleKeydown(e) {
@@ -384,7 +358,7 @@ function handleKeydown(e) {
 }
 
 onMounted(() => {
-  loadTasks(currentDate);
+  reloadTasksForCurrentDate();
   window.addEventListener("resize", updateCalendarWidth);
   updateCalendarWidth();
   window.addEventListener("keydown", handleKeydown);
