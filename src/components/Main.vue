@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount } from "vue";
 import confetti from "canvas-confetti";
+import SalaryViewer from "./elements/SalaryViewer.vue";
 import {
   fetchTasks,
   addTaskAPI,
@@ -559,10 +560,7 @@ function getTaskOverdueRatio(task) {
   <div class="main">
     <div class="header">
       <div class="header-left">
-        <div class="biliboba">
-          <div class="biliboba-left"></div>
-          <div class="biliboba-right"></div>
-        </div>
+        <div class="salary-viewer"><SalaryViewer /></div>
       </div>
       <div class="header-center">
         <v-icon
@@ -995,6 +993,14 @@ function getTaskOverdueRatio(task) {
   scrollbar-color: #6e4aff #111;
 }
 
+.salary-viewer {
+  width: 100%;
+  height: 90%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .taks-types-main-menu {
   position: absolute;
   background-color: #6200ff52;
@@ -1238,34 +1244,8 @@ function getTaskOverdueRatio(task) {
   justify-content: center;
   /* background-color: #6e4aff; */
 }
-
-.biliboba {
-  width: 90%;
-  height: 80%;
-  /* background-color: #25636a; */
-  border-radius: 10px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid #fff3;
-  display: flex;
-  flex-direction: row;
-  overflow: hidden;
-}
-
-.biliboba-left {
-  flex: 1;
-}
-
-.biliboba-right {
-  width: 100%;
-  height: 100%;
-  flex: 1;
-  background-color: #25636a;
-}
-
 .header-center {
-  flex: 2;
+  flex: 0.5;
   display: flex;
   align-items: center;
   justify-content: center;
