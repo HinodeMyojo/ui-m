@@ -49,6 +49,78 @@ export async function login(password) {
   }
 }
 
+// jobs api
+export async function fetchJobs() {
+  const response = await authorizedFetch(`${API_BASE_URL}/api/v1/jobs`);
+  const data = await response.json();
+  return data;
+}
+
+export async function fetchJob(id) {
+  const response = await authorizedFetch(`${API_BASE_URL}/api/v1/jobs/${id}`);
+  const data = await response.json();
+  return data;
+}
+
+export async function addJobAPI(job) {
+  const response = await authorizedFetch(`${API_BASE_URL}/api/v1/jobs`, {
+    method: "POST",
+    body: JSON.stringify(job),
+  });
+  const data = await response.json();
+  return data.id;
+}
+
+export async function updateJobAPI(id, job) {
+  await authorizedFetch(`${API_BASE_URL}/api/v1/jobs/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(job),
+  });
+}
+
+export async function deleteJobAPI(id) {
+  await authorizedFetch(`${API_BASE_URL}/api/v1/jobs/${id}`, {
+    method: "DELETE",
+  });
+}
+
+// salaries api
+export async function fetchSalaries() {
+  const response = await authorizedFetch(`${API_BASE_URL}/api/v1/salaries`);
+  const data = await response.json();
+  return data;
+}
+
+export async function fetchSalary(id) {
+  const response = await authorizedFetch(
+    `${API_BASE_URL}/api/v1/salaries/${id}`
+  );
+  const data = await response.json();
+  return data;
+}
+
+export async function addSalaryAPI(salary) {
+  const response = await authorizedFetch(`${API_BASE_URL}/api/v1/salaries`, {
+    method: "POST",
+    body: JSON.stringify(salary),
+  });
+  const data = await response.json();
+  return data.id;
+}
+
+export async function updateSalaryAPI(id, salary) {
+  await authorizedFetch(`${API_BASE_URL}/api/v1/salaries/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(salary),
+  });
+}
+
+export async function deleteSalaryAPI(id) {
+  await authorizedFetch(`${API_BASE_URL}/api/v1/salaries/${id}`, {
+    method: "DELETE",
+  });
+}
+
 export async function fetchTasks(date) {
   const formattedDate = date.value.toISOString().substring(0, 10);
 

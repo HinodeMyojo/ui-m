@@ -16,7 +16,7 @@
             Финансовые планы
           </button>
         </div>
-        <button class="close-button" @click="$emit('close')">✕</button>
+        <button class="close-button" @click="handleClose">✕</button>
       </div>
       <div class="window-content">
         <template v-if="currentTab === 'finance'">
@@ -31,6 +31,12 @@
                     @click="showManageJobsModal = true"
                   >
                     💼 Работы
+                  </button>
+                  <button
+                    class="manage-jobs-btn"
+                    @click="showManageSalariesModal = true"
+                  >
+                    💰 Управление данными
                   </button>
                   <div class="period-selector">
                     <button
@@ -94,16 +100,21 @@
                 </div>
 
                 <div class="info-card">
-                  <div class="info-label">Желаемая зарплата</div>
+                  <div class="info-label">Ближайший план</div>
                   <div class="info-value highlight">
-                    {{ formatCurrency(targetSalary.amount) }}
+                    {{ formatCurrency(nearestPlan.amount) }}
                   </div>
-                  <div class="info-date">Цель: {{ targetSalary.label }}</div>
+                  <div class="info-date">{{ nearestPlan.label }}</div>
                 </div>
 
                 <div class="info-card">
                   <div class="info-label">Рост за период</div>
-                  <div class="info-value positive">+{{ growthPercent }}%</div>
+                  <div
+                    class="info-value"
+                    :class="growthPercent >= 0 ? 'positive' : 'negative'"
+                  >
+                    {{ growthPercent >= 0 ? "+" : "" }}{{ growthPercent }}%
+                  </div>
                   <div class="info-date">{{ periodRange }}</div>
                 </div>
               </div>
@@ -161,8 +172,8 @@
               </div>
 
               <!-- Прогресс к цели -->
-              <div class="progress-section">
-                <h3 class="chart-title">Прогресс к цели</h3>
+              <div class="progress-section" v-if="nearestPlan.amount > 0">
+                <h3 class="chart-title">Прогресс к ближайшей цели</h3>
                 <div class="progress-bar-container">
                   <div
                     class="progress-bar"
@@ -170,8 +181,28 @@
                   ></div>
                 </div>
                 <div class="progress-info">
-                  <span>{{ progressPercent }}% выполнено</span>
-                  <span>{{ 100 - progressPercent }}% осталось</span>
+                  <span
+                    >{{ progressPercent }}%
+                    {{ progressPercent >= 100 ? "выполнено" : "до цели" }}</span
+                  >
+                  <span v-if="progressPercent < 100"
+                    >{{ 100 - progressPercent }}% осталось</span
+                  >
+                </div>
+              </div>
+
+              <!-- Список всех планов -->
+              <div class="detailed-stats" v-if="allPlans.length > 0">
+                <h3 class="chart-title">Запланированные цели</h3>
+                <div
+                  class="stat-row"
+                  v-for="(plan, index) in allPlans"
+                  :key="index"
+                >
+                  <span class="stat-label"> {{ plan.label }}: </span>
+                  <span class="stat-value highlight">{{
+                    formatCurrency(plan.amount)
+                  }}</span>
                 </div>
               </div>
             </div>
@@ -297,6 +328,77 @@
       </div>
     </div>
 
+    <!-- Модальное окно управления данными о зарплате -->
+    <div
+      v-if="showManageSalariesModal"
+      class="modal-overlay"
+      @click="showManageSalariesModal = false"
+    >
+      <div class="modal large-modal" @click.stop>
+        <div class="modal-header">
+          <h3>Управление данными о зарплате</h3>
+          <button class="modal-close" @click="showManageSalariesModal = false">
+            ✕
+          </button>
+        </div>
+        <div class="modal-body">
+          <button class="btn-add-job" @click="showAddDataModal = true">
+            + Добавить запись
+          </button>
+
+          <div class="salaries-filters">
+            <select v-model="salaryFilter" class="filter-select">
+              <option value="all">Все записи</option>
+              <option value="fact">Только факты</option>
+              <option value="plan">Только планы</option>
+            </select>
+          </div>
+
+          <div class="salaries-list">
+            <div
+              v-for="salary in filteredSalariesForManagement"
+              :key="salary.id"
+              class="salary-item"
+            >
+              <div class="salary-main">
+                <div class="salary-badge" :class="salary.type">
+                  {{ salary.type === "fact" ? "ФАКТ" : "ПЛАН" }}
+                </div>
+                <div class="salary-info">
+                  <div class="salary-period">
+                    {{ getMonthName(salary.month) }} {{ salary.year }}
+                  </div>
+                  <div class="salary-job" v-if="salary.type === 'fact'">
+                    {{ getJobName(salary.jobId) }}
+                  </div>
+                </div>
+                <div class="salary-amount">
+                  {{ formatCurrency(salary.amount) }}
+                </div>
+                <div class="salary-actions">
+                  <button class="btn-icon" @click="editSalary(salary)">
+                    ✏️
+                  </button>
+                  <button class="btn-icon" @click="deleteSalaryData(salary.id)">
+                    🗑️
+                  </button>
+                </div>
+              </div>
+              <div v-if="salary.note" class="salary-note">
+                {{ salary.note }}
+              </div>
+            </div>
+            <div
+              v-if="filteredSalariesForManagement.length === 0"
+              class="no-data"
+            >
+              Нет записей
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Модальное окно добавления/редактирования работы -->
     <div
       v-if="showJobFormModal"
@@ -336,7 +438,7 @@
       </div>
     </div>
 
-    <!-- Модальное окно добавления данных зарплаты -->
+    <!-- Модальное окно добавления/редактирования данных зарплаты -->
     <div
       v-if="showAddDataModal"
       class="modal-overlay"
@@ -344,10 +446,14 @@
     >
       <div class="modal" @click.stop>
         <div class="modal-header">
-          <h3>Добавить данные о зарплате</h3>
-          <button class="modal-close" @click="showAddDataModal = false">
-            ✕
-          </button>
+          <h3>
+            {{
+              editingSalary
+                ? "Редактировать запись"
+                : "Добавить данные о зарплате"
+            }}
+          </h3>
+          <button class="modal-close" @click="closeAddDataModal">✕</button>
         </div>
         <div class="modal-body">
           <div class="form-group">
@@ -408,10 +514,8 @@
           </div>
         </div>
         <div class="modal-footer">
-          <button class="btn-cancel" @click="showAddDataModal = false">
-            Отмена
-          </button>
-          <button class="btn-save" @click="addSalaryData">Сохранить</button>
+          <button class="btn-cancel" @click="closeAddDataModal">Отмена</button>
+          <button class="btn-save" @click="saveSalaryData">Сохранить</button>
         </div>
       </div>
     </div>
@@ -496,6 +600,17 @@ import {
   CategoryScale,
 } from "chart.js";
 
+import {
+  fetchJobs,
+  addJobAPI,
+  updateJobAPI,
+  deleteJobAPI,
+  fetchSalaries,
+  addSalaryAPI,
+  updateSalaryAPI,
+  deleteSalaryAPI,
+} from "../api";
+
 ChartJS.register(
   Title,
   Tooltip,
@@ -506,20 +621,24 @@ ChartJS.register(
   CategoryScale
 );
 
-defineEmits(["close"]);
+const emit = defineEmits(["close"]);
 
 // Текущая активная вкладка
 const currentTab = ref("finance");
+const selectedPlanId = ref(null);
 
 // Состояния модальных окон
 const showManageJobsModal = ref(false);
+const showManageSalariesModal = ref(false);
 const showJobFormModal = ref(false);
 const showAddDataModal = ref(false);
 const showAddTaskModal = ref(false);
 const showCurrentBreakdown = ref(false);
 const editingJob = ref(null);
+const editingSalary = ref(null);
 const editingTask = ref(null);
 const salaryDataError = ref("");
+const salaryFilter = ref("all");
 
 // Периоды для фильтрации
 const periods = [
@@ -530,36 +649,9 @@ const periods = [
 ];
 const selectedPeriod = ref("all");
 
-// Мок данных - Работы
-const jobs = ref([
-  {
-    id: 1,
-    name: "Mirtek",
-    position: ".Net middle",
-    color: "#E86CFF",
-    isActive: true,
-  },
-  {
-    id: 2,
-    name: "Egar",
-    position: ".Net Middle",
-    color: "#3DDFFF",
-    isActive: true,
-  },
-]);
-
-// Мок данных - Записи зарплат
-const salaries = ref([
-  { id: 1, type: "fact", jobId: 1, year: 2025, month: 2, amount: 42000 },
-  { id: 2, type: "fact", jobId: 1, year: 2025, month: 6, amount: 57000 },
-  { id: 3, type: "fact", jobId: 1, year: 2025, month: 7, amount: 200000 },
-  { id: 4, type: "fact", jobId: 2, year: 2025, month: 7, amount: 180000 },
-  { id: 5, type: "fact", jobId: 2, year: 2025, month: 11, amount: 200000 },
-  { id: 6, type: "fact", jobId: 1, year: 2025, month: 11, amount: 200000 },
-  { id: 7, type: "fact", jobId: 2, year: 2025, month: 12, amount: 180000 },
-  { id: 8, type: "plan", year: 2026, month: 2, amount: 350000 },
-  { id: 9, type: "plan", year: 2026, month: 6, amount: 420000 },
-]);
+// Данные
+const jobs = ref([]);
+const salaries = ref([]);
 
 // Глобальные задачи
 const globalTasks = ref([
@@ -660,21 +752,75 @@ const filteredSalaries = computed(() => {
   });
 });
 
+// Computed - Фильтрация для модального окна управления
+const filteredSalariesForManagement = computed(() => {
+  let filtered = [...salaries.value];
+
+  if (salaryFilter.value !== "all") {
+    filtered = filtered.filter((s) => s.type === salaryFilter.value);
+  }
+
+  return filtered.sort((a, b) => {
+    if (a.year !== b.year) return b.year - a.year;
+    return b.month - a.month;
+  });
+});
+
 // Computed - Текущий месяц
 const currentMonthLabel = computed(() => {
   const now = new Date();
   return getMonthName(now.getMonth() + 1) + " " + now.getFullYear();
 });
 
-// Computed - Текущая зарплата
+// Computed - Текущая зарплата (ИСПРАВЛЕНО)
 const currentSalary = computed(() => {
   const now = new Date();
   const currentYear = now.getFullYear();
   const currentMonth = now.getMonth() + 1;
 
-  const currentFacts = filteredSalaries.value.filter(
-    (s) =>
-      s.type === "fact" && s.year === currentYear && s.month === currentMonth
+  // Берём все фактические записи
+  const allFacts = salaries.value.filter((s) => s.type === "fact");
+
+  if (allFacts.length === 0) {
+    return { total: 0, breakdown: [] };
+  }
+
+  // Ищем запись за текущий месяц
+  let selectedYear = currentYear;
+  let selectedMonth = currentMonth;
+
+  // Проверяем, есть ли факт за текущий месяц
+  const hasCurrent = allFacts.some(
+    (s) => s.year === currentYear && s.month === currentMonth
+  );
+
+  if (!hasCurrent) {
+    // Если нет — ищем ближайший предыдущий месяц с данными
+    const sortedFacts = [...allFacts].sort((a, b) => {
+      if (a.year !== b.year) return b.year - a.year;
+      return b.month - a.month;
+    });
+
+    const previous = sortedFacts.find(
+      (s) =>
+        s.year < currentYear ||
+        (s.year === currentYear && s.month < currentMonth)
+    );
+
+    if (previous) {
+      selectedYear = previous.year;
+      selectedMonth = previous.month;
+    } else {
+      // fallback — если ничего нет до этого
+      const latest = sortedFacts[0];
+      selectedYear = latest.year;
+      selectedMonth = latest.month;
+    }
+  }
+
+  // Берём все фактические записи за найденный месяц
+  const currentFacts = allFacts.filter(
+    (s) => s.year === selectedYear && s.month === selectedMonth
   );
 
   const breakdown = activeJobs.value
@@ -693,55 +839,42 @@ const currentSalary = computed(() => {
 
   const total = breakdown.reduce((sum, item) => sum + item.amount, 0);
 
-  return { total, breakdown };
+  return { total, breakdown, year: selectedYear, month: selectedMonth };
 });
 
-// Computed - Целевая зарплата (ближайший план)
-const targetSalary = computed(() => {
+// Computed - Все планы (отсортированные по дате)
+const allPlans = computed(() => {
   const now = new Date();
-  const plans = filteredSalaries.value
+  return salaries.value
     .filter((s) => s.type === "plan")
-    .sort((a, b) => {
-      if (a.year !== b.year) return a.year - b.year;
-      return a.month - b.month;
-    });
+    .map((p) => ({
+      ...p,
+      label: `${getMonthName(p.month)} ${p.year}`,
+      date: new Date(p.year, p.month - 1),
+    }))
+    .sort((a, b) => a.date - b.date);
+});
 
-  const futurePlans = plans.filter((p) => {
-    const planDate = new Date(p.year, p.month - 1);
-    return planDate > now;
-  });
+// Computed - Ближайший план
+const nearestPlan = computed(() => {
+  const now = new Date();
+  const futurePlans = allPlans.value.filter((p) => p.date >= now);
 
-  const nearestPlan = futurePlans[0] ||
-    plans[plans.length - 1] || {
-      amount: 0,
-      year: now.getFullYear(),
-      month: now.getMonth() + 1,
-    };
+  if (futurePlans.length > 0) {
+    return futurePlans[0];
+  }
+
+  // Если нет будущих планов, берем последний план
+  if (allPlans.value.length > 0) {
+    return allPlans.value[allPlans.value.length - 1];
+  }
 
   return {
-    amount: nearestPlan.amount,
-    label: `${getMonthName(nearestPlan.month)} ${nearestPlan.year}`,
-    year: nearestPlan.year,
-    month: nearestPlan.month,
+    amount: 0,
+    label: "Не установлен",
+    year: now.getFullYear(),
+    month: now.getMonth() + 1,
   };
-});
-
-// Computed - Второй план (дальний)
-const distantPlan = computed(() => {
-  const now = new Date();
-  const plans = filteredSalaries.value
-    .filter((s) => s.type === "plan")
-    .sort((a, b) => {
-      if (a.year !== b.year) return a.year - b.year;
-      return a.month - b.month;
-    });
-
-  const futurePlans = plans.filter((p) => {
-    const planDate = new Date(p.year, p.month - 1);
-    return planDate > now;
-  });
-
-  return futurePlans[1] || null;
 });
 
 // Computed - Факты по месяцам (агрегированные)
@@ -777,6 +910,7 @@ const growthPercent = computed(() => {
   if (factsByMonth.value.length < 2) return 0;
   const first = factsByMonth.value[0].amount;
   const last = factsByMonth.value[factsByMonth.value.length - 1].amount;
+  if (first === 0) return 0;
   return Math.round(((last - first) / first) * 100);
 });
 
@@ -792,17 +926,34 @@ const periodRange = computed(() => {
 
 // Computed - Прогресс к цели
 const progressPercent = computed(() => {
-  if (factsByMonth.value.length === 0) return 0;
-  const start = factsByMonth.value[0].amount;
-  const current =
-    currentSalary.value.total ||
-    factsByMonth.value[factsByMonth.value.length - 1].amount;
-  const target = targetSalary.value.amount;
+  if (factsByMonth.value.length === 0 || nearestPlan.value.amount === 0)
+    return 0;
 
+  const current =
+    currentSalary.value.total > 0
+      ? currentSalary.value.total
+      : factsByMonth.value.length > 0
+      ? factsByMonth.value[factsByMonth.value.length - 1].amount
+      : 0;
+
+  const start =
+    factsByMonth.value.length > 0 ? factsByMonth.value[0].amount : 0;
+  const target = nearestPlan.value.amount;
+
+  // Если план меньше стартовой позиции (случай уменьшения зарплаты)
+  if (target < start) {
+    if (current <= target) return 100;
+    return Math.max(
+      0,
+      Math.round(((start - current) / (start - target)) * 100)
+    );
+  }
+
+  // Если план больше стартовой позиции (обычный случай роста)
   if (target <= start) return 100;
   return Math.min(
     100,
-    Math.round(((current - start) / (target - start)) * 100)
+    Math.max(0, Math.round(((current - start) / (target - start)) * 100))
   );
 });
 
@@ -815,7 +966,7 @@ const detailedStats = computed(() => {
 
   const start = facts[0];
   const current = facts[facts.length - 1];
-  const target = targetSalary.value;
+  const nearest = nearestPlan.value;
 
   const monthsDiff =
     facts.length > 1
@@ -824,10 +975,10 @@ const detailedStats = computed(() => {
   const avgGrowth =
     monthsDiff > 0 ? (current.amount - start.amount) / monthsDiff : 0;
 
-  const remaining = target.amount - current.amount;
+  const remaining = nearest.amount - current.amount;
   const monthsToTarget = avgGrowth > 0 ? Math.ceil(remaining / avgGrowth) : 0;
 
-  return [
+  const stats = [
     {
       label: "Стартовая позиция",
       value: `${formatCurrency(start.amount)} (${getMonthName(start.month)} ${
@@ -837,77 +988,95 @@ const detailedStats = computed(() => {
     },
     {
       label: "Текущая позиция",
-      value: `${formatCurrency(current.amount)} (${getMonthName(
-        current.month
-      )} ${current.year})`,
-      class: "",
-    },
-    {
-      label: "Целевая зарплата",
-      value: `${formatCurrency(target.amount)} (${target.label})`,
-      class: "highlight",
-    },
-    {
-      label: "Средний рост в месяц",
-      value: avgGrowth > 0 ? `+${formatCurrency(avgGrowth)}` : "—",
-      class: avgGrowth > 0 ? "positive" : "",
-    },
-    {
-      label: "До цели осталось",
-      value:
-        remaining > 0
-          ? `${formatCurrency(remaining)} (${monthsToTarget} мес.)`
-          : "Цель достигнута!",
+      value: `${formatCurrency(
+        currentSalary.value.total > 0
+          ? currentSalary.value.total
+          : current.amount
+      )} (${currentMonthLabel.value})`,
       class: "",
     },
   ];
+
+  if (nearest.amount > 0) {
+    stats.push({
+      label: "Ближайшая цель",
+      value: `${formatCurrency(nearest.amount)} (${nearest.label})`,
+      class: "highlight",
+    });
+  }
+
+  stats.push({
+    label: "Средний рост в месяц",
+    value:
+      avgGrowth !== 0
+        ? `${avgGrowth > 0 ? "+" : ""}${formatCurrency(Math.abs(avgGrowth))}`
+        : "—",
+    class: avgGrowth > 0 ? "positive" : avgGrowth < 0 ? "negative" : "",
+  });
+
+  if (nearest.amount > 0 && remaining !== 0) {
+    stats.push({
+      label: remaining > 0 ? "До цели осталось" : "Цель превышена на",
+      value:
+        remaining > 0
+          ? `${formatCurrency(remaining)}${
+              monthsToTarget > 0 ? ` (~${monthsToTarget} мес.)` : ""
+            }`
+          : formatCurrency(Math.abs(remaining)),
+      class: remaining > 0 ? "" : "positive",
+    });
+  }
+
+  return stats;
 });
 
-// Computed - Данные для графика
 const chartData = computed(() => {
-  const labels = [];
-  const factData = [];
-  const nearPlanData = [];
-  const distPlanData = [];
+  const dataPoints = [];
 
   // Добавляем факты
   factsByMonth.value.forEach((f) => {
-    const label = `${getMonthName(f.month)} ${f.year}`;
-    labels.push(label);
-    factData.push(f.amount);
-    nearPlanData.push(null);
-    distPlanData.push(null);
+    dataPoints.push({
+      date: new Date(f.year, f.month - 1),
+      label: `${getMonthName(f.month)} ${f.year}`,
+      fact: f.amount,
+      plan: null,
+      jobs: f.jobs,
+    });
   });
 
-  // Добавляем ближайший план
-  if (targetSalary.value.amount > 0) {
-    const targetLabel = targetSalary.value.label;
-    if (!labels.includes(targetLabel)) {
-      labels.push(targetLabel);
-      factData.push(null);
-      nearPlanData.push(targetSalary.value.amount);
-      distPlanData.push(null);
-    } else {
-      const idx = labels.indexOf(targetLabel);
-      nearPlanData[idx] = targetSalary.value.amount;
-    }
-  }
+  // Добавляем планы
+  allPlans.value.forEach((p) => {
+    const label = p.label;
+    const existing = dataPoints.find((dp) => dp.label === label);
 
-  // Добавляем дальний план
-  if (distantPlan.value) {
-    const distLabel = `${getMonthName(distantPlan.value.month)} ${
-      distantPlan.value.year
-    }`;
-    if (!labels.includes(distLabel)) {
-      labels.push(distLabel);
-      factData.push(null);
-      nearPlanData.push(null);
-      distPlanData.push(distantPlan.value.amount);
+    if (existing) {
+      existing.plan = p.amount;
     } else {
-      const idx = labels.indexOf(distLabel);
-      distPlanData[idx] = distantPlan.value.amount;
+      dataPoints.push({
+        date: p.date,
+        label: label,
+        fact: null,
+        plan: p.amount,
+        jobs: [],
+      });
     }
-  }
+  });
+
+  // Сортируем по дате
+  dataPoints.sort((a, b) => a.date - b.date);
+
+  // Формируем данные для Chart.js
+  const labels = dataPoints.map((dp) => dp.label);
+  const factData = dataPoints.map((dp) => dp.fact);
+  const planData = dataPoints.map((dp) => dp.plan);
+
+  // Определяем цвета для разных планов
+  const planColors = [
+    "#1767FD", // Первый план (ближайший)
+    "#3F52FF", // Второй план
+    "rgba(23, 103, 253, 0.6)", // Третий план
+    "rgba(63, 82, 255, 0.5)", // Четвертый план
+  ];
 
   return {
     labels,
@@ -921,31 +1090,25 @@ const chartData = computed(() => {
         fill: true,
         pointRadius: 6,
         pointBackgroundColor: "#ff99dd",
-        spanGaps: false,
       },
       {
-        label: "План (ближайший)",
-        data: nearPlanData,
+        label: "Планы",
+        data: planData,
         borderColor: "#1767FD",
         backgroundColor: "rgba(23, 103, 253, 0.1)",
         tension: 0.4,
         fill: false,
-        pointRadius: 6,
-        pointBackgroundColor: "#3F52FF",
+        pointRadius: 8,
+        pointBackgroundColor: planData.map((val, idx) => {
+          if (val === null) return "transparent";
+          const planIndex = allPlans.value.findIndex(
+            (p) => dataPoints[idx] && p.label === dataPoints[idx].label
+          );
+          return planColors[planIndex % planColors.length];
+        }),
+        pointBorderColor: "#1767FD",
+        pointBorderWidth: 2,
         borderDash: [5, 5],
-        spanGaps: true,
-      },
-      {
-        label: "План (дальний)",
-        data: distPlanData,
-        borderColor: "rgba(23, 103, 253, 0.5)",
-        backgroundColor: "rgba(23, 103, 253, 0.05)",
-        tension: 0.4,
-        fill: false,
-        pointRadius: 6,
-        pointBackgroundColor: "rgba(63, 82, 255, 0.5)",
-        borderDash: [5, 5],
-        spanGaps: true,
       },
     ],
   };
@@ -954,6 +1117,8 @@ const chartData = computed(() => {
 const chartOptions = {
   responsive: true,
   maintainAspectRatio: false,
+  showTooltips: true,
+  spanGaps: true,
   interaction: {
     mode: "index",
     intersect: false,
@@ -964,12 +1129,6 @@ const chartOptions = {
       labels: {
         color: "#fff",
         font: { size: 12 },
-        filter: (item) => {
-          // Скрываем дальний план если его нет
-          if (item.text === "План (дальний)" && !distantPlan.value)
-            return false;
-          return true;
-        },
       },
     },
     title: { display: false },
@@ -1034,6 +1193,11 @@ function getMonthName(month) {
   return months[month - 1] || "";
 }
 
+function getJobName(jobId) {
+  const job = jobs.value.find((j) => j.id === jobId);
+  return job ? `${job.name} - ${job.position}` : "Не указано";
+}
+
 function formatTaskDeadline(dateString) {
   const date = new Date(dateString);
   const day = date.getDate();
@@ -1067,33 +1231,92 @@ function closeJobForm() {
   jobForm.value = { name: "", position: "", color: "#E86CFF" };
 }
 
-function saveJob() {
-  if (editingJob.value) {
-    const index = jobs.value.findIndex((j) => j.id === editingJob.value.id);
-    jobs.value[index] = {
-      ...jobForm.value,
-      id: editingJob.value.id,
-      isActive: editingJob.value.isActive,
-    };
-  } else {
-    const newJob = { ...jobForm.value, id: Date.now(), isActive: true };
-    jobs.value.push(newJob);
+async function saveJob() {
+  try {
+    if (editingJob.value) {
+      const updatedJob = {
+        ...jobForm.value,
+        id: editingJob.value.id,
+        isActive: editingJob.value.isActive,
+      };
+      await updateJobAPI(updatedJob);
+      const index = jobs.value.findIndex((j) => j.id === editingJob.value.id);
+      jobs.value[index] = updatedJob;
+    } else {
+      const newJob = { ...jobForm.value, isActive: true };
+      const addedJob = await addJobAPI(newJob);
+      jobs.value.push(addedJob);
+    }
+    closeJobForm();
+  } catch (error) {
+    console.error("Ошибка сохранения работы:", error);
+    alert("Не удалось сохранить работу");
   }
-  closeJobForm();
 }
 
-function archiveJob(jobId) {
-  const job = jobs.value.find((j) => j.id === jobId);
-  if (job) job.isActive = false;
+async function archiveJob(jobId) {
+  try {
+    const job = jobs.value.find((j) => j.id === jobId);
+    if (job) {
+      const updatedJob = { ...job, isActive: false };
+      await updateJobAPI(updatedJob);
+      job.isActive = false;
+    }
+  } catch (error) {
+    console.error("Ошибка архивации работы:", error);
+    alert("Не удалось архивировать работу");
+  }
 }
 
-function restoreJob(jobId) {
-  const job = jobs.value.find((j) => j.id === jobId);
-  if (job) job.isActive = true;
+async function restoreJob(jobId) {
+  try {
+    const job = jobs.value.find((j) => j.id === jobId);
+    if (job) {
+      const updatedJob = { ...job, isActive: true };
+      await updateJobAPI(updatedJob);
+      job.isActive = true;
+    }
+  } catch (error) {
+    console.error("Ошибка восстановления работы:", error);
+    alert("Не удалось восстановить работу");
+  }
 }
 
-// Добавление данных о зарплате
-function addSalaryData() {
+function handleClose() {
+  localStorage.setItem("financeWindowOpen", "false");
+  emit("close");
+}
+
+// Управление данными о зарплате
+function editSalary(salary) {
+  editingSalary.value = salary;
+  newSalaryData.value = {
+    type: salary.type,
+    jobId: salary.jobId || "",
+    year: salary.year,
+    month: salary.month,
+    amount: salary.amount,
+    note: salary.note || "",
+  };
+  showManageSalariesModal.value = false;
+  showAddDataModal.value = true;
+}
+
+function closeAddDataModal() {
+  showAddDataModal.value = false;
+  editingSalary.value = null;
+  salaryDataError.value = "";
+  newSalaryData.value = {
+    type: "fact",
+    jobId: "",
+    year: new Date().getFullYear(),
+    month: new Date().getMonth() + 1,
+    amount: "",
+    note: "",
+  };
+}
+
+async function saveSalaryData() {
   salaryDataError.value = "";
 
   // Валидация
@@ -1111,37 +1334,60 @@ function addSalaryData() {
     return;
   }
 
-  const newEntry = {
-    id: Date.now(),
-    type: newSalaryData.value.type,
-    year: newSalaryData.value.year,
-    month: newSalaryData.value.month,
-    amount: newSalaryData.value.amount,
-  };
+  try {
+    const salaryData = {
+      type: newSalaryData.value.type,
+      year: newSalaryData.value.year,
+      month: newSalaryData.value.month,
+      amount: newSalaryData.value.amount,
+    };
 
-  if (newSalaryData.value.type === "fact") {
-    newEntry.jobId = newSalaryData.value.jobId;
+    if (newSalaryData.value.type === "fact") {
+      salaryData.jobId = newSalaryData.value.jobId;
+    }
+
+    if (newSalaryData.value.note) {
+      salaryData.note = newSalaryData.value.note;
+    }
+
+    if (editingSalary.value) {
+      // Редактирование существующей записи
+      salaryData.id = editingSalary.value.id;
+      await updateSalaryAPI(salaryData.id, salaryData);
+      const index = salaries.value.findIndex(
+        (s) => s.id === editingSalary.value.id
+      );
+      salaries.value[index] = salaryData;
+    } else {
+      // Добавление новой записи
+      const addedSalary = await addSalaryAPI(salaryData);
+      salaries.value.push(addedSalary);
+    }
+
+    salaries.value.sort((a, b) => {
+      if (a.year !== b.year) return a.year - b.year;
+      return a.month - b.month;
+    });
+
+    closeAddDataModal();
+  } catch (error) {
+    console.error("Ошибка сохранения данных о зарплате:", error);
+    salaryDataError.value = "Не удалось сохранить данные";
+  }
+}
+
+async function deleteSalaryData(salaryId) {
+  if (!confirm("Вы уверены, что хотите удалить эту запись?")) {
+    return;
   }
 
-  if (newSalaryData.value.note) {
-    newEntry.note = newSalaryData.value.note;
+  try {
+    await deleteSalaryAPI(salaryId);
+    salaries.value = salaries.value.filter((s) => s.id !== salaryId);
+  } catch (error) {
+    console.error("Ошибка удаления данных о зарплате:", error);
+    alert("Не удалось удалить запись");
   }
-
-  salaries.value.push(newEntry);
-  salaries.value.sort((a, b) => {
-    if (a.year !== b.year) return a.year - b.year;
-    return a.month - b.month;
-  });
-
-  showAddDataModal.value = false;
-  newSalaryData.value = {
-    type: "fact",
-    jobId: "",
-    year: new Date().getFullYear(),
-    month: new Date().getMonth() + 1,
-    amount: "",
-    note: "",
-  };
 }
 
 // Управление задачами
@@ -1186,8 +1432,14 @@ function deleteTask() {
   }
 }
 
-onMounted(() => {
-  // Инициализация
+onMounted(async () => {
+  localStorage.setItem("financeWindowOpen", "true");
+  try {
+    jobs.value = await fetchJobs();
+    salaries.value = await fetchSalaries();
+  } catch (error) {
+    console.error("Ошибка загрузки данных:", error);
+  }
 });
 </script>
 
@@ -1412,6 +1664,10 @@ onMounted(() => {
   color: #4ade80;
 }
 
+.info-value.negative {
+  color: #ff6b6b;
+}
+
 .info-date {
   font-size: 12px;
   color: #666;
@@ -1565,11 +1821,16 @@ onMounted(() => {
   color: #4ade80;
 }
 
+.stat-value.negative {
+  color: #ff6b6b;
+}
+
 .progress-section {
   background-color: #1a1a1a;
   padding: 20px;
   border-radius: 12px;
   border: 1px solid #fff1;
+  margin-bottom: 30px;
 }
 
 .progress-bar-container {
@@ -2006,29 +2267,131 @@ onMounted(() => {
   transform: scale(1.05);
 }
 
+/* Управление зарплатами */
+.salaries-filters {
+  margin-bottom: 16px;
+}
+
+.filter-select {
+  width: 100%;
+  padding: 10px 12px;
+  background-color: #0a0a0a;
+  border: 1px solid #fff2;
+  border-radius: 6px;
+  color: #fff;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.filter-select:focus {
+  outline: none;
+  border-color: #1767fd;
+}
+
+.salaries-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 500px;
+  overflow-y: auto;
+}
+
+.salary-item {
+  background-color: #0a0a0a;
+  border-radius: 8px;
+  border: 1px solid #fff1;
+  padding: 12px;
+}
+
+.salary-main {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.salary-badge {
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  flex-shrink: 0;
+}
+
+.salary-badge.fact {
+  background-color: rgba(255, 102, 204, 0.2);
+  color: #ff66cc;
+}
+
+.salary-badge.plan {
+  background-color: rgba(23, 103, 253, 0.2);
+  color: #1767fd;
+}
+
+.salary-info {
+  flex: 1;
+}
+
+.salary-period {
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+  margin-bottom: 2px;
+}
+
+.salary-job {
+  font-size: 12px;
+  color: #999;
+}
+
+.salary-amount {
+  font-size: 16px;
+  font-weight: 700;
+  color: #fff;
+  margin-right: 12px;
+}
+
+.salary-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.salary-note {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #fff1;
+  font-size: 12px;
+  color: #bbb;
+  font-style: italic;
+}
+
 /* Scrollbar styles */
 .content-left::-webkit-scrollbar,
 .content-right::-webkit-scrollbar,
-.modal::-webkit-scrollbar {
+.modal::-webkit-scrollbar,
+.salaries-list::-webkit-scrollbar {
   width: 6px;
 }
 
 .content-left::-webkit-scrollbar-track,
 .content-right::-webkit-scrollbar-track,
-.modal::-webkit-scrollbar-track {
+.modal::-webkit-scrollbar-track,
+.salaries-list::-webkit-scrollbar-track {
   background: transparent;
 }
 
 .content-left::-webkit-scrollbar-thumb,
 .content-right::-webkit-scrollbar-thumb,
-.modal::-webkit-scrollbar-thumb {
+.modal::-webkit-scrollbar-thumb,
+.salaries-list::-webkit-scrollbar-thumb {
   background: #333;
   border-radius: 3px;
 }
 
 .content-left::-webkit-scrollbar-thumb:hover,
 .content-right::-webkit-scrollbar-thumb:hover,
-.modal::-webkit-scrollbar-thumb:hover {
+.modal::-webkit-scrollbar-thumb:hover,
+.salaries-list::-webkit-scrollbar-thumb:hover {
   background: #444;
 }
 </style>
