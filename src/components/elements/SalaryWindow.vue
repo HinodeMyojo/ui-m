@@ -100,11 +100,23 @@
                 </div>
 
                 <div class="info-card">
-                  <div class="info-label">Ближайший план</div>
+                  <div class="info-label">Путь самурая</div>
+
+                  <select v-model="selectedSamuraiPlanId" class="plan-select">
+                    <option :value="null">Авто (ближайший)</option>
+                    <option
+                      v-for="plan in allPlans"
+                      :key="plan.id || plan.label"
+                      :value="plan.id"
+                    >
+                      {{ plan.label }} — {{ formatCurrency(plan.amount) }}
+                    </option>
+                  </select>
+
                   <div class="info-value highlight">
-                    {{ formatCurrency(nearestPlan.amount) }}
+                    {{ formatCurrency(selectedSamuraiPlan.amount) }}
                   </div>
-                  <div class="info-date">{{ nearestPlan.label }}</div>
+                  <div class="info-date">{{ selectedSamuraiPlan.label }}</div>
                 </div>
 
                 <div class="info-card">
@@ -172,7 +184,10 @@
               </div>
 
               <!-- Прогресс к цели -->
-              <div class="progress-section" v-if="nearestPlan.amount > 0">
+              <div
+                class="progress-section"
+                v-if="selectedSamuraiPlan.amount > 0"
+              >
                 <h3 class="chart-title">Прогресс к ближайшей цели</h3>
                 <div class="progress-bar-container">
                   <div
@@ -586,7 +601,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from "vue";
+import { ref, computed, onMounted, watch } from "vue";
 import { Line } from "vue-chartjs";
 import FinancialPlansWindow from "./FinancialPlansWindow.vue";
 import {
@@ -625,7 +640,27 @@ const emit = defineEmits(["close"]);
 
 // Текущая активная вкладка
 const currentTab = ref("finance");
-const selectedPlanId = ref(null);
+const selectedSamuraiPlan = ref({
+  amount: 0,
+  label: "Не выбран",
+  year: new Date().getFullYear(),
+  month: new Date().getMonth() + 1,
+});
+const selectedSamuraiPlanId = ref(null);
+
+watch(selectedSamuraiPlanId, (newId) => {
+  if (newId) {
+    const plan = allPlans.value.find((p) => p.id === newId);
+    if (plan) {
+      selectedSamuraiPlan.value = plan;
+      localStorage.setItem("selectedSamuraiPlan", JSON.stringify(plan));
+    }
+  } else {
+    // авто режим — ближайший
+    selectedSamuraiPlan.value = nearestPlan.value;
+    localStorage.removeItem("selectedSamuraiPlan");
+  }
+});
 
 // Состояния модальных окон
 const showManageJobsModal = ref(false);
@@ -926,7 +961,7 @@ const periodRange = computed(() => {
 
 // Computed - Прогресс к цели
 const progressPercent = computed(() => {
-  if (factsByMonth.value.length === 0 || nearestPlan.value.amount === 0)
+  if (factsByMonth.value.length === 0 || selectedSamuraiPlan.value.amount === 0)
     return 0;
 
   const current =
@@ -938,7 +973,7 @@ const progressPercent = computed(() => {
 
   const start =
     factsByMonth.value.length > 0 ? factsByMonth.value[0].amount : 0;
-  const target = nearestPlan.value.amount;
+  const target = selectedSamuraiPlan.value.amount;
 
   // Если план меньше стартовой позиции (случай уменьшения зарплаты)
   if (target < start) {
@@ -966,7 +1001,7 @@ const detailedStats = computed(() => {
 
   const start = facts[0];
   const current = facts[facts.length - 1];
-  const nearest = nearestPlan.value;
+  const nearest = selectedSamuraiPlan.value;
 
   const monthsDiff =
     facts.length > 1
@@ -999,7 +1034,7 @@ const detailedStats = computed(() => {
 
   if (nearest.amount > 0) {
     stats.push({
-      label: "Ближайшая цель",
+      label: "Желаемая цель",
       value: `${formatCurrency(nearest.amount)} (${nearest.label})`,
       class: "highlight",
     });
@@ -1434,9 +1469,20 @@ function deleteTask() {
 
 onMounted(async () => {
   localStorage.setItem("financeWindowOpen", "true");
+
   try {
     jobs.value = await fetchJobs();
     salaries.value = await fetchSalaries();
+
+    const saved = localStorage.getItem("selectedSamuraiPlan");
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      selectedSamuraiPlan.value = parsed;
+      const match = allPlans.value.find((p) => p.id === parsed.id);
+      selectedSamuraiPlanId.value = match ? match.id : null;
+    } else {
+      selectedSamuraiPlan.value = nearestPlan.value;
+    }
   } catch (error) {
     console.error("Ошибка загрузки данных:", error);
   }
@@ -2316,6 +2362,32 @@ onMounted(async () => {
   font-weight: 700;
   letter-spacing: 0.05em;
   flex-shrink: 0;
+}
+
+.plan-select {
+  width: 100%;
+  padding: 6px 10px;
+  background-color: #1a1a1a;
+  border: 1px solid #fff2;
+  transition: all 0.2s ease;
+  color: #fff;
+  border-radius: 6px;
+  font-size: 13px;
+  margin-bottom: 8px;
+  cursor: pointer;
+}
+
+/* При наведении */
+.plan-select:hover {
+  border-color: #1767fd;
+}
+
+/* При фокусе или открытии */
+.plan-select:focus,
+.plan-select:focus-visible {
+  border-color: #1767fd;
+  box-shadow: 0 0 0 2px rgba(23, 103, 253, 0.2); /* мягкое сияние */
+  outline: none; /* убираем стандартный outline */
 }
 
 .salary-badge.fact {
