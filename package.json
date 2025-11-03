@@ -12,10 +12,12 @@
     "@mdi/font": "^7.4.47",
     "@mdi/js": "^7.4.47",
     "canvas-confetti": "^1.9.3",
+    "chart.js": "^4.5.1",
     "pinia": "^3.0.2",
     "tailwindcss": "^4.1.8",
     "three": "^0.176.0",
     "vanta": "^0.5.24",
+    "vue-chartjs": "^5.3.3",
     "vue-datepicker-next": "^1.0.3",
     "vue-router": "^4.5.1",
     "vuetify": "^3.8.7"
