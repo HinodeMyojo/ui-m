@@ -590,74 +590,102 @@ const handleDeletedSubtask = (subtask) => {
 const formatDeadline = (dateString) => {
   if (!dateString) return "";
 
-  const date = new Date(dateString);
+  const deadline = new Date(dateString);
   const now = new Date();
-  const diffMs = date - now;
-  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-  const diffHours = Math.floor(
-    (diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)
-  );
-  const diffMinutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
 
-  // Определяем формат отображения времени
-  const timeStr = date.toLocaleTimeString("ru-RU", {
+  // Нормализуем даты к началу дня для корректного сравнения
+  const deadlineDay = new Date(
+    deadline.getFullYear(),
+    deadline.getMonth(),
+    deadline.getDate()
+  );
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+  // Разница в днях (календарных)
+  const diffDays = Math.floor((deadlineDay - today) / (1000 * 60 * 60 * 24));
+
+  // Разница в миллисекундах для проверки просрочки
+  const diffMs = deadline - now;
+
+  // Форматируем время
+  const timeStr = deadline.toLocaleTimeString("ru-RU", {
     hour: "2-digit",
     minute: "2-digit",
   });
 
+  // Форматируем дату (06.11.2025)
+  const fullDateStr = deadline.toLocaleDateString("ru-RU", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
+
+  // Просрочено
+  if (diffMs < 0) {
+    const absDiffMs = Math.abs(diffMs);
+    const absDiffHours = Math.floor(absDiffMs / (1000 * 60 * 60));
+    const absDiffMinutes = Math.floor(
+      (absDiffMs % (1000 * 60 * 60)) / (1000 * 60)
+    );
+
+    // Просрочено сегодня (в пределах текущих суток)
+    if (diffDays === 0) {
+      if (absDiffHours === 0) {
+        return `⚠️ ${absDiffMinutes}мин назад (${timeStr})`;
+      }
+      return `⚠️ ${absDiffHours}ч назад (${timeStr})`;
+    }
+
+    // Просрочено на несколько дней
+    const dateStr = deadline.toLocaleDateString("ru-RU", {
+      day: "numeric",
+      month: "short",
+    });
+    return `⚠️ ${dateStr} в ${timeStr} (${Math.abs(diffDays)}д назад)`;
+  }
+
   // Сегодня
-  if (diffDays === 0 && diffMs >= 0) {
+  if (diffDays === 0) {
     return `⏰ Сегодня в ${timeStr}`;
   }
 
   // Завтра
   if (diffDays === 1) {
-    return `📅 Завтра в ${timeStr}`;
+    return `📅 Завтра в ${timeStr} (${fullDateStr})`;
   }
 
   // В течение недели (2-6 дней)
-  if (diffDays > 1 && diffDays < 7) {
-    const dayName = date.toLocaleDateString("ru-RU", { weekday: "short" });
-    return `📅 ${
+  if (diffDays >= 2 && diffDays < 7) {
+    const dayName = deadline.toLocaleDateString("ru-RU", { weekday: "short" });
+    return `🚀 ${
       dayName.charAt(0).toUpperCase() + dayName.slice(1)
-    } в ${timeStr}`;
+    } в ${timeStr} (${fullDateStr})`;
   }
 
-  // Просрочено сегодня (в пределах текущих суток)
-  if (diffDays === 0 && diffMs < 0) {
-    const absHours = Math.abs(diffHours);
-    const absMinutes = Math.abs(diffMinutes);
-    if (absHours === 0) {
-      return `⚠️ ${absMinutes}мин назад (${timeStr})`;
-    }
-    return `⚠️ ${absHours}ч назад (${timeStr})`;
-  }
-
-  // Просрочено (больше суток назад)
-  if (diffMs < 0) {
-    const overdueDays = Math.abs(diffDays);
-    const dateStr = date.toLocaleDateString("ru-RU", {
-      day: "numeric",
-      month: "short",
-    });
-    return `⚠️ ${dateStr} в ${timeStr} (${overdueDays}д назад)`;
-  }
-
-  // Далекое будущее (больше недели)
-  const dateStr = date.toLocaleDateString("ru-RU", {
+  // Далекое будущее (7+ дней)
+  const dateStr = deadline.toLocaleDateString("ru-RU", {
     day: "numeric",
     month: "short",
   });
-  return `📅 ${dateStr} в ${timeStr}`;
+  return `🪐 ${dateStr} в ${timeStr}`;
 };
 
 const getDeadlineClass = (dateString) => {
   if (!dateString) return "";
 
-  const date = new Date(dateString);
+  const deadline = new Date(dateString);
   const now = new Date();
-  const diffMs = date - now;
-  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+  // Нормализуем даты к началу дня
+  const deadlineDay = new Date(
+    deadline.getFullYear(),
+    deadline.getMonth(),
+    deadline.getDate()
+  );
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+  const diffDays = Math.floor((deadlineDay - today) / (1000 * 60 * 60 * 24));
+  const diffMs = deadline - now;
 
   // Просрочено
   if (diffMs < 0) {
@@ -669,7 +697,7 @@ const getDeadlineClass = (dateString) => {
     return "deadline-today";
   }
 
-  // Завтра или через 1-2 дня
+  // Завтра или послезавтра
   if (diffDays <= 2) {
     return "deadline-soon";
   }
