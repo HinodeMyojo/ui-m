@@ -320,6 +320,8 @@ onMounted(async () => {
   gap: 8px;
   padding-right: 20px;
   align-items: flex-start;
+  overflow: hidden;
+  max-width: 120px;
 }
 
 .main-task {
