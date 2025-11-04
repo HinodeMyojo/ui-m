@@ -296,7 +296,7 @@ onMounted(async () => {
   height: 100%;
   max-width: 700px;
   background-color: #111;
-  padding: 20px;
+  padding: 2px;
 }
 
 .tasks-container {
