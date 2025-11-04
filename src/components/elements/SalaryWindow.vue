@@ -263,6 +263,9 @@
                     <span class="task-progress-text">{{ task.progress }}%</span>
                   </div>
                 </div>
+                <div v-if="globalTasks.length === 0" class="no-tasks">
+                  Нет глобальных задач
+                </div>
               </div>
             </div>
           </div>
@@ -563,7 +566,7 @@
           </div>
           <div class="form-group">
             <label>Дедлайн</label>
-            <input v-model="taskForm.deadline" type="date" />
+            <input v-model="taskForm.end" type="date" />
           </div>
           <div class="form-group">
             <label>Описание</label>
@@ -620,11 +623,16 @@ import {
   addJobAPI,
   updateJobAPI,
   deleteJobAPI,
+  deleteTaskAPI,
+  addTaskAPI,
   fetchSalaries,
   addSalaryAPI,
   updateSalaryAPI,
   deleteSalaryAPI,
+  fetchGlobalTasks,
 } from "../api";
+
+import { getTaskIcon, calculateTaskProgress } from "@/utils/taskUtils";
 
 ChartJS.register(
   Title,
@@ -1445,24 +1453,36 @@ function closeTaskModal() {
   };
 }
 
-function saveTask() {
+async function saveTask() {
   if (editingTask.value) {
     const index = globalTasks.value.findIndex(
       (t) => t.id === editingTask.value.id
     );
     globalTasks.value[index] = { ...taskForm.value, id: editingTask.value.id };
   } else {
-    const newTask = { ...taskForm.value, id: Date.now() };
+    const newTask = {
+      isGlobal: true,
+      sticker: taskForm.value.icon,
+      title: taskForm.value.name,
+      end: taskForm.value.end
+        ? new Date(taskForm.value.end).toISOString()
+        : null,
+      description: taskForm.value.description,
+    };
+
+    console.log(newTask);
+    await addTaskAPI(newTask);
     globalTasks.value.push(newTask);
   }
   closeTaskModal();
 }
 
-function deleteTask() {
+async function deleteTask() {
   if (confirm("Вы уверены, что хотите удалить эту задачу?")) {
     globalTasks.value = globalTasks.value.filter(
       (t) => t.id !== editingTask.value.id
     );
+    await deleteTaskAPI(editingTask.value.id);
     closeTaskModal();
   }
 }
@@ -1473,6 +1493,22 @@ onMounted(async () => {
   try {
     jobs.value = await fetchJobs();
     salaries.value = await fetchSalaries();
+    globalTasks.value = await fetchGlobalTasks();
+
+    globalTasks.value = globalTasks.value.map((task) => ({
+      id: task.id,
+      name: task.title,
+      icon: getTaskIcon(task),
+      deadline: task.end,
+      description: task.description || "",
+      progress: calculateTaskProgress(task),
+      completed: task.done,
+      // Дополнительные поля для детализации
+      totalSubtasks: task.totalSubtasks,
+      completedSubtasks: task.completedSubtasks,
+      start: task.start,
+      end: task.end,
+    }));
 
     const saved = localStorage.getItem("selectedSamuraiPlan");
     if (saved) {
@@ -1548,7 +1584,7 @@ onMounted(async () => {
 
 .window-header {
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
   align-items: center;
   padding: 16px 20px;
   background-color: #111;

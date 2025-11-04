@@ -121,12 +121,20 @@ export async function deleteSalaryAPI(id) {
   });
 }
 
+// tasks api
 export async function fetchTasks(date) {
   const formattedDate = date.value.toISOString().substring(0, 10);
 
   const response = await authorizedFetch(
     `${API_BASE_URL}/api/v1/tasks/?date=${formattedDate}`
   );
+  const data = await response.json();
+  return data;
+}
+
+// Новый метод для получения глобальных задач
+export async function fetchGlobalTasks() {
+  const response = await authorizedFetch(`${API_BASE_URL}/api/v1/tasks/global`);
   const data = await response.json();
   return data;
 }
@@ -155,6 +163,7 @@ export async function fetchTask(id) {
   const data = await response.json();
   return data;
 }
+
 export async function addTaskAPI(task) {
   const newTask = {
     title: task.title,
@@ -163,6 +172,8 @@ export async function addTaskAPI(task) {
     end: task.end || null,
     color: task.color || null,
     parentId: task.parentId || null,
+    sticker: task.sticker || null,
+    isGlobal: task.isGlobal || false, // добавляем флаг глобальной задачи
     subtasks: (task.subtasks || []).map((subtask) => ({
       title: subtask.title,
       description: subtask.description ?? "", // опционально
@@ -183,19 +194,19 @@ export async function addTaskAPI(task) {
 }
 
 export async function deleteTaskAPI(id) {
-  // Здесь будет DELETE на бэк
   await authorizedFetch(`${API_BASE_URL}/api/v1/tasks/?id=${id}`, {
     method: "DELETE",
   });
 }
+
 export async function updateTaskAPI(id, patch) {
-  // Здесь будет PATCH/PUT на бэк
   const updateTask = {
     title: patch.title,
     start: patch.start,
     end: patch.end,
     steps: [],
     color: patch.color,
+    isGlobal: patch.isGlobal || false,
   };
   await authorizedFetch(`${API_BASE_URL}/api/v1/tasks/?id=${id}`, {
     method: "PUT",

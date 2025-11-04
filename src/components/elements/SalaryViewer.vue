@@ -10,8 +10,8 @@
         <div class="main-task-label">Основные задачи</div>
         <div class="main-tasks">
           <div class="main-task" v-for="task in displayedTasks" :key="task.id">
-            <div class="task-icon">{{ task.icon }}</div>
-            <div class="task-title">{{ task.name }}</div>
+            <div class="task-icon">{{ getTaskIcon(task) }}</div>
+            <div class="task-title">{{ task.title }}</div>
           </div>
           <div v-if="globalTasks.length === 0" class="no-tasks">Нет задач</div>
         </div>
@@ -32,6 +32,7 @@
 import { ref, computed, onMounted } from "vue";
 import { Line } from "vue-chartjs";
 import SalaryWindow from "./SalaryWindow.vue";
+import { getTaskIcon } from "@/utils/taskUtils";
 
 import {
   Chart as ChartJS,
@@ -44,7 +45,7 @@ import {
   CategoryScale,
 } from "chart.js";
 
-import { fetchJobs, fetchSalaries } from "../api";
+import { fetchJobs, fetchSalaries, fetchGlobalTasks } from "../api";
 
 ChartJS.register(
   Title,
@@ -59,28 +60,7 @@ ChartJS.register(
 const isWindowOpen = ref(false);
 const jobs = ref([]);
 const salaries = ref([]);
-
-// Глобальные задачи (пока хардкод, можно добавить API)
-const globalTasks = ref([
-  {
-    id: 1,
-    name: "Собеседования ОМ",
-    icon: "🎯",
-    progress: 65,
-  },
-  {
-    id: 2,
-    name: "SQRC сертификация",
-    icon: "📜",
-    progress: 40,
-  },
-  {
-    id: 3,
-    name: "Паттерны",
-    icon: "📚",
-    progress: 80,
-  },
-]);
+const globalTasks = ref([]); // Теперь загружается из API
 
 // Показываем только первые 3 задачи
 const displayedTasks = computed(() => {
@@ -263,6 +243,7 @@ onMounted(async () => {
     // Загружаем данные из API
     jobs.value = await fetchJobs();
     salaries.value = await fetchSalaries();
+    globalTasks.value = await fetchGlobalTasks(); // Загружаем глобальные задачи
 
     // Проверяем состояние окна
     const savedState = localStorage.getItem("financeWindowOpen");
@@ -353,7 +334,7 @@ onMounted(async () => {
   line-height: 1.2;
   background-color: #1a1a1a;
   border-radius: 6px;
-  /* padding: 6px 10px; */
+  padding: 6px 10px;
   width: fit-content;
   transition: all 0.2s ease;
 }

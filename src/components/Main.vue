@@ -70,6 +70,7 @@ const createEmptyTaskForm = () => ({
   subtaskInput: "",
   steps: 0,
   stepActive: 0,
+  isGlobal: false,
 });
 
 function celebrateTaskCreation() {
@@ -310,7 +311,7 @@ function closeAddModal() {
 }
 
 function addTask() {
-  const { title, start, end, color, subtasks } = newTask.value;
+  const { title, start, end, color, subtasks, isGlobal } = newTask.value;
   if (!title || !end) return;
 
   const startDate = start
@@ -325,6 +326,7 @@ function addTask() {
     end: endDate,
     color,
     subtasks,
+    isGlobal, // передаем флаг глобальной задачи
   };
 
   addTaskAPI(taskToAdd).then(() => {
@@ -798,6 +800,17 @@ function getTaskOverdueRatio(task) {
                 class="color-fullwidth"
               />
             </label>
+
+            <!-- НОВЫЙ ЧЕКБОКС ДЛЯ ГЛОБАЛЬНОЙ ЗАДАЧИ -->
+            <label class="checkbox-label">
+              <input
+                v-model="newTask.isGlobal"
+                type="checkbox"
+                class="checkbox-input"
+              />
+              <span class="checkbox-text">Глобальная задача</span>
+            </label>
+
             <label>
               Подзадачи
               <div class="subtasks-label">
@@ -832,17 +845,6 @@ function getTaskOverdueRatio(task) {
                 </li>
               </ul>
             </label>
-            <!-- <label
-              >Выполнено шагов
-              <input
-                v-model.number="newTask.stepActive"
-                type="number"
-                :min="0"
-                :max="25"
-                :disabled="!newTask.steps"
-                :class="{ 'steps-disabled': !newTask.steps }"
-              />
-            </label> -->
             <button class="add-task-submit" type="submit">Добавить</button>
           </form>
         </div>
@@ -1632,6 +1634,32 @@ function getTaskOverdueRatio(task) {
   padding: 32px 32px 24px 32px;
   align-items: center;
 }
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  padding: 8px 0;
+}
+
+.checkbox-input {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  accent-color: #6e4aff;
+}
+
+.checkbox-text {
+  color: #b7c9d1;
+  font-size: 1.04rem;
+  font-weight: 500;
+  user-select: none;
+}
+
+.checkbox-label:hover .checkbox-text {
+  color: #fff;
+}
+
 .delete-confirm-content {
   align-items: center;
   text-align: center;
