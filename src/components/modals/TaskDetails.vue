@@ -12,7 +12,7 @@
     />
   </div>
   <div class="modal-cntnt">
-    <!-- Добавляем модальное окно для просмотра изображения -->
+    <!-- Модальное окно для просмотра изображения -->
     <div
       v-if="selectedImage"
       class="image-preview-modal"
@@ -102,15 +102,21 @@
                   class="w-4 h-4 accent-blue"
                   @change="updateSubtask(subtask.id, subtask.done)"
                 />
-                <!-- {{ subtask.id }} -->
                 <span
                   :for="'subtask-' + index"
                   :class="{ 'text-gray-500': subtask.done }"
-                  class="flex-1 overflow-hidden"
+                  class="flex-1 overflow-hidden subtask-content"
                 >
                   <h3 class="truncate block text-white" :title="subtask.title">
                     {{ subtask.title }}
                   </h3>
+                  <div
+                    v-if="subtask.end"
+                    class="subtask-deadline"
+                    :class="getDeadlineClass(subtask.end)"
+                  >
+                    {{ formatDeadline(subtask.end) }}
+                  </div>
                 </span>
               </div>
             </div>
@@ -542,12 +548,12 @@ const chatValue = ref(null);
 const chatMainRef = ref(null);
 const chatMessageRef = ref(null);
 
-// Добавляем состояние для выбранного изображения
+// Состояние для выбранного изображения
 const selectedImage = ref(null);
 
 const modalState = ref({
   active: false,
-  mode: "add", // "add", "edit" или "delete"
+  mode: "add",
   subtask: null,
 });
 
@@ -580,6 +586,98 @@ const handleDeletedSubtask = (subtask) => {
   reloadTask();
 };
 
+// Функции для форматирования дедлайна
+const formatDeadline = (dateString) => {
+  if (!dateString) return "";
+
+  const date = new Date(dateString);
+  const now = new Date();
+  const diffMs = date - now;
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  const diffHours = Math.floor(
+    (diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)
+  );
+  const diffMinutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+
+  // Определяем формат отображения времени
+  const timeStr = date.toLocaleTimeString("ru-RU", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+
+  // Сегодня
+  if (diffDays === 0 && diffMs >= 0) {
+    return `⏰ Сегодня в ${timeStr}`;
+  }
+
+  // Завтра
+  if (diffDays === 1) {
+    return `📅 Завтра в ${timeStr}`;
+  }
+
+  // В течение недели (2-6 дней)
+  if (diffDays > 1 && diffDays < 7) {
+    const dayName = date.toLocaleDateString("ru-RU", { weekday: "short" });
+    return `📅 ${
+      dayName.charAt(0).toUpperCase() + dayName.slice(1)
+    } в ${timeStr}`;
+  }
+
+  // Просрочено сегодня (в пределах текущих суток)
+  if (diffDays === 0 && diffMs < 0) {
+    const absHours = Math.abs(diffHours);
+    const absMinutes = Math.abs(diffMinutes);
+    if (absHours === 0) {
+      return `⚠️ ${absMinutes}мин назад (${timeStr})`;
+    }
+    return `⚠️ ${absHours}ч назад (${timeStr})`;
+  }
+
+  // Просрочено (больше суток назад)
+  if (diffMs < 0) {
+    const overdueDays = Math.abs(diffDays);
+    const dateStr = date.toLocaleDateString("ru-RU", {
+      day: "numeric",
+      month: "short",
+    });
+    return `⚠️ ${dateStr} в ${timeStr} (${overdueDays}д назад)`;
+  }
+
+  // Далекое будущее (больше недели)
+  const dateStr = date.toLocaleDateString("ru-RU", {
+    day: "numeric",
+    month: "short",
+  });
+  return `📅 ${dateStr} в ${timeStr}`;
+};
+
+const getDeadlineClass = (dateString) => {
+  if (!dateString) return "";
+
+  const date = new Date(dateString);
+  const now = new Date();
+  const diffMs = date - now;
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+  // Просрочено
+  if (diffMs < 0) {
+    return "deadline-overdue";
+  }
+
+  // Сегодня
+  if (diffDays === 0) {
+    return "deadline-today";
+  }
+
+  // Завтра или через 1-2 дня
+  if (diffDays <= 2) {
+    return "deadline-soon";
+  }
+
+  // Больше 2 дней
+  return "deadline-normal";
+};
+
 // Обновляем функцию открытия изображения
 const openImage = async (imageUrl) => {
   selectedImage.value = imageUrl;
@@ -597,9 +695,6 @@ function scrollToBottom() {
   }
 }
 
-// TODO
-// Прокрутка при открытии чата
-
 const selectedSubtask = ref(null);
 const selectedSubtaskId = ref(null);
 
@@ -614,7 +709,6 @@ const clickSubtask = async (subtask) => {
   const chatR = chat[chatValue.value.id];
   if (chatR) {
     messagesVar.value = chatR.messages;
-    // Добавляем небольшую задержку для гарантии, что DOM обновился
     setTimeout(scrollToBottom, 100);
   }
 };
@@ -622,7 +716,6 @@ const clickSubtask = async (subtask) => {
 // Функция для открытия общего чата задачи
 const openTaskChat = () => {
   chatValue.value = task.value.chat;
-  // для того, чтобы было видно, что это родительский чат
   chatValue.value.id = null;
   messagesVar.value = chatValue.value.messages;
   setTimeout(scrollToBottom, 100);
@@ -664,18 +757,12 @@ async function sendMessage() {
     },
   };
 
-  // Добавляем сообщение в чат
   messagesVar.value = [...(messagesVar.value || []), newMessage];
-
-  // Очищаем поле ввода и предпросмотр файлов
   chatMessageRef.value?.clearMessage();
   previewFiles.value = [];
-
-  // Прокручиваем чат вниз после добавления сообщения
   setTimeout(scrollToBottom, 100);
 }
 
-// Инициализируем общий чат задачи при монтировании компонента
 onMounted(() => {
   openTaskChat();
   getProgress();
@@ -688,12 +775,10 @@ onBeforeUnmount(() => {
 
 // Drag and drop handlers
 function handleDragOver(event) {
-  // Проверяем, есть ли перетаскиваемые файлы
   if (event.dataTransfer.types.includes("Files")) {
     isDragging.value = true;
     const items = Array.from(event.dataTransfer.items);
 
-    // Проверяем, есть ли среди перетаскиваемых файлов изображения
     const hasImages = items.some((item) => {
       const type = item.type || item.getAsFile()?.type || "";
       return imageMimeTypes.includes(type);
@@ -701,7 +786,7 @@ function handleDragOver(event) {
 
     isDraggingImage.value = hasImages;
     isDraggingFile.value = true;
-    event.stopPropagation(); // Предотвращаем всплытие события
+    event.stopPropagation();
   }
 }
 
@@ -781,22 +866,18 @@ function removePreviewFile(index) {
   previewFiles.value.splice(index, 1);
 }
 
-// Обработка выбора файлов через кнопку скрепки
 const fileInput = ref(null);
 
 async function handleFileSelect(event) {
   const files = Array.from(event.target.files);
   await addPreviewFiles(files, "file");
-  // Очищаем input для возможности повторного выбора тех же файлов
   event.target.value = "";
 }
 
-// Очистка всех файлов
 function clearAllFiles() {
   previewFiles.value = [];
 }
 
-// Computed properties for file previews
 const imageFiles = computed(() =>
   previewFiles.value.filter((file) => file.uploadType === "image")
 );
@@ -808,17 +889,15 @@ const nonImageFiles = computed(() =>
 const hasImages = computed(() => imageFiles.value.length > 0);
 const hasOtherFiles = computed(() => nonImageFiles.value.length > 0);
 
-// Добавляем функцию для перетаскивания подзадач
 function startDrag(event, subtask) {
   event.dataTransfer.effectAllowed = "move";
   event.dataTransfer.setData("application/json", JSON.stringify(subtask));
-  event.stopPropagation(); // Предотвращаем всплытие события
+  event.stopPropagation();
 }
 
 function onSubtaskDrop(event, subtasks) {
-  // Проверяем, есть ли перетаскиваемые файлы
   if (event.dataTransfer.types.includes("Files")) {
-    return; // Если это файлы, не обрабатываем событие здесь
+    return;
   }
 
   const subtask = JSON.parse(event.dataTransfer.getData("application/json"));
@@ -831,14 +910,12 @@ function onSubtaskDrop(event, subtasks) {
     const [removed] = subtasks.splice(fromIndex, 1);
     subtasks.splice(toIndex, 0, removed);
   }
-  event.stopPropagation(); // Предотвращаем всплытие события
+  event.stopPropagation();
 }
 
-// Состояние для редактирования
 const editingMessageId = ref(null);
 const editingText = ref("");
 
-// Функции для редактирования
 function isEditing(messageId) {
   return editingMessageId.value === messageId;
 }
@@ -862,7 +939,6 @@ function saveEdit(messageId) {
   if (messageIndex !== -1) {
     messagesVar.value[messageIndex].text = editingText.value;
     messagesVar.value[messageIndex].date = new Date().toLocaleTimeString();
-    // Сохраняем текущие вложения
     messagesVar.value[messageIndex].attachments = {
       images: [...(editingAttachments.value?.images || [])],
       files: [...(editingAttachments.value?.files || [])],
@@ -876,7 +952,6 @@ function cancelEdit() {
     (m) => m.id === editingMessageId.value
   );
   if (messageIndex !== -1 && editingAttachments.value) {
-    // Восстанавливаем оригинальные вложения
     messagesVar.value[messageIndex].attachments = {
       images: [...editingAttachments.value.images],
       files: [...editingAttachments.value.files],
@@ -888,7 +963,6 @@ function cancelEdit() {
 }
 
 async function updateSubtask(taskId, state) {
-  "Вызов функции updateSubtask с taskId:", taskId, "и state:", state;
   await checkTask(taskId, state);
   await getProgress();
 }
@@ -911,10 +985,8 @@ async function getProgress() {
   needProgressPercentage.value = needProgress();
 }
 
-// Добавляем состояние для хранения копии вложений при редактировании
 const editingAttachments = ref(null);
 
-// Функция для форматирования размера файла
 function formatFileSize(bytes) {
   if (bytes === 0) return "0 Bytes";
   const k = 1024;
@@ -923,7 +995,6 @@ function formatFileSize(bytes) {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
 }
 
-// Функции для удаления вложений
 function removeImage(messageId, imageIndex) {
   const messageIndex = messagesVar.value.findIndex((m) => m.id === messageId);
   if (messageIndex !== -1) {
@@ -938,18 +1009,57 @@ function removeMessageFile(messageId, fileIndex) {
   }
 }
 
-// Функция для определения иконки файла по типу
 function getFileIcon(type) {
   if (type.startsWith("image/")) return mdiImage;
-  // if (type === "application/pdf") return mdiFilePdfBox;
-  // if (type.includes("word")) return mdiFileWord;
-  // if (type.includes("excel") || type.includes("sheet")) return mdiFileExcel;
-  // if (type === "text/plain") return mdiFileText;
   return mdiFileDocument;
 }
 </script>
 <style scoped>
-/* drop */
+/* ... (сохраняем все существующие стили) ... */
+
+/* Новые стили для дедлайнов в подзадачах */
+.subtask-content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.subtask-deadline {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  display: inline-block;
+  width: fit-content;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.deadline-overdue {
+  background: rgba(255, 68, 68, 0.15);
+  color: #ff6b6b;
+  border: 1px solid rgba(255, 68, 68, 0.3);
+}
+
+.deadline-today {
+  background: rgba(255, 183, 77, 0.15);
+  color: #ffb74d;
+  border: 1px solid rgba(255, 183, 77, 0.3);
+}
+
+.deadline-soon {
+  background: rgba(193, 68, 129, 0.15);
+  color: #c14481;
+  border: 1px solid rgba(193, 68, 129, 0.3);
+}
+
+.deadline-normal {
+  background: rgba(110, 74, 255, 0.15);
+  color: #a5b4fc;
+  border: 1px solid rgba(110, 74, 255, 0.3);
+}
+
+/* Остальные существующие стили остаются без изменений */
 .dropzone {
   border: 2px dashed #888;
   padding: 20px;
@@ -1032,7 +1142,6 @@ function getFileIcon(type) {
   display: flex;
   flex-direction: column;
   height: 100%;
-  /* padding: 0 0 0 16px; */
 }
 .today-progres,
 .need-progres {
@@ -1107,25 +1216,20 @@ function getFileIcon(type) {
   transition: all 0.2s ease;
 }
 
-/* Индивидуальные цвета */
 .add-btn {
-  /* background-color: #4caf50; */
   border-color: #6e4aff;
 }
 
 .edit-btn {
-  /* background-color: #2196f3; */
   border-color: #6e4aff;
 }
 
 .delete-btn {
-  /* background-color: #f44336; */
   border-color: #c14481;
 }
 
 .subtask-btn:hover {
   opacity: 0.85;
-  /* scale: 1.05; */
 }
 
 .subtask-btn:active {
@@ -1152,8 +1256,6 @@ function getFileIcon(type) {
   display: grid;
   grid-template-columns: 10fr 1fr;
 }
-.subtask-actions {
-}
 
 .subtask :active {
   cursor: grabbing;
@@ -1172,7 +1274,7 @@ function getFileIcon(type) {
   align-items: center;
   justify-content: flex-start;
   width: 100%;
-  height: 40px;
+  min-height: 40px;
   gap: 15px;
   border-radius: 8px;
   user-select: none;
@@ -1187,6 +1289,7 @@ function getFileIcon(type) {
   cursor: pointer;
   accent-color: #6e4aff;
   transition: all 0.2s ease;
+  flex-shrink: 0;
 }
 
 .subtask-boba input[type="checkbox"]:hover {
@@ -1199,7 +1302,6 @@ function getFileIcon(type) {
   color: #ffffff;
   margin: 0;
   transition: color 0.2s ease;
-  flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1268,19 +1370,18 @@ function getFileIcon(type) {
   padding: 16px;
 }
 
-/* Chrome, Safari, Edge */
 .chat-main::-webkit-scrollbar {
   width: 8px;
 }
 
 .chat-main::-webkit-scrollbar-track {
-  background: #111; /* Трек (фон) */
+  background: #111;
 }
 
 .chat-main::-webkit-scrollbar-thumb {
-  background-color: #888; /* Цвет полосы */
+  background-color: #888;
   border-radius: 4px;
-  border: 2px solid #111; /* Отступ внутри трека */
+  border: 2px solid #111;
 }
 
 .chat-main::-webkit-scrollbar-thumb:hover {
@@ -1297,7 +1398,6 @@ function getFileIcon(type) {
   position: relative;
   flex-direction: column;
   width: 100%;
-  /* gap: 12px; */
   padding: 16px;
   display: grid;
   grid-template-rows: 1fr auto;
@@ -1413,18 +1513,16 @@ function getFileIcon(type) {
   gap: 10px;
   flex-direction: column;
 }
-/*  */
+
 .image-grid {
   display: grid;
   gap: 8px;
 }
 
-/* Один элемент */
 .count-1 {
   grid-template-columns: 1fr;
 }
 
-/* Два элемента — две колонки */
 .count-2 {
   grid-template-columns: repeat(2, 1fr);
 }
@@ -1439,7 +1537,6 @@ function getFileIcon(type) {
   grid-template-areas:
     "main img1"
     "main img2";
-  /* gap: 8px; */
 }
 
 .count-3 .x0 {
@@ -1452,7 +1549,6 @@ function getFileIcon(type) {
   grid-area: img2;
 }
 
-/* Четыре элемента: равномерная сетка 2x2 */
 .count-4 {
   grid-template-columns: repeat(2, 1fr);
   grid-template-rows: repeat(2, 1fr);
@@ -1479,15 +1575,12 @@ function getFileIcon(type) {
   grid-area: img4;
 }
 
-/* Общие стили изображений */
 .image {
   width: 100%;
   height: 100%;
   object-fit: cover;
   border-radius: 6px;
 }
-
-/*  */
 
 .title h3 {
   font-family: "Montserrat", 0;
@@ -1518,7 +1611,6 @@ function getFileIcon(type) {
 
 .drop-zones {
   position: absolute;
-  /* top: v-bind('chatHeaderRef?.clientHeight + "px"'); */
   top: 48px;
   left: 0;
   right: 0;
@@ -1702,7 +1794,6 @@ function getFileIcon(type) {
   background: #ff6666;
 }
 
-/* Стили для модального окна просмотра изображения */
 .image-preview-modal {
   position: fixed;
   top: 0;
@@ -2008,5 +2099,14 @@ function getFileIcon(type) {
 
 .subtask-chats::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.3);
+}
+
+.preview-section-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 13px;
+  padding: 2px 5px;
 }
 </style>

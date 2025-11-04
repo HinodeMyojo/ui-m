@@ -17,6 +17,18 @@
           />
         </label>
 
+        <label>
+          Дедлайн (необязательно)
+          <input
+            v-model="taskData.end"
+            type="datetime-local"
+            placeholder="Выберите дату и время"
+          />
+          <span v-if="taskData.end" class="deadline-info">
+            {{ formatDeadlineInfo(taskData.end) }}
+          </span>
+        </label>
+
         <button type="submit" class="btn-submit">{{ submitButtonText }}</button>
       </form>
 
@@ -53,9 +65,22 @@ const props = defineProps({
 
 const emit = defineEmits(["close", "created", "updated", "deleted"]);
 
+// Функция для форматирования даты из ISO в datetime-local
+const formatDateForInput = (isoDate) => {
+  if (!isoDate) return "";
+  const date = new Date(isoDate);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
+};
+
 const taskData = ref({
   id: props.mode === "add" ? null : props.subtask?.id,
   title: props.mode === "add" ? "" : props.subtask?.title || "",
+  end: props.mode === "add" ? "" : formatDateForInput(props.subtask?.end),
   parentId: props.task.id,
 });
 
@@ -76,6 +101,26 @@ const submitButtonText = computed(() => {
   return props.mode === "edit" ? "Сохранить" : "Добавить";
 });
 
+const formatDeadlineInfo = (dateTimeLocal) => {
+  if (!dateTimeLocal) return "";
+  const date = new Date(dateTimeLocal);
+  const now = new Date();
+  const diffMs = date - now;
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  const diffHours = Math.floor(
+    (diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)
+  );
+
+  if (diffMs < 0) {
+    return "⚠️ Просрочен";
+  } else if (diffDays === 0 && diffHours < 24) {
+    return `⏰ Осталось ${diffHours}ч`;
+  } else if (diffDays < 7) {
+    return `📅 Через ${diffDays}д`;
+  }
+  return `📅 ${date.toLocaleDateString("ru-RU")}`;
+};
+
 const closeModal = () => {
   emit("close");
 };
@@ -95,14 +140,26 @@ const submit = async () => {
   if (!taskData.value.title.trim()) return;
 
   try {
+    // Преобразуем datetime-local в ISO формат для API
+    const endDate = taskData.value.end
+      ? new Date(taskData.value.end).toISOString()
+      : null;
+
+    const taskPayload = {
+      title: taskData.value.title,
+      end: endDate,
+      parentId: taskData.value.parentId,
+    };
+
     if (props.mode === "add") {
-      const response = await addTaskAPI(taskData.value);
+      const response = await addTaskAPI(taskPayload);
       emit("created", response);
     } else if (props.mode === "edit") {
-      const response = await updateTaskAPI(taskData.value.id, taskData.value);
+      const response = await updateTaskAPI(taskData.value.id, taskPayload);
       emit("updated", response);
     }
     taskData.value.title = "";
+    taskData.value.end = "";
     emit("close");
   } catch (error) {
     console.error(
@@ -135,7 +192,7 @@ const submit = async () => {
   box-shadow: 0 4px 32px rgba(0, 0, 0, 0.5);
   padding: 32px;
   width: 90%;
-  max-width: 400px;
+  max-width: 450px;
   position: relative;
   color: #fff;
 }
@@ -149,6 +206,12 @@ const submit = async () => {
   border: none;
   color: #fff;
   cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.modal-close:hover {
+  color: #6e4aff;
+  transform: scale(1.1);
 }
 
 .modal-title {
@@ -160,32 +223,67 @@ const submit = async () => {
 form {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 16px;
 }
 
 label {
   font-size: 0.95rem;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 8px;
 }
 
-input[type="text"] {
+input[type="text"],
+input[type="datetime-local"] {
   background: #18191f;
   color: #fff;
   border: 1px solid #2e2660;
   border-radius: 8px;
-  padding: 8px 12px;
+  padding: 10px 12px;
   font-size: 1rem;
   outline: none;
+  transition: all 0.2s ease;
 }
 
 input:focus {
   border-color: #6e4aff;
+  box-shadow: 0 0 0 3px rgba(110, 74, 255, 0.1);
+}
+
+input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+  filter: invert(1);
+  cursor: pointer;
+}
+
+.deadline-info {
+  font-size: 0.85rem;
+  color: #c14481;
+  margin-top: 4px;
+  padding: 6px 10px;
+  background: rgba(193, 68, 129, 0.1);
+  border-radius: 6px;
+  display: inline-block;
+}
+
+.btn-submit {
+  background: linear-gradient(90deg, #2e2660 60%, #18191f 100%);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 16px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s, box-shadow 0.2s, transform 0.1s;
 }
 
 .btn-submit:hover {
   background: linear-gradient(90deg, #6e4aff 60%, #2e2660 100%);
+  box-shadow: 0 4px 12px rgba(110, 74, 255, 0.3);
+}
+
+.btn-submit:active {
+  transform: scale(0.98);
 }
 
 .delete-confirmation {
@@ -206,18 +304,6 @@ input:focus {
   align-items: center;
 }
 
-.btn-submit {
-  background: linear-gradient(90deg, #2e2660 60%, #18191f 100%);
-  color: #fff;
-  border: none;
-  border-radius: 8px;
-  padding: 8px 16px;
-  font-size: 1rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.2s, box-shadow 0.2s;
-}
-
 .btn-delete {
   background: linear-gradient(90deg, #c14481 60%, #18191f 100%);
 }
@@ -231,7 +317,7 @@ input:focus {
   color: #fff;
   border: 1px solid #2e2660;
   border-radius: 8px;
-  padding: 8px 16px;
+  padding: 10px 16px;
   font-size: 1rem;
   font-weight: 600;
   cursor: pointer;
