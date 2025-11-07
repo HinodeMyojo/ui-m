@@ -13,6 +13,8 @@ import { useRouter } from "vue-router";
 
 import TaskDetails from "@/components/modals/TaskDetails.vue";
 
+import SkillsMiniWidget from "./elements/SkillsMiniWidget.vue";
+
 const DEFAULT_TASK_COLOR = "#25636A";
 const CONFETTI_DELAY_MS = 200;
 const CONFETTI_COLORS = [
@@ -556,6 +558,9 @@ function getTaskOverdueRatio(task) {
           @click="handleNextMonth"
         />
       </div>
+      <div class="skills-widget">
+        <SkillsMiniWidget />
+      </div>
       <div class="header-right">
         <button class="add-task-btn" @click="openAddModal">
           + Добавить задачу
@@ -946,7 +951,7 @@ function getTaskOverdueRatio(task) {
 .main {
   flex: 1;
   width: 100%;
-  height: 100%;
+  min-height: 100vh;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -957,14 +962,15 @@ function getTaskOverdueRatio(task) {
 
 .body {
   width: 100%;
-  height: 100%;
+  min-height: 100vh;
   flex: 5;
   position: relative;
   /* overflow: hidden; */
-  display: flex;
+  /* display: flex; */
   flex-direction: row;
   align-items: center;
   /* overflow-y: auto; */
+  /* background-color: #111; */
   scrollbar-width: auto;
   scrollbar-color: #6e4aff #111;
 }
@@ -982,7 +988,9 @@ function getTaskOverdueRatio(task) {
   background-color: #6200ff52;
   height: 170px;
   max-width: 35px;
+  align-items: center;
   left: -30px;
+  display: flex;
   top: 0px;
   border-top-left-radius: 15px;
   border-bottom-left-radius: 15px;
@@ -998,7 +1006,6 @@ function getTaskOverdueRatio(task) {
   display: flex;
   flex: 1;
   width: 100%;
-  height: 100%;
   align-items: center;
   justify-content: center;
 }
@@ -1012,7 +1019,7 @@ function getTaskOverdueRatio(task) {
 }
 .columns-container {
   width: 100%;
-  height: 100%;
+  /* height: 100%; */
   display: flex;
   position: relative;
   background: transparent;
@@ -1221,6 +1228,14 @@ function getTaskOverdueRatio(task) {
   /* background-color: #6e4aff; */
 }
 .header-center {
+  flex: 0.7;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 32px;
+}
+
+.skills-widget {
   flex: 0.5;
   display: flex;
   align-items: center;
@@ -1229,7 +1244,7 @@ function getTaskOverdueRatio(task) {
 }
 
 .header-right {
-  flex: 1;
+  flex: 0.6;
   display: flex;
   align-items: center;
   justify-content: flex-end;
@@ -1378,7 +1393,7 @@ function getTaskOverdueRatio(task) {
   border-radius: 18px;
   box-shadow: 0 4px 32px 0 #0008;
   min-width: 320px;
-  max-width: 96vw;
+  /* max-width: 30%; */
   padding: 38px 32px 32px 32px;
   min-width: 500px;
   position: relative;

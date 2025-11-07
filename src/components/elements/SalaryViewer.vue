@@ -260,12 +260,13 @@ onMounted(async () => {
 .salary-main {
   position: relative;
   height: 90%;
-  width: 90%;
+  width: 100%;
   border-radius: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
   border: 1px solid #fff3;
+  background-color: #111;
   flex-direction: row;
   overflow: hidden;
 }
@@ -280,11 +281,11 @@ onMounted(async () => {
 }
 
 .task-area {
-  position: relative;
+  /* position: relative; */
   width: 100%;
   height: 100%;
   flex: 1;
-  background-color: #111;
+
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -295,7 +296,6 @@ onMounted(async () => {
   width: 100%;
   height: 100%;
   max-width: 700px;
-  background-color: #111;
   padding: 2px;
 }
 
@@ -321,7 +321,7 @@ onMounted(async () => {
   padding-right: 20px;
   align-items: flex-start;
   overflow: hidden;
-  max-width: 120px;
+  max-width: 123px;
 }
 
 .main-task {
@@ -336,9 +336,14 @@ onMounted(async () => {
   line-height: 1.2;
   background-color: #1a1a1a;
   border-radius: 6px;
-  padding: 6px 10px;
+  padding: 6px 6px;
   width: fit-content;
   transition: all 0.2s ease;
+
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .main-task:hover {
@@ -351,6 +356,9 @@ onMounted(async () => {
 }
 
 .task-title {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
