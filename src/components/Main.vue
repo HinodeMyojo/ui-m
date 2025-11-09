@@ -13,6 +13,9 @@ import { useRouter } from "vue-router";
 
 import TaskDetails from "@/components/modals/TaskDetails.vue";
 
+import TimeTrackerMini from "./elements/TimeTrackerMini.vue";
+import TimeStatsModal from "@/components/elements/TimeStatsModal.vue";
+
 import SkillsMiniWidget from "./elements/SkillsMiniWidget.vue";
 
 const DEFAULT_TASK_COLOR = "#25636A";
@@ -531,6 +534,14 @@ function checkProgress(task) {
 function getTaskOverdueRatio(task) {
   return (task.requiredSubtasks - task.completedSubtasks) / task.totalSubtasks;
 }
+
+const showTimeStats = ref(false);
+function openTimeStats() {
+  showTimeStats.value = true;
+}
+function closeTimeStats() {
+  showTimeStats.value = false;
+}
 </script>
 
 <template>
@@ -558,8 +569,8 @@ function getTaskOverdueRatio(task) {
           @click="handleNextMonth"
         />
       </div>
-      <div class="skills-widget">
-        <SkillsMiniWidget />
+      <div class="time-tracker-widget">
+        <TimeTrackerMini @openStats="openTimeStats" />
       </div>
       <div class="header-right">
         <button class="add-task-btn" @click="openAddModal">
@@ -772,6 +783,9 @@ function getTaskOverdueRatio(task) {
     >
       <TaskDetails :task="openedTask" />
     </div>
+  </transition>
+  <transition name="modal-fade">
+    <TimeStatsModal v-if="showTimeStats" @close="closeTimeStats" />
   </transition>
   <transition name="modal-fade">
     <div v-if="showAddModal" class="modal-overlay">
@@ -1600,6 +1614,16 @@ function getTaskOverdueRatio(task) {
     gap: 4px;
   }
 }
+.time-tracker-widget {
+  flex: 0.5;
+  display: flex;
+  height: 130px;
+  align-items: center;
+  justify-content: center;
+  gap: 32px;
+  width: 350px;
+}
+
 .edit-task-btn {
   background: none;
   border: none;

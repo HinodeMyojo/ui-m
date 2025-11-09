@@ -49,6 +49,47 @@ export async function login(password) {
   }
 }
 
+// time
+
+export async function fetchTimeEntries(date) {
+  const formattedDate = date.toISOString().split("T")[0];
+  const response = await authorizedFetch(
+    `${API_BASE_URL}/api/v1/time/${formattedDate}`
+  );
+  return await response.json();
+}
+
+// Добавить запись времени
+export async function addTimeEntry(entry) {
+  const response = await authorizedFetch(`${API_BASE_URL}/api/v1/time`, {
+    method: "POST",
+    body: JSON.stringify(entry),
+  });
+
+  return await response.json();
+}
+
+// Удалить запись времени
+export async function deleteTimeEntry(id) {
+  const response = await authorizedFetch(`${API_BASE_URL}/api/v1/time/${id}`, {
+    method: "DELETE",
+  });
+
+  return await response.json();
+}
+
+// Получить статистику за период
+export async function fetchTimeStats(startDate, endDate) {
+  const token = localStorage.getItem("token");
+  const start = startDate.toISOString().split("T")[0];
+  const end = endDate.toISOString().split("T")[0];
+
+  const response = await authorizedFetch(
+    `${API_BASE_URL}/api/v1/time/stats?start=${start}&end=${end}`
+  );
+  return await response.json();
+}
+
 // jobs api
 export async function fetchJobs() {
   const response = await authorizedFetch(`${API_BASE_URL}/api/v1/jobs`);
