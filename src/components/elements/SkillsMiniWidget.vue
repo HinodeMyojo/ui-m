@@ -210,8 +210,9 @@ function navigateToSkills() {
   backdrop-filter: blur(12px);
   border: 1px solid rgba(23, 103, 253, 0.2);
   border-radius: 16px;
-  padding: 16px 20px;
+  padding: 8px 20px;
   cursor: pointer;
+  height: 90%;
   transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }

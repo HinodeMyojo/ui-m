@@ -11,23 +11,20 @@ html,
 body {
   margin: 0;
   padding: 0;
-  height: auto;
   min-height: 100vh;
-  overflow: hidden;
-  overflow-y: auto;
   overflow-x: hidden;
+  overflow-y: auto; /* убираем overflow: hidden */
   scrollbar-width: auto;
   scrollbar-color: #6e4aff #111;
   background-color: #18191f;
 }
 #app {
-  /* width: 100vw;
-  height: 100%; */
   display: flex;
   justify-content: center;
   align-items: center;
   position: relative;
   z-index: 1;
+  min-height: 100vh; /* добавьте это */
 }
 
 .modal-overlay {

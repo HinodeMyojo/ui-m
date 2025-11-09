@@ -957,7 +957,6 @@ function getTaskOverdueRatio(task) {
   align-items: center;
   justify-content: center;
   position: relative;
-  /* overflow: hidden; */
 }
 
 .body {
@@ -965,19 +964,16 @@ function getTaskOverdueRatio(task) {
   min-height: 100vh;
   flex: 5;
   position: relative;
-  /* overflow: hidden; */
-  /* display: flex; */
   flex-direction: row;
   align-items: center;
-  /* overflow-y: auto; */
-  /* background-color: #111; */
   scrollbar-width: auto;
   scrollbar-color: #6e4aff #111;
+  /* background: #11111113; */
 }
 
 .salary-viewer {
   width: 100%;
-  height: 90%;
+  height: 130px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1030,6 +1026,7 @@ function getTaskOverdueRatio(task) {
   min-width: 0;
   border-right: 1px solid rgba(44, 47, 54, 0.5);
   position: relative;
+  height: 100vh;
 }
 
 .column:first-child {
@@ -1215,7 +1212,7 @@ function getTaskOverdueRatio(task) {
   align-items: center;
   justify-content: space-between;
   border-bottom: 2px solid #1e2025;
-  min-height: 64px;
+  min-height: 62px;
 }
 
 .header-left {
@@ -1228,7 +1225,7 @@ function getTaskOverdueRatio(task) {
   /* background-color: #6e4aff; */
 }
 .header-center {
-  flex: 0.7;
+  flex: 0.9;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1236,15 +1233,16 @@ function getTaskOverdueRatio(task) {
 }
 
 .skills-widget {
-  flex: 0.5;
+  flex: 0.3;
   display: flex;
+  height: 130px;
   align-items: center;
   justify-content: center;
   gap: 32px;
 }
 
 .header-right {
-  flex: 0.6;
+  flex: 1;
   display: flex;
   align-items: center;
   justify-content: flex-end;
