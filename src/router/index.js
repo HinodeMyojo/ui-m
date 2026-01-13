@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from "vue-router";
 import HomeView from "../views/HomeView.vue";
 import LoginView from "../views/LoginView.vue";
 import SkillsView from "../views/SkillsView.vue";
+import CanvasView from "../views/CanvasView.vue";
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -20,6 +21,16 @@ const router = createRouter({
       path: "/skills",
       name: "Skills",
       component: SkillsView,
+    },
+    {
+      path: "/canvas",
+      name: "CanvasList",
+      component: CanvasView,
+    },
+    {
+      path: "/canvas/:id",
+      name: "CanvasEditor",
+      component: () => import("../components/canvas/CanvasEditor.vue"),
     },
   ],
 });

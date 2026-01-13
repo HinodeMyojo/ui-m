@@ -580,9 +580,9 @@ function closeTimeStats() {
       </div>
     </div>
     <div class="body">
-      <div class="taks-types-main-menu">
+      <div class="taks-types-main-menu" @click="router.push('/canvas')" title="Открыть Canvas">
         <div class="taks-types-word">
-          <h3>Home</h3>
+          <h3>Canvas</h3>
         </div>
       </div>
       <div
