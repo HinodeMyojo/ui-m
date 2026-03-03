@@ -799,6 +799,10 @@ function closeTimeStats() {
         <div class="icon"><img :src="holiColors" alt=""></div>
         <p class="text">MD TO PDF</p>
       </button>
+      <button class="nyamaaa" @click="router.push('/pdfReader')">
+        <div class="icon">📄</div>
+        <p class="text">PDF Reader</p>
+      </button>
     </div>
   </transition>
   <transition name="modal-fade">
