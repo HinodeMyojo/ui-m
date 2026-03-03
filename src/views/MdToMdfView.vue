@@ -13,10 +13,11 @@
             <button @click="toggleNotesPanel" :class="{ active: showNotesPanel }">
                 📝 Заметки{{ userNotes.length ? ' (' + userNotes.length + ')' : '' }}
             </button>
+            <button @click="toggleAiPanel" :class="{ active: aiPanelOpen }">🤖 Claude</button>
             <span v-if="readingTime" class="read-time-label">~{{ readingTime }} мин</span>
         </div>
 
-        <div class="fullscreen-body" @click="activeCitation = null; noteTooltipVisible = false">
+        <div class="fullscreen-body" @click="activeCitation = null; noteTooltipVisible = false; aiKeyModalOpen = false">
             <div class="fullscreen-main">
                 <!-- Search bar -->
                 <div v-if="searchOpen" class="search-bar">
@@ -82,7 +83,106 @@
              :style="noteTooltipStyle"
              @click.stop>
             <button class="note-tooltip-btn" @click="saveNote">📌 Сохранить заметку</button>
+            <button class="note-tooltip-btn note-tooltip-ai-btn" @click="openAiWithSelection">🤖 Спросить Claude</button>
             <button class="note-tooltip-close" @click="noteTooltipVisible = false">✕</button>
+        </div>
+
+        <!-- AI Key Modal -->
+        <div v-if="aiKeyModalOpen" class="ai-key-modal-overlay" @click.self="aiKeyModalOpen = false">
+            <div class="ai-key-modal">
+                <div class="ai-key-modal-title">🤖 Claude API Key</div>
+                <p class="ai-key-modal-desc">Введите ваш Anthropic API ключ. Он сохранится в localStorage только в браузере.</p>
+                <input
+                    v-model="aiKeyInput"
+                    type="password"
+                    class="ai-key-input"
+                    placeholder="sk-ant-..."
+                    @keydown.enter="confirmApiKey"
+                    @keydown.stop />
+                <div class="ai-key-modal-actions">
+                    <button class="ai-key-save-btn" @click="confirmApiKey">Сохранить</button>
+                    <button class="ai-key-cancel-btn" @click="aiKeyModalOpen = false">Отмена</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Claude AI Chat Panel -->
+        <div v-if="aiPanelOpen" class="ai-panel" :class="{ dark: darkMode }"
+             :style="showSidebar ? { right: sidebarWidth + 'px' } : {}"
+             @click.stop>
+            <div class="ai-panel-header">
+                <span class="ai-panel-title">🤖 Claude AI</span>
+                <div class="ai-panel-actions">
+                    <!-- Mode toggle -->
+                    <div class="ai-mode-toggle" title="Режим работы">
+                        <button class="ai-mode-btn" :class="{ active: aiMode === 'api' }" @click="aiMode = 'api'">API</button>
+                        <button class="ai-mode-btn" :class="{ active: aiMode === 'tab' }" @click="aiMode = 'tab'">claude.ai</button>
+                    </div>
+                    <button v-if="aiMode === 'api'" class="ai-panel-btn" @click="clearAiChat" title="Очистить чат">🗑</button>
+                    <button v-if="aiMode === 'api'" class="ai-panel-btn" @click="openApiKeyModal" title="API ключ">🔑</button>
+                    <button class="ai-panel-btn ai-panel-close" @click="aiPanelOpen = false">✕</button>
+                </div>
+            </div>
+
+            <!-- API mode -->
+            <template v-if="aiMode === 'api'">
+                <div class="ai-messages" ref="aiMessagesEl">
+                    <div v-if="!aiMessages.length" class="ai-empty">
+                        Выделите текст и нажмите «Спросить Claude», или задайте вопрос ниже.<br><br>
+                        <small>Нужен API ключ с <b>console.anthropic.com</b></small>
+                    </div>
+                    <div v-for="msg in aiMessages" :key="msg.id"
+                         class="ai-message" :class="'ai-message-' + msg.role">
+                        <div v-if="msg.role === 'context'" class="ai-context-block">
+                            <span class="ai-context-label">📎 Контекст:</span>
+                            <span class="ai-context-text">{{ msg.content }}</span>
+                        </div>
+                        <template v-else>
+                            <div class="ai-message-bubble" v-html="msg.role === 'assistant' ? mdParser.parse(msg.content || '...') : escapeHtml(msg.content)"></div>
+                            <div v-if="msg.role === 'assistant' && msg.streaming" class="ai-streaming-dot"></div>
+                        </template>
+                    </div>
+                </div>
+                <div class="ai-input-row">
+                    <textarea
+                        v-model="aiInputText"
+                        class="ai-input"
+                        placeholder="Задайте вопрос... (Enter — отправить)"
+                        rows="2"
+                        @keydown.enter.exact.prevent="sendAiMessage"
+                        @keydown.stop />
+                    <button class="ai-send-btn" @click="sendAiMessage" :disabled="aiStreaming">
+                        {{ aiStreaming ? '⏳' : '➤' }}
+                    </button>
+                </div>
+            </template>
+
+            <!-- Tab mode -->
+            <template v-else>
+                <div class="ai-tab-body">
+                    <div class="ai-tab-icon">🌐</div>
+                    <div class="ai-tab-desc">
+                        Откроет <b>claude.ai</b> в новой вкладке в вашем браузере.<br>
+                        Используется ваша существующая сессия — логин не сбивается.
+                    </div>
+                    <div v-if="tabPendingContext" class="ai-tab-context-preview">
+                        <div class="ai-tab-context-label">📎 Выделенный текст будет скопирован:</div>
+                        <div class="ai-tab-context-text">{{ tabPendingContext.slice(0, 200) }}{{ tabPendingContext.length > 200 ? '…' : '' }}</div>
+                    </div>
+                    <div class="ai-tab-input-group">
+                        <textarea
+                            v-model="aiInputText"
+                            class="ai-input ai-tab-input"
+                            :placeholder="tabPendingContext ? 'Добавьте вопрос (необязательно)...' : 'Введите вопрос или выделите текст...'"
+                            rows="3"
+                            @keydown.stop />
+                        <button class="ai-tab-open-btn" @click="openInTab">
+                            Открыть claude.ai →
+                        </button>
+                        <div class="ai-tab-hint">Текст скопируется в буфер — вставьте его в Claude (Ctrl+V)</div>
+                    </div>
+                </div>
+            </template>
         </div>
 
         <!-- SVG Tree Visualizer Modal -->
@@ -578,7 +678,9 @@ function closeSearch() {
 function onFullscreenKeydown(e) {
     if (e.ctrlKey && e.key === 'f') { e.preventDefault(); openSearch(); return; }
     if (e.key === 'Escape') {
+        if (aiKeyModalOpen.value) { aiKeyModalOpen.value = false; return; }
         if (searchOpen.value) { closeSearch(); return; }
+        if (aiPanelOpen.value) { aiPanelOpen.value = false; return; }
         isFullscreen.value = false;
     }
     if (searchOpen.value && e.key === 'Enter' && e.target !== searchInputEl.value) {
@@ -737,6 +839,174 @@ function scrollToNote(note) {
 function toggleNotesPanel() {
     showNotesPanel.value = !showNotesPanel.value;
     if (showNotesPanel.value) showSidebar.value = true;
+}
+
+// ===== CLAUDE AI INTEGRATION =====
+const AI_KEY_STORAGE = 'claude-api-key';
+const AI_MODE_STORAGE = 'claude-ai-mode';
+const aiPanelOpen = ref(false);
+const aiMode = ref(localStorage.getItem(AI_MODE_STORAGE) || 'tab'); // 'api' | 'tab'
+const aiMessages = ref([]); // { id, role: 'user'|'assistant'|'context', content, streaming? }
+const aiInputText = ref('');
+const aiStreaming = ref(false);
+const aiMessagesEl = ref(null);
+const aiKeyModalOpen = ref(false);
+const aiKeyInput = ref('');
+const tabPendingContext = ref('');
+let aiMsgId = 0;
+
+watch(aiMode, (val) => localStorage.setItem(AI_MODE_STORAGE, val));
+
+function getApiKey() {
+    return localStorage.getItem(AI_KEY_STORAGE) || '';
+}
+
+function openApiKeyModal() {
+    aiKeyInput.value = getApiKey();
+    aiKeyModalOpen.value = true;
+}
+
+function confirmApiKey() {
+    const key = aiKeyInput.value.trim();
+    if (key) localStorage.setItem(AI_KEY_STORAGE, key);
+    aiKeyModalOpen.value = false;
+    aiKeyInput.value = '';
+}
+
+function toggleAiPanel() {
+    aiPanelOpen.value = !aiPanelOpen.value;
+}
+
+function clearAiChat() {
+    aiMessages.value = [];
+}
+
+function escapeHtml(str) {
+    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function scrollAiToBottom() {
+    nextTick(() => {
+        if (aiMessagesEl.value) aiMessagesEl.value.scrollTop = aiMessagesEl.value.scrollHeight;
+    });
+}
+
+function openAiWithSelection() {
+    const sel = pendingSelection.value;
+    noteTooltipVisible.value = false;
+    aiPanelOpen.value = true;
+    if (sel && sel.text) {
+        if (aiMode.value === 'api') {
+            aiMessages.value.push({ id: aiMsgId++, role: 'context', content: sel.text.slice(0, 400) });
+            aiInputText.value = '';
+            scrollAiToBottom();
+        } else {
+            tabPendingContext.value = sel.text;
+            aiInputText.value = '';
+        }
+    }
+}
+
+function openInTab() {
+    const question = aiInputText.value.trim();
+    let text = '';
+    if (tabPendingContext.value) {
+        text += `Контекст:\n"${tabPendingContext.value}"\n\n`;
+    }
+    if (question) text += question;
+    else if (tabPendingContext.value) text += 'Объясни этот фрагмент текста.';
+
+    navigator.clipboard.writeText(text).catch(() => {});
+    window.open('https://claude.ai/new', '_blank', 'noopener');
+    tabPendingContext.value = '';
+    aiInputText.value = '';
+}
+
+async function sendAiMessage() {
+    const question = aiInputText.value.trim();
+    if (!question || aiStreaming.value) return;
+
+    const key = getApiKey();
+    if (!key) { openApiKeyModal(); return; }
+
+    // Find last context block to inject into prompt
+    const lastCtx = [...aiMessages.value].reverse().find(m => m.role === 'context');
+    let userContent = question;
+    if (lastCtx) userContent = `Контекст из текста:\n"${lastCtx.content}"\n\nВопрос: ${question}`;
+
+    aiMessages.value.push({ id: aiMsgId++, role: 'user', content: question });
+    aiInputText.value = '';
+    scrollAiToBottom();
+
+    // Build messages for API (only user/assistant, no context bubbles)
+    // Replace the last user message content with the context-enriched version
+    const filtered = aiMessages.value.filter(m => m.role === 'user' || m.role === 'assistant');
+    const apiMessages = filtered.map((m, i) =>
+        (m.role === 'user' && i === filtered.length - 1)
+            ? { role: 'user', content: userContent }
+            : { role: m.role, content: m.content }
+    );
+
+    const assistantMsg = { id: aiMsgId++, role: 'assistant', content: '', streaming: true };
+    aiMessages.value.push(assistantMsg);
+    aiStreaming.value = true;
+    scrollAiToBottom();
+
+    try {
+        const resp = await fetch('https://api.anthropic.com/v1/messages', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'x-api-key': key,
+                'anthropic-version': '2023-06-01',
+                'anthropic-dangerous-direct-browser-access': 'true',
+            },
+            body: JSON.stringify({
+                model: 'claude-opus-4-6',
+                max_tokens: 2048,
+                stream: true,
+                system: 'Ты помощник для чтения и понимания текстов. Отвечай на русском, если вопрос на русском. Форматируй ответы с markdown когда уместно.',
+                messages: apiMessages,
+            }),
+        });
+
+        if (!resp.ok) {
+            const err = await resp.json().catch(() => ({ error: { message: resp.statusText } }));
+            assistantMsg.content = `Ошибка: ${err?.error?.message || resp.statusText}`;
+            assistantMsg.streaming = false;
+            return;
+        }
+
+        const reader = resp.body.getReader();
+        const decoder = new TextDecoder();
+        let buf = '';
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buf += decoder.decode(value, { stream: true });
+            const lines = buf.split('\n');
+            buf = lines.pop(); // keep incomplete line
+            for (const line of lines) {
+                if (!line.startsWith('data: ')) continue;
+                const data = line.slice(6).trim();
+                if (data === '[DONE]') break;
+                try {
+                    const evt = JSON.parse(data);
+                    if (evt.type === 'content_block_delta' && evt.delta?.type === 'text_delta') {
+                        assistantMsg.content += evt.delta.text;
+                        scrollAiToBottom();
+                    }
+                } catch {}
+            }
+        }
+    } catch (err) {
+        assistantMsg.content = `Ошибка соединения: ${err.message}`;
+    } finally {
+        assistantMsg.streaming = false;
+        aiStreaming.value = false;
+        scrollAiToBottom();
+    }
 }
 
 watch(docNotesKey, () => {
@@ -2583,6 +2853,485 @@ textarea {
     color: #fef3c7;
     border-bottom-color: #f59e0b;
 }
+
+/* ===== Claude AI Panel ===== */
+.note-tooltip-ai-btn {
+    background: #6d28d9 !important;
+}
+
+.note-tooltip-ai-btn:hover {
+    background: #5b21b6 !important;
+}
+
+.ai-panel {
+    position: fixed;
+    right: 0;
+    bottom: 0;
+    top: 52px; /* below toolbar */
+    width: 380px;
+    z-index: 2000;
+    background: #fff;
+    border-left: 1px solid #e2e8f0;
+    display: flex;
+    flex-direction: column;
+    box-shadow: -4px 0 24px rgba(0,0,0,0.12);
+    font-size: 13px;
+}
+
+.ai-panel.dark {
+    background: #181825;
+    border-left-color: #313244;
+    color: #cdd6f4;
+}
+
+.ai-panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    border-bottom: 1px solid #e2e8f0;
+    flex-shrink: 0;
+}
+
+.ai-panel.dark .ai-panel-header {
+    border-bottom-color: #313244;
+}
+
+.ai-panel-title {
+    font-weight: 700;
+    font-size: 13px;
+    color: #6d28d9;
+}
+
+.ai-panel.dark .ai-panel-title {
+    color: #cba6f7;
+}
+
+.ai-panel-actions {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+}
+
+/* Mode toggle */
+.ai-mode-toggle {
+    display: flex;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    overflow: hidden;
+    margin-right: 4px;
+}
+
+.ai-panel.dark .ai-mode-toggle {
+    border-color: #45475a;
+}
+
+.ai-mode-btn {
+    padding: 3px 9px;
+    border: none;
+    background: none;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    color: #94a3b8;
+    transition: background 0.12s, color 0.12s;
+    font-family: inherit;
+}
+
+.ai-mode-btn.active {
+    background: #7c3aed;
+    color: #fff;
+}
+
+.ai-mode-btn:not(.active):hover {
+    background: #f1f5f9;
+    color: #475569;
+}
+
+.ai-panel.dark .ai-mode-btn:not(.active):hover {
+    background: #313244;
+    color: #cdd6f4;
+}
+
+.ai-panel-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 3px 7px;
+    border-radius: 4px;
+    font-size: 13px;
+    color: #64748b;
+    transition: background 0.12s;
+}
+
+.ai-panel-btn:hover {
+    background: #f1f5f9;
+    color: #1e293b;
+}
+
+.ai-panel.dark .ai-panel-btn {
+    color: #a6adc8;
+}
+
+.ai-panel.dark .ai-panel-btn:hover {
+    background: #313244;
+    color: #cdd6f4;
+}
+
+.ai-panel-close {
+    color: #94a3b8;
+}
+
+.ai-panel-close:hover {
+    color: #f87171 !important;
+}
+
+.ai-messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.ai-empty {
+    color: #94a3b8;
+    text-align: center;
+    padding: 24px 12px;
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.ai-message-user .ai-message-bubble {
+    background: #eff6ff;
+    color: #1e3a5f;
+    border-radius: 12px 12px 4px 12px;
+    padding: 8px 12px;
+    align-self: flex-end;
+    max-width: 90%;
+    margin-left: auto;
+    word-break: break-word;
+}
+
+.ai-panel.dark .ai-message-user .ai-message-bubble {
+    background: #1e2640;
+    color: #bfdbfe;
+}
+
+.ai-message-assistant .ai-message-bubble {
+    background: #f8fafc;
+    color: #1e293b;
+    border-radius: 12px 12px 12px 4px;
+    padding: 8px 12px;
+    max-width: 98%;
+    word-break: break-word;
+    border: 1px solid #e2e8f0;
+}
+
+.ai-panel.dark .ai-message-assistant .ai-message-bubble {
+    background: #1e1e2e;
+    color: #cdd6f4;
+    border-color: #313244;
+}
+
+.ai-message-assistant .ai-message-bubble p { margin: 0 0 6px; }
+.ai-message-assistant .ai-message-bubble p:last-child { margin: 0; }
+.ai-message-assistant .ai-message-bubble ul,
+.ai-message-assistant .ai-message-bubble ol { margin: 0 0 6px; padding-left: 20px; }
+.ai-message-assistant .ai-message-bubble li { margin: 0 0 2px; display: list-item; }
+.ai-message-assistant .ai-message-bubble code {
+    background: #0d1117; color: #e6edf3; padding: 1px 5px; border-radius: 3px; font-size: 0.85em;
+}
+.ai-message-assistant .ai-message-bubble pre {
+    background: #0d1117; color: #e6edf3; padding: 10px 12px; border-radius: 6px; overflow-x: auto; margin: 6px 0;
+}
+.ai-message-assistant .ai-message-bubble pre code { background: none; padding: 0; }
+.ai-message-assistant .ai-message-bubble strong { color: #9d174d; font-weight: 700; }
+.ai-panel.dark .ai-message-assistant .ai-message-bubble strong { color: #f5c2e7; }
+.ai-message-assistant .ai-message-bubble h1,
+.ai-message-assistant .ai-message-bubble h2,
+.ai-message-assistant .ai-message-bubble h3 { margin: 8px 0 4px; font-size: 1em; font-weight: 700; }
+
+.ai-streaming-dot {
+    display: inline-block;
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: #6d28d9;
+    margin: 4px 0 0 4px;
+    animation: ai-blink 0.8s infinite;
+}
+
+.ai-panel.dark .ai-streaming-dot { background: #cba6f7; }
+
+@keyframes ai-blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.2; }
+}
+
+/* ===== Tab mode ===== */
+.ai-tab-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 24px 20px;
+    gap: 16px;
+    overflow-y: auto;
+}
+
+.ai-tab-icon { font-size: 40px; line-height: 1; }
+
+.ai-tab-desc {
+    font-size: 13px;
+    color: #475569;
+    text-align: center;
+    line-height: 1.6;
+}
+.ai-panel.dark .ai-tab-desc { color: #a6adc8; }
+.ai-tab-desc b { color: #1e293b; }
+.ai-panel.dark .ai-tab-desc b { color: #cdd6f4; }
+
+.ai-tab-context-preview {
+    width: 100%;
+    background: #faf5ff;
+    border: 1px solid #e9d5ff;
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 12px;
+}
+.ai-panel.dark .ai-tab-context-preview {
+    background: #1e1030;
+    border-color: #6d28d9;
+}
+
+.ai-tab-context-label {
+    font-weight: 700;
+    color: #7c3aed;
+    margin-bottom: 4px;
+    display: block;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+.ai-panel.dark .ai-tab-context-label { color: #cba6f7; }
+
+.ai-tab-context-text {
+    color: #374151;
+    line-height: 1.4;
+    display: -webkit-box;
+    -webkit-line-clamp: 4;
+    line-clamp: 4;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+.ai-panel.dark .ai-tab-context-text { color: #e9d5ff; }
+
+.ai-tab-input-group {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.ai-tab-input { width: 100% !important; }
+
+.ai-tab-open-btn {
+    padding: 10px;
+    border: none;
+    border-radius: 8px;
+    background: linear-gradient(135deg, #7c3aed, #2563eb);
+    color: #fff;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.12s;
+    text-align: center;
+}
+.ai-tab-open-btn:hover { opacity: 0.88; }
+
+.ai-tab-hint {
+    font-size: 11px;
+    color: #94a3b8;
+    text-align: center;
+}
+.ai-panel.dark .ai-tab-hint { color: #585b70; }
+
+.ai-context-block {
+    background: #faf5ff;
+    border-left: 3px solid #a855f7;
+    padding: 6px 10px;
+    border-radius: 0 6px 6px 0;
+    font-size: 12px;
+    color: #581c87;
+}
+
+.ai-panel.dark .ai-context-block {
+    background: #1e1030;
+    border-left-color: #cba6f7;
+    color: #e9d5ff;
+}
+
+.ai-context-label {
+    font-weight: 700;
+    margin-right: 4px;
+}
+
+.ai-context-text {
+    opacity: 0.8;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.ai-input-row {
+    display: flex;
+    gap: 6px;
+    padding: 10px 12px;
+    border-top: 1px solid #e2e8f0;
+    flex-shrink: 0;
+    align-items: flex-end;
+}
+
+.ai-panel.dark .ai-input-row {
+    border-top-color: #313244;
+}
+
+.ai-input {
+    flex: 1;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    padding: 7px 10px;
+    font-size: 13px;
+    font-family: inherit;
+    resize: none;
+    outline: none;
+    background: #fff;
+    color: #1e293b;
+    line-height: 1.4;
+}
+
+.ai-input:focus {
+    border-color: #7c3aed;
+    box-shadow: 0 0 0 2px #7c3aed22;
+}
+
+.ai-panel.dark .ai-input {
+    background: #1e1e2e;
+    border-color: #45475a;
+    color: #cdd6f4;
+}
+
+.ai-panel.dark .ai-input:focus {
+    border-color: #cba6f7;
+    box-shadow: 0 0 0 2px #cba6f722;
+}
+
+.ai-send-btn {
+    padding: 8px 12px;
+    border: none;
+    border-radius: 8px;
+    background: #7c3aed;
+    color: #fff;
+    font-size: 15px;
+    cursor: pointer;
+    transition: background 0.12s;
+    flex-shrink: 0;
+    align-self: flex-end;
+    height: 36px;
+}
+
+.ai-send-btn:hover:not(:disabled) { background: #6d28d9; }
+.ai-send-btn:disabled { opacity: 0.5; cursor: default; }
+
+/* ===== API Key Modal ===== */
+.ai-key-modal-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 5000;
+    background: rgba(0,0,0,0.55);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(4px);
+}
+
+.ai-key-modal {
+    background: #fff;
+    border-radius: 14px;
+    padding: 28px 28px 22px;
+    width: 400px;
+    box-shadow: 0 16px 48px rgba(0,0,0,0.3);
+}
+
+.ai-key-modal-title {
+    font-size: 18px;
+    font-weight: 700;
+    margin-bottom: 10px;
+    color: #1e293b;
+}
+
+.ai-key-modal-desc {
+    font-size: 13px;
+    color: #64748b;
+    margin-bottom: 16px;
+    line-height: 1.5;
+}
+
+.ai-key-input {
+    width: 100%;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 14px;
+    font-family: 'Fira Code', monospace;
+    outline: none;
+    margin-bottom: 16px;
+    color: #1e293b;
+    background: #f8fafc;
+}
+
+.ai-key-input:focus {
+    border-color: #7c3aed;
+    box-shadow: 0 0 0 2px #7c3aed22;
+    background: #fff;
+}
+
+.ai-key-modal-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+}
+
+.ai-key-save-btn {
+    padding: 8px 20px;
+    border: none;
+    border-radius: 8px;
+    background: #7c3aed;
+    color: #fff;
+    font-size: 13px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: background 0.12s;
+}
+
+.ai-key-save-btn:hover { background: #6d28d9; }
+
+.ai-key-cancel-btn {
+    padding: 8px 16px;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    background: none;
+    color: #64748b;
+    font-size: 13px;
+    cursor: pointer;
+    transition: background 0.12s;
+}
+
+.ai-key-cancel-btn:hover { background: #f1f5f9; }
 
 /* ===== Code tree visualize button ===== */
 .code-tree-btn {
