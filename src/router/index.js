@@ -3,6 +3,7 @@ import HomeView from "../views/HomeView.vue";
 import LoginView from "../views/LoginView.vue";
 import SkillsView from "../views/SkillsView.vue";
 import CanvasView from "../views/CanvasView.vue";
+import MdToMdfView from "@/views/MdToMdfView.vue";
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -11,6 +12,11 @@ const router = createRouter({
       path: "/",
       name: "home",
       component: HomeView,
+    },
+    {
+      path: "/mdToPdf",
+      name: "mdToPdf",
+      component: MdToMdfView,
     },
     {
       path: "/login",
