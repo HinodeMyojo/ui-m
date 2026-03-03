@@ -6,8 +6,8 @@
             <button @click="darkMode = !darkMode">{{ darkMode ? '☀️ Светлая' : '🌙 Тёмная' }}</button>
             <button @click="showSidebar = !showSidebar" :class="{ active: showSidebar }">📋 Структура</button>
         </div>
-        <div class="fullscreen-body">
-            <div class="fullscreen-content" v-html="renderedHtml"></div>
+        <div class="fullscreen-body" @click="activeCitation = null">
+            <div class="fullscreen-content" v-html="fullscreenHtml" @click.stop="onContentClick"></div>
             <div v-if="showSidebar" class="fullscreen-sidebar" :style="{ width: sidebarWidth + 'px' }">
                 <div class="sidebar-resizer" @mousedown="startSidebarResize"></div>
                 <div class="sidebar-section" v-if="tocItems.length">
@@ -30,6 +30,74 @@
                     Нет структуры
                 </div>
             </div>
+        </div>
+
+        <!-- SVG Tree Visualizer Modal -->
+        <div v-if="treeModalOpen" class="tree-modal-overlay" @click.self="treeModalOpen = false">
+            <div class="tree-modal">
+                <div class="tree-modal-header">
+                    <span class="tree-modal-title">🌳 Структура файлов</span>
+                    <div class="tree-modal-controls">
+                        <button class="tree-modal-btn" @click="resetTreeView">↺ Сброс</button>
+                        <button class="tree-modal-btn tree-modal-close-btn" @click="treeModalOpen = false">✕ Закрыть</button>
+                    </div>
+                </div>
+                <div class="tree-viewport"
+                     :class="{ panning: treeIsPanning }"
+                     @wheel.prevent="onTreeWheel"
+                     @mousedown="onTreePanStart">
+                    <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        :width="treeSvgSize.w"
+                        :height="treeSvgSize.h"
+                        :style="{ transform: treeTransform, transformOrigin: '0 0' }">
+                        <defs>
+                            <marker id="arrowhead" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
+                                <path d="M0,0 L0,6 L6,3 z" fill="#45475a"/>
+                            </marker>
+                        </defs>
+                        <!-- Edges -->
+                        <path
+                            v-for="edge in treeRenderData.edges"
+                            :key="'e'+edge.id"
+                            :d="`M${edge.x1},${edge.y1} C${edge.x1+50},${edge.y1} ${edge.x2-50},${edge.y2} ${edge.x2},${edge.y2}`"
+                            class="tree-edge"
+                            marker-end="url(#arrowhead)" />
+                        <!-- Nodes -->
+                        <g
+                            v-for="node in treeRenderData.nodes"
+                            :key="node.id"
+                            :transform="`translate(${node.x},${node.y})`"
+                            class="tree-node-group"
+                            @click.stop="toggleTreeNode(node)">
+                            <rect
+                                :width="NODE_W" :height="NODE_H" rx="7"
+                                :class="['tree-node-rect',
+                                    node.isFolder ? 'tree-node-folder' : 'tree-node-file',
+                                    node.collapsed ? 'tree-node-collapsed' : '']" />
+                            <text x="12" :y="NODE_H/2" class="tree-node-icon" dominant-baseline="central">
+                                {{ node.isFolder ? (node.collapsed ? '📁' : '📂') : '📄' }}
+                            </text>
+                            <text x="34" :y="NODE_H/2" class="tree-node-name" dominant-baseline="central">{{ node.name }}</text>
+                            <text v-if="node.children.length > 0"
+                                  :x="NODE_W - 14" :y="NODE_H/2"
+                                  class="tree-collapse-icon" dominant-baseline="central">
+                                {{ node.collapsed ? '+' : '−' }}
+                            </text>
+                            <title v-if="node.comment || node.fullName !== node.name">{{ node.fullName }}{{ node.comment ? ' — ' + node.comment : '' }}</title>
+                        </g>
+                    </svg>
+                </div>
+            </div>
+        </div>
+
+        <!-- Citation popup -->
+        <div v-if="activeCitation" class="citation-popup" :style="popupStyle" @click.stop>
+            <div class="citation-popup-header">
+                <span class="citation-popup-num">[{{ activeCitation.num }}]</span>
+                <button class="citation-popup-close" @click="activeCitation = null">✕</button>
+            </div>
+            <div class="citation-popup-body" v-html="mdParser.parse(activeCitation.text)"></div>
         </div>
     </div>
 
@@ -72,9 +140,12 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue';
+import { ref, computed, shallowRef, triggerRef } from 'vue';
 import { Marked } from 'marked';
 import hljs from 'highlight.js';
+
+// Stores code block texts during each parse (reset before each parse)
+const codeBlocks = [];
 
 const mdParser = new Marked({
     gfm: true,
@@ -88,11 +159,20 @@ const mdParser = new Marked({
                 highlighted = hljs.highlightAuto(text).value;
             }
             const cls = lang ? ` class="hljs language-${lang}"` : ' class="hljs"';
-            return `<pre><code${cls}>${highlighted}\n</code></pre>`;
+            const langLabel = lang ? `<span class="code-lang">${lang}</span>` : '';
+            const idx = codeBlocks.push(text) - 1;
+            const treeBtn = /[├└│]/.test(text)
+                ? `<button class="code-tree-btn" data-code-idx="${idx}">🌳 Визуализировать</button>`
+                : '';
+            return `<div class="code-block-wrapper"><div class="code-block-toolbar">${langLabel}${treeBtn}<button class="code-copy-btn" data-code-idx="${idx}">Копировать</button></div><pre><code${cls}>${highlighted}\n</code></pre></div>`;
         },
         heading({ text, depth }) {
             const id = text.toLowerCase().replace(/[^\w\s-]/g, '').replace(/\s+/g, '-');
             return `<h${depth} id="${id}">${text}</h${depth}>`;
+        },
+        link({ href, title, text }) {
+            const t = title ? ` title="${title}"` : '';
+            return `<a href="${href}"${t} target="_blank" rel="noopener noreferrer">${text}</a>`;
         },
     },
 });
@@ -292,8 +372,232 @@ const darkStyles = `
 `;
 
 const renderedHtml = computed(() => {
-    return fileContent.value ? mdParser.parse(fileContent.value) : '';
+    if (!fileContent.value) return '';
+    codeBlocks.length = 0; // reset before each parse
+    return mdParser.parse(fileContent.value);
 });
+
+// Wrap [N] citation refs in fullscreen HTML for click interactivity
+const fullscreenHtml = computed(() => {
+    if (!renderedHtml.value) return '';
+    return renderedHtml.value.replace(/\[(\d+)\]/g, '<span class="citation-ref" data-ref="$1">[$1]</span>');
+});
+
+const citationMap = computed(() => {
+    const map = {};
+    if (!fileContent.value) return map;
+    const lines = fileContent.value.split('\n');
+    let inSources = false;
+    for (const line of lines) {
+        if (/^##\s+(Источники|References|Sources|Bibliography)/i.test(line)) { inSources = true; continue; }
+        if (inSources && /^##/.test(line)) { inSources = false; }
+        if (inSources) {
+            const m = line.match(/^(\d+)\.\s+(.+)/);
+            if (m) map[m[1]] = m[2];
+        }
+    }
+    return map;
+});
+
+const activeCitation = ref(null);
+const citationPos = ref({ x: 0, y: 0 });
+
+const popupStyle = computed(() => {
+    const x = Math.min(citationPos.value.x, window.innerWidth - 360);
+    const y = citationPos.value.y + 16;
+    return { left: x + 'px', top: y + 'px' };
+});
+
+function onContentClick(e) {
+    // Handle tree visualize button
+    const treeBtn = e.target.closest('.code-tree-btn');
+    if (treeBtn) {
+        const idx = parseInt(treeBtn.dataset.codeIdx, 10);
+        openTreeModal(codeBlocks[idx] ?? '');
+        return;
+    }
+
+    // Handle copy button
+    const copyBtn = e.target.closest('.code-copy-btn');
+    if (copyBtn) {
+        const idx = parseInt(copyBtn.dataset.codeIdx, 10);
+        const code = codeBlocks[idx] ?? '';
+        navigator.clipboard.writeText(code).then(() => {
+            const prev = copyBtn.textContent;
+            copyBtn.textContent = 'Скопировано!';
+            copyBtn.classList.add('copied');
+            setTimeout(() => {
+                copyBtn.textContent = prev;
+                copyBtn.classList.remove('copied');
+            }, 1500);
+        });
+        return;
+    }
+
+    // Handle citation ref
+    const ref = e.target.closest('.citation-ref');
+    if (!ref) { activeCitation.value = null; return; }
+    const num = ref.dataset.ref;
+    if (citationMap.value[num]) {
+        activeCitation.value = { num, text: citationMap.value[num] };
+        citationPos.value = { x: e.clientX, y: e.clientY };
+    }
+}
+
+// ===== SVG TREE VISUALIZER =====
+const NODE_W = 200;
+const NODE_H = 36;
+const V_GAP = 16;
+const INDENT = 230;
+
+let _nodeId = 0;
+
+function splitComment(str) {
+    const idx = str.indexOf('#');
+    if (idx === -1) return [str.trim(), ''];
+    return [str.slice(0, idx).trim(), str.slice(idx + 1).trim()];
+}
+
+function makeNode(name, comment, parent) {
+    const [n, c] = splitComment(name);
+    return {
+        id: _nodeId++,
+        name: n.length > 24 ? n.slice(0, 22) + '…' : n,
+        fullName: n,
+        comment: comment || c,
+        children: [],
+        collapsed: false,
+        isFolder: n.endsWith('/'),
+        parent,
+        x: 0, y: 0,
+    };
+}
+
+function parseAsciiTree(text) {
+    _nodeId = 0;
+    const lines = text.split('\n').filter(l => l.trim());
+    const root = makeNode('root', '', null);
+    root.isFolder = true;
+    const stack = [{ node: root, depth: -1 }];
+
+    for (const line of lines) {
+        // Match lines with tree connector: ├── or └──
+        const m = line.match(/^((?:[│|]\s{0,3}|\s{4})*)([├└╠╚](?:──|--)\s*)(.+)$/u);
+        if (!m) {
+            // Root-level line (no connector)
+            const [n, c] = splitComment(line.trim());
+            root.name = n.length > 24 ? n.slice(0, 22) + '…' : n;
+            root.fullName = n;
+            root.comment = c;
+            root.isFolder = n.endsWith('/');
+            continue;
+        }
+        const prefix = m[1];
+        const rawName = m[3].trim();
+        // Depth: count 4-char groups in prefix
+        const depth = prefix.length > 0 ? Math.round(prefix.length / 4) : 0;
+        const node = makeNode(rawName, '', null);
+
+        while (stack.length > 1 && stack[stack.length - 1].depth >= depth) stack.pop();
+        const parent = stack[stack.length - 1].node;
+        node.parent = parent;
+        parent.children.push(node);
+        stack.push({ node, depth });
+    }
+    return root;
+}
+
+function layoutTree(node, depth, yStart) {
+    node.x = depth * INDENT + 20;
+    node.y = yStart;
+    if (node.collapsed || node.children.length === 0) return yStart + NODE_H + V_GAP;
+    let y = yStart + NODE_H + V_GAP;
+    for (const child of node.children) y = layoutTree(child, depth + 1, y);
+    return y;
+}
+
+function flattenVisible(node, result = []) {
+    result.push(node);
+    if (!node.collapsed) for (const c of node.children) flattenVisible(c, result);
+    return result;
+}
+
+// ---- Reactive state ----
+const treeModalOpen = ref(false);
+const treeData = shallowRef(null);
+const treePan = ref({ x: 0, y: 0 });
+const treeScale = ref(1);
+const treeIsPanning = ref(false);
+const treeSvgSize = ref({ w: 800, h: 600 });
+
+const treeTransform = computed(() =>
+    `translate(${treePan.value.x}px, ${treePan.value.y}px) scale(${treeScale.value})`
+);
+
+const treeRenderData = computed(() => {
+    const tree = treeData.value;
+    if (!tree) return { nodes: [], edges: [] };
+    const nodes = flattenVisible(tree);
+    const edges = [];
+    for (const node of nodes) {
+        if (!node.parent) continue;
+        const p = node.parent;
+        edges.push({ id: node.id, x1: p.x + NODE_W, y1: p.y + NODE_H / 2, x2: node.x, y2: node.y + NODE_H / 2 });
+    }
+    return { nodes, edges };
+});
+
+function openTreeModal(code) {
+    const tree = parseAsciiTree(code);
+    layoutTree(tree, 0, 20);
+    const nodes = flattenVisible(tree);
+    const w = Math.max(...nodes.map(n => n.x + NODE_W)) + 60;
+    const h = Math.max(...nodes.map(n => n.y + NODE_H)) + 40;
+    treeData.value = tree;
+    treeSvgSize.value = { w, h };
+    treePan.value = { x: 0, y: 0 };
+    treeScale.value = 1;
+    treeModalOpen.value = true;
+}
+
+function toggleTreeNode(node) {
+    if (node.children.length === 0) return;
+    node.collapsed = !node.collapsed;
+    layoutTree(treeData.value, 0, 20);
+    const nodes = flattenVisible(treeData.value);
+    treeSvgSize.value = {
+        w: Math.max(...nodes.map(n => n.x + NODE_W)) + 60,
+        h: Math.max(...nodes.map(n => n.y + NODE_H)) + 40,
+    };
+    triggerRef(treeData);
+}
+
+function resetTreeView() {
+    treePan.value = { x: 0, y: 0 };
+    treeScale.value = 1;
+}
+
+function onTreeWheel(e) {
+    const factor = e.deltaY < 0 ? 1.12 : 0.9;
+    treeScale.value = Math.max(0.15, Math.min(5, treeScale.value * factor));
+}
+
+function onTreePanStart(e) {
+    if (e.button !== 0) return;
+    treeIsPanning.value = true;
+    const startX = e.clientX, startY = e.clientY;
+    const startPanX = treePan.value.x, startPanY = treePan.value.y;
+    function onMove(ev) {
+        treePan.value = { x: startPanX + ev.clientX - startX, y: startPanY + ev.clientY - startY };
+    }
+    function onUp() {
+        treeIsPanning.value = false;
+        window.removeEventListener('mousemove', onMove);
+        window.removeEventListener('mouseup', onUp);
+    }
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+}
 
 function onDrop(event) {
     isDragging.value = false;
@@ -361,6 +665,16 @@ function formatDate(iso) {
 }
 
 // === Download ===
+function stripCodeToolbars(html) {
+    const div = document.createElement('div');
+    div.innerHTML = html;
+    div.querySelectorAll('.code-block-toolbar').forEach(el => el.remove());
+    div.querySelectorAll('.code-block-wrapper').forEach(el => {
+        el.replaceWith(...el.childNodes);
+    });
+    return div.innerHTML;
+}
+
 function downloadPdf() {
     if (!fileContent.value) return;
 
@@ -379,7 +693,7 @@ function downloadPdf() {
                 * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
             }
         </style></head>
-        <body>${renderedHtml.value}</body>
+        <body>${stripCodeToolbars(renderedHtml.value)}</body>
         </html>
     `);
     iframe.contentDocument.close();
@@ -693,6 +1007,15 @@ function downloadPdf() {
     margin: 0 0 14px;
 }
 
+.fullscreen-content :deep(.code-block-wrapper) {
+    margin: 0 0 14px;
+}
+
+.fullscreen-content :deep(.code-block-wrapper) pre {
+    margin: 0;
+    border-radius: 0 0 8px 8px;
+}
+
 .fullscreen-content :deep(pre code) {
     display: block;
     padding: 16px;
@@ -830,6 +1153,79 @@ function downloadPdf() {
 
 /* placeholder — flash animation moved to non-scoped style block below */
 
+/* Citation popup */
+.citation-popup {
+    position: fixed;
+    z-index: 2000;
+    width: 340px;
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.18);
+    padding: 14px 16px 12px;
+    font-size: 13px;
+    line-height: 1.5;
+    color: #1e293b;
+}
+
+.fullscreen.dark .citation-popup {
+    background: #1e1e2e;
+    border-color: #313244;
+    color: #cdd6f4;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+}
+
+.citation-popup-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+}
+
+.citation-popup-num {
+    font-weight: 700;
+    color: #2563eb;
+    font-size: 14px;
+}
+
+.fullscreen.dark .citation-popup-num {
+    color: #89b4fa;
+}
+
+.citation-popup-close {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: #94a3b8;
+    font-size: 13px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    line-height: 1;
+}
+
+.citation-popup-close:hover {
+    background: #f1f5f9;
+    color: #475569;
+}
+
+.fullscreen.dark .citation-popup-close:hover {
+    background: #313244;
+    color: #cdd6f4;
+}
+
+.citation-popup-body :deep(p) {
+    margin: 0;
+}
+
+.citation-popup-body :deep(a) {
+    color: #2563eb;
+    word-break: break-all;
+}
+
+.fullscreen.dark .citation-popup-body :deep(a) {
+    color: #89b4fa;
+}
+
 /* Fullscreen dark content overrides */
 .fullscreen.dark .fullscreen-content {
     color: #cdd6f4;
@@ -936,6 +1332,88 @@ function downloadPdf() {
 
 .fullscreen.dark .fullscreen-content :deep(a) {
     color: #89b4fa;
+}
+
+/* ===== SVG TREE MODAL ===== */
+.tree-modal-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 3000;
+    background: rgba(0, 0, 0, 0.78);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(4px);
+}
+
+.tree-modal {
+    background: #13131f;
+    border: 1px solid #313244;
+    border-radius: 14px;
+    width: 92vw;
+    height: 87vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    box-shadow: 0 24px 64px rgba(0, 0, 0, 0.7);
+}
+
+.tree-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 13px 20px;
+    border-bottom: 1px solid #313244;
+    flex-shrink: 0;
+}
+
+.tree-modal-title {
+    color: #cba6f7;
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+}
+
+.tree-modal-controls {
+    display: flex;
+    gap: 8px;
+}
+
+.tree-modal-btn {
+    padding: 5px 13px;
+    border: 1px solid #45475a;
+    border-radius: 6px;
+    background: #313244;
+    color: #cdd6f4;
+    font-size: 12px;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.tree-modal-btn:hover {
+    background: #45475a;
+}
+
+.tree-modal-close-btn {
+    border-color: #f38ba855;
+    color: #f38ba8;
+}
+
+.tree-modal-close-btn:hover {
+    background: #3b1f2b;
+}
+
+.tree-viewport {
+    flex: 1;
+    overflow: hidden;
+    cursor: grab;
+    user-select: none;
+    position: relative;
+    background: radial-gradient(ellipse at center, #1a1a2e 0%, #11111b 100%);
+}
+
+.tree-viewport.panning {
+    cursor: grabbing;
 }
 
 /* ===== MAIN LAYOUT ===== */
@@ -1407,6 +1885,91 @@ textarea {
 </style>
 
 <style>
+/* Code block copy button */
+.code-block-wrapper {
+    position: relative;
+    margin: 0 0 14px;
+}
+
+.code-block-wrapper pre {
+    margin: 0;
+}
+
+.code-block-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: #161b22;
+    padding: 6px 14px;
+    border-radius: 8px 8px 0 0;
+    border-bottom: 1px solid #30363d;
+}
+
+.code-lang {
+    font-size: 11px;
+    font-weight: 600;
+    color: #8b949e;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-family: 'Fira Code', 'JetBrains Mono', monospace;
+}
+
+.code-copy-btn {
+    background: none;
+    border: 1px solid #30363d;
+    color: #8b949e;
+    font-size: 11px;
+    padding: 3px 10px;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+    font-family: system-ui, sans-serif;
+    margin-left: auto;
+}
+
+.code-copy-btn:hover {
+    background: #21262d;
+    color: #e6edf3;
+    border-color: #8b949e;
+}
+
+.code-copy-btn.copied {
+    color: #3fb950;
+    border-color: #3fb950;
+}
+
+.code-block-wrapper pre code {
+    border-radius: 0 0 8px 8px !important;
+}
+
+/* Citation ref styling inside v-html */
+.citation-ref {
+    display: inline-block;
+    color: #2563eb;
+    font-size: 0.8em;
+    font-weight: 600;
+    cursor: pointer;
+    vertical-align: super;
+    padding: 0 2px;
+    border-radius: 3px;
+    transition: background 0.15s;
+    user-select: none;
+}
+
+.citation-ref:hover {
+    background: #dbeafe;
+    color: #1d4ed8;
+}
+
+.fullscreen.dark .citation-ref {
+    color: #89b4fa;
+}
+
+.fullscreen.dark .citation-ref:hover {
+    background: #1e2640;
+    color: #bfdbfe;
+}
+
 /* Non-scoped: flash highlight for dynamically added class inside v-html */
 @keyframes highlight-flash {
     0%   { background-color: #fef08a; }
@@ -1416,5 +1979,89 @@ textarea {
 .highlight-flash {
     animation: highlight-flash 1.2s ease-out;
     border-radius: 3px;
+}
+
+/* ===== Code tree visualize button ===== */
+.code-tree-btn {
+    display: none;
+    background: none;
+    border: 1px solid #30363d;
+    color: #a6e3a1;
+    font-size: 11px;
+    padding: 3px 10px;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+    font-family: system-ui, sans-serif;
+}
+
+.code-tree-btn:hover {
+    background: #1a2e1a;
+    color: #cdd6f4;
+    border-color: #a6e3a1;
+}
+
+/* Only show inside fullscreen */
+.fullscreen .code-tree-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+/* ===== SVG Tree nodes ===== */
+.tree-edge {
+    fill: none;
+    stroke: #45475a;
+    stroke-width: 1.5;
+}
+
+.tree-node-group {
+    cursor: pointer;
+}
+
+.tree-node-rect {
+    transition: filter 0.12s;
+}
+
+.tree-node-group:hover .tree-node-rect {
+    filter: brightness(1.3);
+}
+
+.tree-node-folder {
+    fill: #1a2744;
+    stroke: #89b4fa;
+    stroke-width: 1.5;
+}
+
+.tree-node-file {
+    fill: #1a2620;
+    stroke: #a6e3a1;
+    stroke-width: 1;
+}
+
+.tree-node-collapsed {
+    fill: #2e1a32;
+    stroke: #cba6f7;
+    stroke-width: 1.5;
+}
+
+.tree-node-name {
+    fill: #cdd6f4;
+    font-size: 12px;
+    font-family: 'Fira Code', 'JetBrains Mono', 'Consolas', monospace;
+    pointer-events: none;
+}
+
+.tree-node-icon {
+    font-size: 13px;
+    pointer-events: none;
+}
+
+.tree-collapse-icon {
+    fill: #585b70;
+    font-size: 14px;
+    font-weight: 700;
+    font-family: system-ui, sans-serif;
+    pointer-events: none;
 }
 </style>
