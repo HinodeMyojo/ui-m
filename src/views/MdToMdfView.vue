@@ -1,13 +1,49 @@
 <template>
     <!-- Fullscreen preview -->
-    <div v-if="isFullscreen" class="fullscreen" :class="{ dark: darkMode }" @keydown.esc="isFullscreen = false">
+    <div v-if="isFullscreen" class="fullscreen" :class="{ dark: darkMode }" @keydown="onFullscreenKeydown" tabindex="0">
+        <!-- Reading progress bar -->
+        <div class="read-progress-bar" :style="{ width: (readProgress * 100) + '%' }"></div>
+
         <div class="fullscreen-toolbar">
             <button @click="isFullscreen = false">✕ Закрыть</button>
             <button @click="darkMode = !darkMode">{{ darkMode ? '☀️ Светлая' : '🌙 Тёмная' }}</button>
             <button @click="showSidebar = !showSidebar" :class="{ active: showSidebar }">📋 Структура</button>
+            <button @click="openSearch" :class="{ active: searchOpen }">🔍 Поиск</button>
+            <button @click="toggleFocusMode" :class="{ active: focusMode }">🎯 Фокус</button>
+            <button @click="toggleNotesPanel" :class="{ active: showNotesPanel }">
+                📝 Заметки{{ userNotes.length ? ' (' + userNotes.length + ')' : '' }}
+            </button>
+            <span v-if="readingTime" class="read-time-label">~{{ readingTime }} мин</span>
         </div>
-        <div class="fullscreen-body" @click="activeCitation = null">
-            <div class="fullscreen-content" v-html="fullscreenHtml" @click.stop="onContentClick"></div>
+
+        <div class="fullscreen-body" @click="activeCitation = null; noteTooltipVisible = false">
+            <div class="fullscreen-main">
+                <!-- Search bar -->
+                <div v-if="searchOpen" class="search-bar">
+                    <input
+                        ref="searchInputEl"
+                        v-model="searchQuery"
+                        @input="runSearch"
+                        @keydown.stop
+                        placeholder="Поиск в тексте..."
+                        class="search-input" />
+                    <span class="search-counter" v-if="searchMatches.length">
+                        {{ searchIdx + 1 }} / {{ searchMatches.length }}
+                    </span>
+                    <span class="search-counter" v-else-if="searchQuery">0 совпадений</span>
+                    <button class="search-nav-btn" @click="prevMatch" :disabled="!searchMatches.length">▲</button>
+                    <button class="search-nav-btn" @click="nextMatch" :disabled="!searchMatches.length">▼</button>
+                    <button class="search-close-btn" @click="closeSearch">✕</button>
+                </div>
+
+                <div class="fullscreen-content"
+                     v-html="fullscreenHtml"
+                     @click.stop="onContentClick"
+                     @scroll="onContentScroll"
+                     @mouseup="onContentMouseUp">
+                </div>
+            </div>
+
             <div v-if="showSidebar" class="fullscreen-sidebar" :style="{ width: sidebarWidth + 'px' }">
                 <div class="sidebar-resizer" @mousedown="startSidebarResize"></div>
                 <div class="sidebar-section" v-if="tocItems.length">
@@ -26,10 +62,27 @@
                         <span class="highlight-text">{{ h.text }}</span>
                     </div>
                 </div>
-                <div v-if="!tocItems.length && !highlights.length" class="sidebar-empty">
+                <div class="sidebar-section" v-if="showNotesPanel">
+                    <div class="sidebar-title">Заметки</div>
+                    <div v-if="!userNotes.length" class="sidebar-empty">Нет заметок<br><small>Выделите текст чтобы сохранить</small></div>
+                    <div v-for="note in userNotes" :key="note.id" class="note-item" @click="scrollToNote(note)">
+                        <span class="note-text">{{ note.text }}</span>
+                        <button class="note-delete" @click.stop="deleteNote(note.id)">✕</button>
+                    </div>
+                </div>
+                <div v-if="!tocItems.length && !highlights.length && !showNotesPanel" class="sidebar-empty">
                     Нет структуры
                 </div>
             </div>
+        </div>
+
+        <!-- Note save tooltip -->
+        <div v-if="noteTooltipVisible"
+             class="note-tooltip"
+             :style="noteTooltipStyle"
+             @click.stop>
+            <button class="note-tooltip-btn" @click="saveNote">📌 Сохранить заметку</button>
+            <button class="note-tooltip-close" @click="noteTooltipVisible = false">✕</button>
         </div>
 
         <!-- SVG Tree Visualizer Modal -->
@@ -140,7 +193,7 @@
 </template>
 
 <script setup>
-import { ref, computed, shallowRef, triggerRef } from 'vue';
+import { ref, computed, shallowRef, triggerRef, watch, nextTick } from 'vue';
 import { Marked } from 'marked';
 import hljs from 'highlight.js';
 
@@ -406,6 +459,297 @@ const popupStyle = computed(() => {
     const x = Math.min(citationPos.value.x, window.innerWidth - 360);
     const y = citationPos.value.y + 16;
     return { left: x + 'px', top: y + 'px' };
+});
+
+// ===== FEATURE 1: READING PROGRESS + TIME =====
+const readProgress = ref(0);
+const readingTime = computed(() => {
+    if (!fileContent.value) return 0;
+    const text = fileContent.value;
+
+    // Блоки кода: каждые 10 строк ≈ 1 мин на осмысление + тестирование
+    const codeBlockMatches = [...text.matchAll(/```[\s\S]*?```/g)];
+    const codeLines = codeBlockMatches.reduce((sum, m) => sum + m[0].split('\n').length - 2, 0);
+    const codeMinutes = Math.ceil(codeLines / 10);
+
+    // Обычный текст без разметки: 200 слов/мин
+    const plain = text
+        .replace(/```[\s\S]*?```/g, '')
+        .replace(/`[^`]+`/g, '')
+        .replace(/^#{1,6}\s+/gm, '')
+        .replace(/[*_~|\\[\]()>#\-+]/g, ' ')
+        .replace(/https?:\/\/\S+/g, '');
+    const words = plain.trim().split(/\s+/).filter(w => w.length > 1).length;
+    const textMinutes = Math.ceil(words / 200);
+
+    return textMinutes + codeMinutes;
+});
+
+function onContentScroll(e) {
+    const el = e.target;
+    const scrollable = el.scrollHeight - el.clientHeight;
+    readProgress.value = scrollable > 0 ? el.scrollTop / scrollable : 0;
+    onContentScrollFocus();
+}
+
+// ===== FEATURE 2: SEARCH =====
+const searchOpen = ref(false);
+const searchQuery = ref('');
+const searchMatches = ref([]);
+const searchIdx = ref(0);
+const searchInputEl = ref(null);
+
+function openSearch() {
+    searchOpen.value = true;
+    nextTick(() => searchInputEl.value?.focus());
+}
+
+function runSearch() {
+    clearSearchMarks();
+    const query = searchQuery.value.trim();
+    if (!query) return;
+
+    const content = document.querySelector('.fullscreen-content');
+    if (!content) return;
+
+    // Pass 1: collect {node, start, end}
+    const targets = [];
+    const walker = document.createTreeWalker(content, NodeFilter.SHOW_TEXT);
+    const lower = query.toLowerCase();
+    let node;
+    while ((node = walker.nextNode())) {
+        if (node.parentElement?.closest('.search-hl, .code-block-toolbar')) continue;
+        const text = node.textContent.toLowerCase();
+        let idx = 0;
+        while ((idx = text.indexOf(lower, idx)) !== -1) {
+            targets.push({ node, start: idx, end: idx + query.length });
+            idx += query.length;
+        }
+    }
+
+    // Pass 2: wrap in reverse order
+    const marks = [];
+    for (let i = targets.length - 1; i >= 0; i--) {
+        const { node: n, start, end } = targets[i];
+        try {
+            const range = document.createRange();
+            range.setStart(n, start);
+            range.setEnd(n, end);
+            const mark = document.createElement('mark');
+            mark.className = 'search-hl';
+            range.surroundContents(mark);
+            marks.unshift(mark);
+        } catch {}
+    }
+    searchMatches.value = marks;
+    searchIdx.value = 0;
+    if (marks.length) scrollToSearchMatch(0);
+}
+
+function scrollToSearchMatch(idx) {
+    searchMatches.value.forEach((m, i) => m.classList.toggle('search-hl-active', i === idx));
+    searchMatches.value[idx]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+function nextMatch() {
+    if (!searchMatches.value.length) return;
+    searchIdx.value = (searchIdx.value + 1) % searchMatches.value.length;
+    scrollToSearchMatch(searchIdx.value);
+}
+
+function prevMatch() {
+    if (!searchMatches.value.length) return;
+    searchIdx.value = (searchIdx.value - 1 + searchMatches.value.length) % searchMatches.value.length;
+    scrollToSearchMatch(searchIdx.value);
+}
+
+function clearSearchMarks() {
+    document.querySelectorAll('.fullscreen-content .search-hl').forEach(m => m.replaceWith(...m.childNodes));
+    document.querySelector('.fullscreen-content')?.normalize();
+    searchMatches.value = [];
+}
+
+function closeSearch() {
+    clearSearchMarks();
+    searchOpen.value = false;
+    searchQuery.value = '';
+}
+
+function onFullscreenKeydown(e) {
+    if (e.ctrlKey && e.key === 'f') { e.preventDefault(); openSearch(); return; }
+    if (e.key === 'Escape') {
+        if (searchOpen.value) { closeSearch(); return; }
+        isFullscreen.value = false;
+    }
+    if (searchOpen.value && e.key === 'Enter' && e.target !== searchInputEl.value) {
+        e.shiftKey ? prevMatch() : nextMatch();
+    }
+}
+
+// ===== FEATURE 3: FOCUS MODE =====
+const focusMode = ref(false);
+let focusRafId = null;
+let focusCurrentEl = null;
+
+const FOCUS_SELECTOR = 'p, h1, h2, h3, h4, li, blockquote';
+
+function onContentScrollFocus() {
+    if (!focusMode.value) return;
+    if (focusRafId) cancelAnimationFrame(focusRafId);
+    focusRafId = requestAnimationFrame(updateFocusedElement);
+}
+
+function updateFocusedElement() {
+    const content = document.querySelector('.fullscreen-content');
+    if (!content) return;
+    const els = Array.from(content.querySelectorAll(FOCUS_SELECTOR));
+    const viewMid = content.getBoundingClientRect().top + content.clientHeight / 2;
+
+    let closestIdx = 0, closestDist = Infinity;
+    for (let i = 0; i < els.length; i++) {
+        const r = els[i].getBoundingClientRect();
+        const dist = Math.abs(r.top + r.height / 2 - viewMid);
+        if (dist < closestDist) { closestDist = dist; closestIdx = i; }
+    }
+
+    // Activate a window of ±2 elements around the closest
+    const activeSet = new Set(
+        els.slice(Math.max(0, closestIdx - 2), closestIdx + 3)
+    );
+
+    for (const el of els) {
+        el.classList.toggle('focus-active', activeSet.has(el));
+    }
+    focusCurrentEl = els[closestIdx] ?? null;
+}
+
+function toggleFocusMode() {
+    focusMode.value = !focusMode.value;
+    const content = document.querySelector('.fullscreen-content');
+    if (!content) return;
+    if (focusMode.value) {
+        content.classList.add('focus-mode');
+        updateFocusedElement();
+    } else {
+        content.classList.remove('focus-mode');
+        content.querySelectorAll('.focus-active').forEach(el => el.classList.remove('focus-active'));
+        focusCurrentEl = null;
+    }
+}
+
+watch(isFullscreen, (val) => {
+    if (!val) {
+        if (focusMode.value) toggleFocusMode();
+        closeSearch();
+        readProgress.value = 0;
+    }
+});
+
+// ===== FEATURE 4: NOTES =====
+const userNotes = ref([]);
+const noteTooltipVisible = ref(false);
+const noteTooltipPos = ref({ x: 0, y: 0 });
+const pendingSelection = ref(null);
+const showNotesPanel = ref(false);
+
+const noteTooltipStyle = computed(() => ({
+    left: Math.min(noteTooltipPos.value.x, window.innerWidth - 220) + 'px',
+    top: Math.max(noteTooltipPos.value.y - 52, 8) + 'px',
+}));
+
+function simpleHash(str) {
+    let h = 5381;
+    for (let i = 0; i < Math.min(str.length, 200); i++) h = (h * 33) ^ str.charCodeAt(i);
+    return (h >>> 0).toString(36);
+}
+
+const docNotesKey = computed(() => `md-notes-${simpleHash(fileContent.value)}`);
+
+function loadNotes() {
+    try { return JSON.parse(localStorage.getItem(docNotesKey.value) || '[]'); } catch { return []; }
+}
+
+function saveNotesStorage() {
+    localStorage.setItem(docNotesKey.value, JSON.stringify(userNotes.value));
+}
+
+function applyNoteHighlights() {
+    document.querySelectorAll('.fullscreen-content .user-note-hl').forEach(m => m.replaceWith(...m.childNodes));
+    document.querySelector('.fullscreen-content')?.normalize();
+    for (const note of userNotes.value) {
+        const content = document.querySelector('.fullscreen-content');
+        if (!content) break;
+        const walker = document.createTreeWalker(content, NodeFilter.SHOW_TEXT);
+        let node;
+        while ((node = walker.nextNode())) {
+            if (node.parentElement?.closest('.search-hl, .user-note-hl, .code-block-toolbar')) continue;
+            const idx = node.textContent.indexOf(note.searchText);
+            if (idx === -1) continue;
+            try {
+                const range = document.createRange();
+                range.setStart(node, idx);
+                range.setEnd(node, idx + note.searchText.length);
+                const mark = document.createElement('mark');
+                mark.className = 'user-note-hl';
+                mark.dataset.noteId = note.id;
+                range.surroundContents(mark);
+            } catch {}
+            break;
+        }
+    }
+}
+
+function onContentMouseUp(e) {
+    if (e.target.closest('.code-block-toolbar, .citation-ref, .code-tree-btn')) return;
+    const sel = window.getSelection();
+    if (!sel || sel.isCollapsed || sel.toString().trim().length < 3) {
+        noteTooltipVisible.value = false;
+        return;
+    }
+    const text = sel.toString().trim();
+    pendingSelection.value = { text, searchText: text.slice(0, 80) };
+    noteTooltipPos.value = { x: e.clientX, y: e.clientY };
+    noteTooltipVisible.value = true;
+}
+
+function saveNote() {
+    if (!pendingSelection.value) return;
+    const note = { id: Date.now(), text: pendingSelection.value.text, searchText: pendingSelection.value.searchText };
+    userNotes.value.push(note);
+    saveNotesStorage();
+    nextTick(applyNoteHighlights);
+    noteTooltipVisible.value = false;
+    pendingSelection.value = null;
+    window.getSelection()?.removeAllRanges();
+}
+
+function deleteNote(id) {
+    userNotes.value = userNotes.value.filter(n => n.id !== id);
+    saveNotesStorage();
+    nextTick(applyNoteHighlights);
+}
+
+function scrollToNote(note) {
+    const mark = document.querySelector(`.fullscreen-content .user-note-hl[data-note-id="${note.id}"]`);
+    mark?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+function toggleNotesPanel() {
+    showNotesPanel.value = !showNotesPanel.value;
+    if (showNotesPanel.value) showSidebar.value = true;
+}
+
+watch(docNotesKey, () => {
+    userNotes.value = loadNotes();
+    nextTick(applyNoteHighlights);
+}, { immediate: true });
+
+watch(fullscreenHtml, () => {
+    nextTick(() => {
+        applyNoteHighlights();
+        if (searchOpen.value && searchQuery.value) runSearch();
+        if (focusMode.value) updateFocusedElement();
+    });
 });
 
 function onContentClick(e) {
@@ -1334,6 +1678,219 @@ function downloadPdf() {
     color: #89b4fa;
 }
 
+/* ===== READING PROGRESS BAR ===== */
+.read-progress-bar {
+    position: absolute;
+    top: 0; left: 0;
+    height: 3px;
+    background: linear-gradient(90deg, #2563eb, #7c3aed);
+    z-index: 20;
+    border-radius: 0 2px 2px 0;
+    transition: width 0.1s linear;
+    pointer-events: none;
+}
+
+.fullscreen.dark .read-progress-bar {
+    background: linear-gradient(90deg, #89b4fa, #cba6f7);
+}
+
+.read-time-label {
+    font-size: 12px;
+    color: #fff;
+    opacity: 0.7;
+    white-space: nowrap;
+    align-self: center;
+    padding: 0 4px;
+    margin-left: auto;
+}
+
+/* ===== FULLSCREEN MAIN WRAPPER ===== */
+.fullscreen-main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    min-width: 0;
+}
+
+/* ===== SEARCH BAR ===== */
+.search-bar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    background: rgba(255, 255, 255, 0.96);
+    border-bottom: 1px solid #e2e8f0;
+    flex-shrink: 0;
+    backdrop-filter: blur(8px);
+}
+
+.fullscreen.dark .search-bar {
+    background: rgba(30, 30, 46, 0.96);
+    border-bottom-color: #313244;
+}
+
+.search-input {
+    flex: 1;
+    max-width: 320px;
+    padding: 5px 10px;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    font-size: 13px;
+    outline: none;
+    background: #fff;
+    color: #1e293b;
+}
+
+.search-input:focus {
+    border-color: #2563eb;
+    box-shadow: 0 0 0 2px #2563eb22;
+}
+
+.fullscreen.dark .search-input {
+    background: #181825;
+    border-color: #45475a;
+    color: #cdd6f4;
+}
+
+.fullscreen.dark .search-input:focus {
+    border-color: #89b4fa;
+    box-shadow: 0 0 0 2px #89b4fa22;
+}
+
+.search-counter {
+    font-size: 12px;
+    color: #64748b;
+    white-space: nowrap;
+    min-width: 70px;
+}
+
+.fullscreen.dark .search-counter { color: #a6adc8; }
+
+.search-nav-btn {
+    padding: 4px 8px;
+    border: 1px solid #d1d5db;
+    border-radius: 5px;
+    background: none;
+    color: #475569;
+    cursor: pointer;
+    font-size: 11px;
+    transition: background 0.12s;
+}
+
+.search-nav-btn:hover:not(:disabled) { background: #f1f5f9; }
+.search-nav-btn:disabled { opacity: 0.35; cursor: default; }
+
+.fullscreen.dark .search-nav-btn {
+    border-color: #45475a;
+    color: #cdd6f4;
+}
+
+.fullscreen.dark .search-nav-btn:hover:not(:disabled) { background: #313244; }
+
+.search-close-btn {
+    padding: 4px 10px;
+    border: none;
+    border-radius: 5px;
+    background: none;
+    color: #94a3b8;
+    cursor: pointer;
+    font-size: 12px;
+    margin-left: 4px;
+    transition: color 0.12s;
+}
+
+.search-close-btn:hover { color: #f87171; }
+
+/* ===== NOTE TOOLTIP ===== */
+.note-tooltip {
+    position: fixed;
+    z-index: 2500;
+    display: flex;
+    gap: 4px;
+    background: #1e293b;
+    border-radius: 8px;
+    padding: 5px 7px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+    transform: translateX(-50%);
+}
+
+.note-tooltip-btn {
+    padding: 4px 10px;
+    border: none;
+    border-radius: 5px;
+    background: #2563eb;
+    color: #fff;
+    font-size: 12px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.12s;
+}
+
+.note-tooltip-btn:hover { background: #1d4ed8; }
+
+.note-tooltip-close {
+    padding: 4px 8px;
+    border: none;
+    border-radius: 5px;
+    background: none;
+    color: #94a3b8;
+    cursor: pointer;
+    font-size: 12px;
+    transition: color 0.12s;
+}
+
+.note-tooltip-close:hover { color: #f87171; }
+
+/* ===== NOTES IN SIDEBAR ===== */
+.note-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    padding: 6px 8px;
+    border-radius: 5px;
+    font-size: 12px;
+    cursor: pointer;
+    background: #fefce8;
+    border-left: 2px solid #eab308;
+    margin-bottom: 4px;
+    transition: opacity 0.15s;
+}
+
+.note-item:hover { opacity: 0.75; }
+
+.fullscreen.dark .note-item {
+    background: #252010;
+    border-left-color: #d97706;
+}
+
+.note-text {
+    flex: 1;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    color: #1e293b;
+    line-height: 1.4;
+}
+
+.fullscreen.dark .note-text { color: #cdd6f4; }
+
+.note-delete {
+    background: none !important;
+    border: none !important;
+    color: #94a3b8;
+    cursor: pointer;
+    font-size: 11px;
+    padding: 1px 4px !important;
+    border-radius: 3px !important;
+    flex-shrink: 0;
+    line-height: 1.2;
+}
+
+.note-delete:hover { color: #f87171 !important; }
+
 /* ===== SVG TREE MODAL ===== */
 .tree-modal-overlay {
     position: fixed;
@@ -1979,6 +2536,52 @@ textarea {
 .highlight-flash {
     animation: highlight-flash 1.2s ease-out;
     border-radius: 3px;
+}
+
+/* ===== Search highlights ===== */
+.search-hl {
+    background: #fef08a;
+    color: #0f172a;
+    border-radius: 2px;
+}
+
+.search-hl-active {
+    background: #f59e0b;
+    color: #0f172a;
+    outline: 2px solid #f59e0b;
+    border-radius: 2px;
+}
+
+/* ===== Focus mode ===== */
+.fullscreen-content.focus-mode p,
+.fullscreen-content.focus-mode h1,
+.fullscreen-content.focus-mode h2,
+.fullscreen-content.focus-mode h3,
+.fullscreen-content.focus-mode h4,
+.fullscreen-content.focus-mode li,
+.fullscreen-content.focus-mode blockquote {
+    opacity: 0.12;
+    transition: opacity 0.6s ease;
+}
+
+.fullscreen-content.focus-mode .focus-active {
+    opacity: 1 !important;
+    transition: opacity 0.6s ease;
+}
+
+/* ===== User note highlights ===== */
+.user-note-hl {
+    background: #fde68a;
+    color: inherit;
+    border-radius: 2px;
+    cursor: pointer;
+    border-bottom: 2px solid #d97706;
+}
+
+.fullscreen.dark .user-note-hl {
+    background: #3d2a00;
+    color: #fef3c7;
+    border-bottom-color: #f59e0b;
 }
 
 /* ===== Code tree visualize button ===== */
