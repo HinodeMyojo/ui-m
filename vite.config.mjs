@@ -13,6 +13,7 @@ const { version } = require("./package.json");
 export default defineConfig({
   define: {
     __APP_VERSION__: JSON.stringify(version),
+    __BUILD_TIME__: JSON.stringify(new Date().toISOString()),
   },
   plugins: [vue(), vueDevTools(), tailwindcss()],
   resolve: {

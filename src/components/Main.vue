@@ -97,6 +97,13 @@ function celebrateTaskCreation() {
   }, CONFETTI_DELAY_MS);
 }
 
+/* global __APP_VERSION__, __BUILD_TIME__ */
+const appVersion = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '?';
+const buildTime = typeof __BUILD_TIME__ !== 'undefined'
+  ? new Date(__BUILD_TIME__).toLocaleString('ru', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })
+  : '?';
+const showBuildInfo = ref(false);
+
 const tasks = ref([]);
 
 async function loadTasks(date) {
@@ -586,6 +593,11 @@ function closeTimeStats() {
           + Добавить задачу
         </button>
         <button class="logout-btn" @click="logout">Выйти</button>
+        <button class="version-badge" @click="showBuildInfo = !showBuildInfo" :title="`v${appVersion} · ${buildTime}`">v{{ appVersion }}</button>
+        <div v-if="showBuildInfo" class="build-info-popup">
+          <div>Версия: <b>{{ appVersion }}</b></div>
+          <div>Сборка: <b>{{ buildTime }}</b></div>
+        </div>
       </div>
     </div>
     <div class="body">
@@ -1320,6 +1332,7 @@ function closeTimeStats() {
   display: flex;
   align-items: center;
   justify-content: flex-end;
+  position: relative;
 }
 
 .month-block {
@@ -1862,5 +1875,36 @@ function closeTimeStats() {
   background: #23232b !important;
   color: #fff !important;
   border-color: #6e4aff;
+}
+
+.version-badge {
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.25);
+  font-size: 11px;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: color 0.2s;
+  flex-shrink: 0;
+}
+.version-badge:hover {
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.build-info-popup {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  background: #1a1b26;
+  border: 1px solid rgba(110, 74, 255, 0.3);
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 12px;
+  color: #ccc;
+  white-space: nowrap;
+  z-index: 1000;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+  line-height: 1.8;
 }
 </style>
