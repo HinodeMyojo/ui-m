@@ -24,11 +24,14 @@
             <button class="pdf-tb-btn pdf-tb-sm" @click="emit('fit-page')" title="По странице">⛶</button>
             <div class="pdf-tb-divider"></div>
             <button class="pdf-tb-btn" @click="emit('toggle-search')" :class="{ active: searchOpen }" title="Поиск (Ctrl+F)">🔍</button>
-            <button class="pdf-tb-btn" @click="emit('toggle-sidebar')" :class="{ active: showSidebar }" title="Содержание">☰</button>
+            <button class="pdf-tb-btn" @click="emit('toggle-sidebar')" :class="{ active: showSidebar }" title="Панель">☰</button>
             <button class="pdf-tb-btn" @click="emit('toggle-thumbnails')" :class="{ active: showThumbnails }" title="Миниатюры">⊞</button>
             <div class="pdf-tb-divider"></div>
+            <button class="pdf-tb-btn" @click="emit('toggle-bookmark')"
+                :class="{ bookmarked: isCurrentPageBookmarked }"
+                :title="isCurrentPageBookmarked ? 'Удалить закладку (B)' : 'Добавить закладку (B)'">🔖</button>
+            <div class="pdf-tb-divider"></div>
             <button class="pdf-tb-btn" @click="emit('toggle-fullscreen')" :title="isFullscreen ? 'Выйти из полного экрана' : 'Полный экран'">
-                {{ isFullscreen ? '⛶' : '⛶' }}{{ isFullscreen ? '' : '' }}
                 <span v-if="isFullscreen">✕fs</span><span v-else>⛶</span>
             </button>
             <template v-if="nightMode">
@@ -43,6 +46,10 @@
             <button class="pdf-tb-btn" @click="emit('toggle-dark')" :title="darkMode ? 'Светлая тема' : 'Тёмная тема'">
                 {{ darkMode ? '☀️' : '💡' }}
             </button>
+            <div class="pdf-tb-divider"></div>
+            <button class="pdf-tb-btn" @click="emit('toggle-hover-translate')"
+                :class="{ active: hoverTranslate }" title="Перевод при наведении">🌐</button>
+            <button class="pdf-tb-btn pdf-tb-sm" @click="emit('open-translate-settings')" title="Настройки перевода">⚙️</button>
         </div>
 
         <div class="pdf-progress-bar-line" :style="{ width: (readProgress * 100) + '%' }"></div>
@@ -56,12 +63,15 @@ defineProps({
     showSidebar: Boolean, showThumbnails: Boolean, searchOpen: Boolean,
     readProgress: Number, estimatedReadingTime: String,
     canPrev: Boolean, canNext: Boolean,
+    isCurrentPageBookmarked: Boolean,
+    hoverTranslate: Boolean,
 });
 const emit = defineEmits([
     'prev-page', 'next-page', 'jump-to-page',
     'zoom-in', 'zoom-out', 'fit-width', 'fit-page',
     'toggle-dark', 'toggle-night', 'night-brightness-down', 'night-brightness-up',
     'toggle-fullscreen', 'toggle-sidebar', 'toggle-thumbnails',
-    'toggle-search', 'close-doc',
+    'toggle-search', 'close-doc', 'toggle-bookmark',
+    'toggle-hover-translate', 'open-translate-settings',
 ]);
 </script>

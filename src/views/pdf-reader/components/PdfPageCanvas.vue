@@ -5,6 +5,12 @@
         <canvas ref="canvasEl" v-show="rendered"></canvas>
         <div v-if="!rendered" class="pdf-page-placeholder"></div>
         <div ref="textLayerEl" class="textLayer"></div>
+        <PdfAnnotationLayer
+            :annotations="annotations"
+            :zoomLevel="zoomLevel"
+            @remove="emit('remove-annotation', $event)"
+            @edit-note="emit('edit-annotation-note', $event)"
+        />
     </div>
 </template>
 
@@ -12,6 +18,7 @@
 import { ref, watch, computed, onMounted, onBeforeUnmount, toRaw } from 'vue';
 import { TextLayer } from 'pdfjs-dist';
 import 'pdfjs-dist/web/pdf_viewer.css';
+import PdfAnnotationLayer from './PdfAnnotationLayer.vue';
 
 const props = defineProps({
     pdfDoc: Object,
@@ -20,7 +27,11 @@ const props = defineProps({
     nightMode: Boolean,
     searchQuery: String,
     searchPageMatches: Number,
+    annotations: { type: Array, default: () => [] },
+    goToPage: { type: Function, default: null },
 });
+
+const emit = defineEmits(['remove-annotation', 'edit-annotation-note']);
 
 const canvasEl = ref(null);
 const textLayerEl = ref(null);
@@ -39,6 +50,43 @@ const placeholderStyle = computed(() => ({
     width: Math.round(pageWidth.value * props.zoomLevel) + 'px',
     height: Math.round(pageHeight.value * props.zoomLevel) + 'px',
 }));
+
+// ── Link annotations ─────────────────────────────────────────────────────
+async function renderLinkAnnotations(page, viewport, wrapperEl) {
+    wrapperEl.querySelectorAll('.pdf-link-annotation').forEach(el => el.remove());
+    if (!props.goToPage || !props.pdfDoc) return;
+    try {
+        const anns = await page.getAnnotations();
+        const doc = toRaw(props.pdfDoc);
+        for (const ann of anns) {
+            if (ann.subtype !== 'Link' || !ann.dest || ann.url) continue;
+            let targetPage = null;
+            try {
+                const resolved = typeof ann.dest === 'string'
+                    ? await doc.getDestination(ann.dest)
+                    : ann.dest;
+                if (resolved && resolved[0]) {
+                    const idx = await doc.getPageIndex(resolved[0]);
+                    targetPage = idx + 1;
+                }
+            } catch { continue; }
+            if (!targetPage) continue;
+
+            const [vx1, vy1, vx2, vy2] = viewport.convertToViewportRectangle(ann.rect);
+            const left = Math.min(vx1, vx2);
+            const top  = Math.min(vy1, vy2);
+            const w    = Math.abs(vx2 - vx1);
+            const h    = Math.abs(vy2 - vy1);
+
+            const div = document.createElement('div');
+            div.className = 'pdf-link-annotation';
+            div.style.cssText = `left:${left}px;top:${top}px;width:${w}px;height:${h}px;`;
+            div.title = `Перейти на страницу ${targetPage}`;
+            div.addEventListener('click', (e) => { e.stopPropagation(); props.goToPage(targetPage); });
+            wrapperEl.appendChild(div);
+        }
+    } catch { /* ignore */ }
+}
 
 // ── Actual render ────────────────────────────────────────────────────────
 async function render() {
@@ -73,7 +121,6 @@ async function render() {
         if (tl) {
             tl.innerHTML = '';
             if (textLayerInstance) { textLayerInstance.cancel?.(); textLayerInstance = null; }
-            // pdfjs-dist v5 uses --total-scale-factor CSS variable for sizing/positioning
             tl.style.setProperty('--total-scale-factor', props.zoomLevel);
             try {
                 const textContent = await page.getTextContent();
@@ -85,6 +132,10 @@ async function render() {
                 await textLayerInstance.render();
             } catch (err) { console.warn('TextLayer error:', err); }
         }
+
+        // Link annotations
+        const wrapper = canvasEl.value?.closest('.pdf-page-wrapper');
+        if (wrapper) await renderLinkAnnotations(page, viewport, wrapper);
     } catch (e) {
         if (e?.name !== 'RenderingCancelledException') console.warn('Page', props.pageNum, 'render error:', e);
     }
