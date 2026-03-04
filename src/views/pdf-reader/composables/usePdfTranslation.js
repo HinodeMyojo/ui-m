@@ -87,12 +87,10 @@ export function usePdfTranslation(fileName) {
         translationError.value = '';
 
         try {
-            // Try Free API endpoint first; fall back to Pro if 403
-            // Requests go through Vite dev proxy (/deepl-free → api-free.deepl.com)
-            const endpoints = [
-                '/deepl-free/v2/translate',
-                '/deepl-pro/v2/translate',
-            ];
+            // In dev: go through Vite proxy. In prod: call DeepL directly (CORS is allowed with auth header).
+            const endpoints = import.meta.env.DEV
+                ? ['/deepl-free/v2/translate', '/deepl-pro/v2/translate']
+                : ['https://api-free.deepl.com/v2/translate', 'https://api.deepl.com/v2/translate'];
 
             let result = null;
             for (const endpoint of endpoints) {
@@ -142,10 +140,9 @@ export function usePdfTranslation(fileName) {
     async function checkApiKey() {
         if (!apiKey.value) return { ok: false, error: 'Ключ не задан' };
         try {
-            for (const endpoint of [
-                '/deepl-free/v2/usage',
-                '/deepl-pro/v2/usage',
-            ]) {
+            for (const endpoint of import.meta.env.DEV
+                ? ['/deepl-free/v2/usage', '/deepl-pro/v2/usage']
+                : ['https://api-free.deepl.com/v2/usage', 'https://api.deepl.com/v2/usage']) {
                 const res = await fetch(endpoint, {
                     headers: { Authorization: `DeepL-Auth-Key ${apiKey.value}` },
                 });
