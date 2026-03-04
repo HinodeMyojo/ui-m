@@ -16,7 +16,7 @@
 
 <script setup>
 import { ref, watch, computed, onMounted, onBeforeUnmount, toRaw } from 'vue';
-import { TextLayer } from 'pdfjs-dist';
+import { TextLayer, AnnotationMode } from 'pdfjs-dist';
 import 'pdfjs-dist/web/pdf_viewer.css';
 import PdfAnnotationLayer from './PdfAnnotationLayer.vue';
 
@@ -111,7 +111,11 @@ async function render() {
         canvas.height = viewport.height;
         const ctx = canvas.getContext('2d');
 
-        renderTask = page.render({ canvasContext: ctx, viewport });
+        // Fill white background so transparent images render correctly (SMask / ImageMask)
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        renderTask = page.render({ canvasContext: ctx, viewport, annotationMode: AnnotationMode.ENABLE_FORMS });
         await renderTask.promise;
         renderTask = null;
         rendered.value = true;

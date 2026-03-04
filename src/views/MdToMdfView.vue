@@ -5,6 +5,7 @@
         <div class="read-progress-bar" :style="{ width: (readProgress * 100) + '%' }"></div>
 
         <div class="fullscreen-toolbar">
+            <button @click="router.push('/')">🏠 Главная</button>
             <button @click="isFullscreen = false">✕ Закрыть</button>
             <button @click="darkMode = !darkMode">{{ darkMode ? '☀️ Светлая' : '🌙 Тёмная' }}</button>
             <button @click="showSidebar = !showSidebar" :class="{ active: showSidebar }">📋 Структура</button>
@@ -142,6 +143,7 @@
     <!-- Main editor -->
     <div v-else class="menu">
         <div class="header">
+            <button @click="router.push('/')">🏠 Главная</button>
             <button @click="downloadPdf">📥 Скачать</button>
             <button @click="darkMode = !darkMode">{{ darkMode ? '☀️ Светлая' : '🌙 Тёмная' }}</button>
             <button @click="isFullscreen = true">🔍 Просмотр</button>
@@ -179,6 +181,8 @@
 
 <script setup>
 import { watch, nextTick } from 'vue';
+import { useRouter } from 'vue-router';
+const router = useRouter();
 import { useViewState }       from './md-editor/composables/useViewState.js';
 import { useMarkdownParser }  from './md-editor/composables/useMarkdownParser.js';
 import { useStorage }         from './md-editor/composables/useStorage.js';

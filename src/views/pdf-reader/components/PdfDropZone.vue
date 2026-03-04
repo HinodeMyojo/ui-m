@@ -1,6 +1,7 @@
 <template>
     <div class="pdf-dropzone" :class="{ dragging, dark: darkMode }" @dragover.prevent="dragging = true"
         @dragleave="dragging = false" @drop.prevent="onDrop">
+        <button class="pdf-dz-home" @click="router.push('/')" title="На главную">🏠</button>
         <div class="pdf-dropzone-inner">
             <div class="pdf-dropzone-icon">📄</div>
             <div class="pdf-dropzone-title">Открыть PDF</div>
@@ -18,7 +19,9 @@
 
 <script setup>
 import { ref } from 'vue';
+import { useRouter } from 'vue-router';
 
+const router = useRouter();
 const props = defineProps({ darkMode: Boolean, isLoading: Boolean, loadError: String });
 const emit = defineEmits(['file-selected']);
 

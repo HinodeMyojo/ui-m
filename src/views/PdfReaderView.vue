@@ -29,7 +29,8 @@
                 @toggle-thumbnails="toggleThumbnails" @toggle-search="openSearch" @close-doc="closeDocument"
                 @toggle-bookmark="toggleCurrentPage"
                 @toggle-hover-translate="hoverMode = !hoverMode"
-                @open-translate-settings="showTranslateSettings = true" />
+                @open-translate-settings="showTranslateSettings = true"
+                @go-home="$router.push('/')" />
 
             <PdfSearchBar v-if="searchOpen" :searchQuery="searchQuery" :matchCount="searchMatches.length"
                 :currentMatchIdx="searchIdx" :isSearching="isSearching"

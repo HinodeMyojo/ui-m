@@ -23,7 +23,13 @@ export function usePdfLoader() {
         fileName.value = file.name;
         try {
             const arrayBuffer = await file.arrayBuffer();
-            const doc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+            const doc = await pdfjsLib.getDocument({
+                data: arrayBuffer,
+                cMapUrl: 'https://cdn.jsdelivr.net/npm/pdfjs-dist/cmaps/',
+                cMapPacked: true,
+                standardFontDataUrl: 'https://cdn.jsdelivr.net/npm/pdfjs-dist/standard_fonts/',
+                wasmUrl: 'https://cdn.jsdelivr.net/npm/pdfjs-dist/wasm/',
+            }).promise;
             pdfDoc.value = doc;
             pageCount.value = doc.numPages;
         } catch (e) {
