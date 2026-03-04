@@ -125,6 +125,14 @@ body.pdf-dark {
     max-width: 200px;
 }
 
+.pdf-app-version {
+    font-size: 10px;
+    color: var(--pdf-text-secondary);
+    opacity: 0.45;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
 .pdf-tb-btn {
     background: none;
     border: none;

@@ -1,12 +1,19 @@
 import { fileURLToPath, URL } from "node:url";
+import { createRequire } from "node:module";
 
 import { defineConfig } from "vite";
 import vue from "@vitejs/plugin-vue";
 import vueDevTools from "vite-plugin-vue-devtools";
 import tailwindcss from "@tailwindcss/vite";
 
+const require = createRequire(import.meta.url);
+const { version } = require("./package.json");
+
 // https://vite.dev/config/
 export default defineConfig({
+  define: {
+    __APP_VERSION__: JSON.stringify(version),
+  },
   plugins: [vue(), vueDevTools(), tailwindcss()],
   resolve: {
     alias: {

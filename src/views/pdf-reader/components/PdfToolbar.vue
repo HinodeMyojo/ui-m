@@ -5,6 +5,7 @@
             <div class="pdf-tb-divider"></div>
             <button class="pdf-tb-btn" title="Открыть другой файл" @click="emit('close-doc')">✕</button>
             <span class="pdf-filename">{{ fileName }}</span>
+            <span class="pdf-app-version">v{{ appVersion }}</span>
         </div>
 
         <div class="pdf-toolbar-center">
@@ -59,6 +60,9 @@
 </template>
 
 <script setup>
+/* global __APP_VERSION__ */
+const appVersion = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '?';
+
 defineProps({
     fileName: String, currentPage: Number, pageCount: Number,
     zoomLevel: Number, darkMode: Boolean, nightMode: Boolean, nightBrightness: Number, isFullscreen: Boolean,
