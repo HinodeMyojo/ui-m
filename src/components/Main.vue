@@ -11,7 +11,8 @@ import {
 } from "./api.js";
 import { useRouter } from "vue-router";
 
-import holiColors from "../assets/gif/rocket_1f680.gif"
+import gifRocket from "../assets/gif/rocket_1f680.gif"
+import gifLantern from "../assets/gif/1f383.gif"
 
 import TaskDetails from "@/components/modals/TaskDetails.vue";
 
@@ -793,16 +794,48 @@ function closeTimeStats() {
     </div>
   </transition>
   <transition name="modal-fade">
-    <div v-if="showNyamaModals" class="modal-nyama">
-      <!-- пока что хардкод)) пока что)) -->
-      <button class="nyamaaa" @click="openMdToPdfPage">
-        <div class="icon"><img :src="holiColors" alt=""></div>
-        <p class="text">MD TO PDF</p>
-      </button>
-      <button class="nyamaaa" @click="router.push('/pdfReader')">
-        <div class="icon">📄</div>
-        <p class="text">PDF Reader</p>
-      </button>
+    <div v-if="showNyamaModals" class="modal-nyama-backdrop" @click.self="showNyamaModals = false">
+      <div class="modal-nyama">
+        <button class="nyamaaa" @click="openMdToPdfPage">
+          <div class="icon"><img :src="gifRocket" alt=""></div>
+          <p class="text">MD TO PDF</p>
+        </button>
+        <button class="nyamaaa" @click="router.push('/pdfReader')">
+          <div class="icon"><img :src="gifLantern" alt=""></div>
+          <p class="text">PDF Reader</p>
+        </button>
+        <button class="nyamaaa nyamaaa-soon" disabled title="Скоро">
+          <div class="icon">🗺️</div>
+          <p class="text">Архитектор</p>
+          <span class="nyama-badge">Скоро</span>
+        </button>
+        <button class="nyamaaa nyamaaa-soon" disabled title="Скоро">
+          <div class="icon">🗣️</div>
+          <p class="text">English Coach</p>
+          <span class="nyama-badge">Скоро</span>
+        </button>
+        <button class="nyamaaa nyamaaa-soon" disabled title="Скоро">
+          <div class="icon">🧠</div>
+          <p class="text">Mind Map</p>
+          <span class="nyama-badge">Скоро</span>
+        </button>
+        <button class="nyamaaa nyamaaa-soon nyamaaa-unknown" disabled>
+          <div class="icon">❓</div>
+          <span class="nyama-badge">Неизвестно</span>
+        </button>
+        <button class="nyamaaa nyamaaa-soon nyamaaa-unknown" disabled>
+          <div class="icon">❓</div>
+          <span class="nyama-badge">Неизвестно</span>
+        </button>
+        <button class="nyamaaa nyamaaa-soon nyamaaa-unknown" disabled>
+          <div class="icon">❓</div>
+          <span class="nyama-badge">Неизвестно</span>
+        </button>
+        <button class="nyamaaa nyamaaa-soon nyamaaa-unknown" disabled>
+          <div class="icon">❓</div>
+          <span class="nyama-badge">Неизвестно</span>
+        </button>
+      </div>
     </div>
   </transition>
   <transition name="modal-fade">
@@ -971,35 +1004,107 @@ function closeTimeStats() {
   background-color: #2e26601f;
 }
 
-.modal-nyama {
-  width: 90%;
-  height: 800px;
-  position: absolute;
-  background-color: #2122297C;
-  border-radius: 50px;
-  display: grid;
-  padding: 20px;
-}
-
-.nyamaaa {
-  width: 200px;
-  height: 200px;
-  border-radius: 30px;
-  background-color: hwb(231.43 10.2% 56.86% / 0.82);
+.modal-nyama-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(6px);
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 10px;
   justify-content: center;
 }
 
+.modal-nyama {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 20px;
+  padding: 32px 36px;
+  background: rgba(24, 25, 31, 0.96);
+  border-radius: 32px;
+  border: 1px solid rgba(255,255,255,0.07);
+  box-shadow: 0 32px 80px rgba(0,0,0,0.6);
+  max-width: 700px;
+  justify-content: center;
+}
+
+.nyamaaa {
+  width: 160px;
+  height: 160px;
+  border-radius: 22px;
+  background: hwb(231.43 10.2% 56.86% / 0.82);
+  border: 1px solid rgba(255,255,255,0.1);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+  user-select: none;
+  position: relative;
+}
+
+.nyamaaa:not(:disabled):hover {
+  transform: translateY(-4px) scale(1.03);
+  box-shadow: 0 12px 32px rgba(0,0,0,0.4);
+}
+
+.nyamaaa:not(:disabled):active {
+  transform: scale(0.88);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+  transition: transform 0.07s ease;
+}
+
 .nyamaaa img {
-  width: 100px;
+  width: 80px;
+  height: 80px;
+  object-fit: contain;
+}
+
+.nyamaaa .icon {
+  font-size: 52px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .nyamaaa p {
   font-weight: 700;
-  font-size: larger;
+  font-size: 12px;
+  color: #fff;
+  letter-spacing: 0.05em;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+/* Inactive / coming soon */
+.nyamaaa-soon {
+  background: rgba(40, 42, 54, 0.5);
+  border-color: rgba(255,255,255,0.05);
+  cursor: not-allowed;
+  opacity: 0.45;
+  filter: grayscale(0.4);
+}
+
+.nyamaaa-soon p { color: #888; }
+
+.nyamaaa-unknown .icon { font-size: 64px; opacity: 0.4; }
+
+.nyama-badge {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background: rgba(110, 74, 255, 0.75);
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 2px 6px;
+  border-radius: 6px;
+  text-transform: uppercase;
 }
 
 .column-number {

@@ -29,7 +29,8 @@
                 @toggle-thumbnails="toggleThumbnails" @toggle-search="openSearch" @close-doc="closeDocument"
                 @toggle-bookmark="toggleCurrentPage"
                 @toggle-hover-translate="hoverMode = !hoverMode"
-                @open-translate-settings="showTranslateSettings = true" />
+                @open-translate-settings="showTranslateSettings = true"
+                @go-home="$router.push('/')" />
 
             <PdfSearchBar v-if="searchOpen" :searchQuery="searchQuery" :matchCount="searchMatches.length"
                 :currentMatchIdx="searchIdx" :isSearching="isSearching"
@@ -341,9 +342,10 @@ function zoomTo(newZoom, anchorScreenY) {
     const vp = viewportEl.value;
     if (!vp) { setZoom(newZoom); return; }
 
+    // Find page element under anchor point
     const absY = vp.scrollTop + anchorScreenY;
     let anchor = null;
-    for (const el of Object.values(pageRefs.value ?? pageRefs)) {
+    for (const el of Object.values(pageRefs.value ?? {})) {
         if (!el) continue;
         const top = el.offsetTop;
         const h   = el.offsetHeight;
@@ -353,10 +355,15 @@ function zoomTo(newZoom, anchorScreenY) {
         }
     }
 
+    const oldZoom = zoomLevel.value;
     setZoom(newZoom);
 
     nextTick(() => requestAnimationFrame(() => {
-        if (!anchor) return;
+        if (!anchor) {
+            // Fallback: scale scrollTop proportionally
+            vp.scrollTop = vp.scrollTop * (newZoom / oldZoom);
+            return;
+        }
         const newTop = anchor.el.offsetTop;
         const newH   = anchor.el.offsetHeight;
         vp.scrollTop = newTop + anchor.ratio * newH - anchor.screenY;

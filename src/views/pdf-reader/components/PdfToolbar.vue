@@ -1,6 +1,8 @@
 <template>
     <div class="pdf-toolbar">
         <div class="pdf-toolbar-left">
+            <button class="pdf-tb-btn" title="На главную" @click="emit('go-home')">🏠</button>
+            <div class="pdf-tb-divider"></div>
             <button class="pdf-tb-btn" title="Открыть другой файл" @click="emit('close-doc')">✕</button>
             <span class="pdf-filename">{{ fileName }}</span>
         </div>
@@ -72,6 +74,6 @@ const emit = defineEmits([
     'toggle-dark', 'toggle-night', 'night-brightness-down', 'night-brightness-up',
     'toggle-fullscreen', 'toggle-sidebar', 'toggle-thumbnails',
     'toggle-search', 'close-doc', 'toggle-bookmark',
-    'toggle-hover-translate', 'open-translate-settings',
+    'toggle-hover-translate', 'open-translate-settings', 'go-home',
 ]);
 </script>

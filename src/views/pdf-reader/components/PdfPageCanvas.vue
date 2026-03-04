@@ -16,7 +16,7 @@
 
 <script setup>
 import { ref, watch, computed, onMounted, onBeforeUnmount, toRaw } from 'vue';
-import { TextLayer } from 'pdfjs-dist';
+import { TextLayer, AnnotationMode } from 'pdfjs-dist';
 import 'pdfjs-dist/web/pdf_viewer.css';
 import PdfAnnotationLayer from './PdfAnnotationLayer.vue';
 
@@ -31,7 +31,7 @@ const props = defineProps({
     goToPage: { type: Function, default: null },
 });
 
-const emit = defineEmits(['remove-annotation', 'edit-annotation-note']);
+const emit = defineEmits(['remove-annotation', 'edit-annotation-note', 'height-changed']);
 
 const canvasEl = ref(null);
 const textLayerEl = ref(null);
@@ -107,11 +107,19 @@ async function render() {
         if (renderTask) { renderTask.cancel(); renderTask = null; }
 
         const canvas = canvasEl.value;
-        canvas.width = viewport.width;
-        canvas.height = viewport.height;
+        const dpr = window.devicePixelRatio || 1;
+        canvas.width  = Math.round(viewport.width  * dpr);
+        canvas.height = Math.round(viewport.height * dpr);
+        canvas.style.width  = viewport.width  + 'px';
+        canvas.style.height = viewport.height + 'px';
         const ctx = canvas.getContext('2d');
+        ctx.scale(dpr, dpr);
 
-        renderTask = page.render({ canvasContext: ctx, viewport });
+        // Fill white background so transparent images render correctly (SMask / ImageMask)
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, viewport.width, viewport.height);
+
+        renderTask = page.render({ canvasContext: ctx, viewport, annotationMode: AnnotationMode.ENABLE_FORMS });
         await renderTask.promise;
         renderTask = null;
         rendered.value = true;
@@ -155,6 +163,7 @@ async function loadPageDimensions() {
         const vp = page.getViewport({ scale: 1 });
         pageWidth.value = vp.width;
         pageHeight.value = vp.height;
+        emit('height-changed', Math.round(vp.height * props.zoomLevel));
     } catch { /* ignore */ }
 }
 

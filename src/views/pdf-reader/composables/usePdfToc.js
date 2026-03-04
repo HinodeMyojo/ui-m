@@ -14,9 +14,20 @@ async function resolveDestToPage(pdfDoc, dest) {
     }
 }
 
+// Returns true if the title looks like a raw internal destination, not a human-readable heading
+function isRawDestTitle(title) {
+    if (!title) return true;
+    // Google Docs exports: "_heading=h.xxxxx", "_bookmark=id.xxx", "_cmnt=xxx", etc.
+    if (/^_[a-z]+=/.test(title)) return true;
+    // Pure hex / alphanumeric slugs with no spaces (e.g. "a1b2c3d4")
+    if (/^[a-f0-9]{6,}$/i.test(title)) return true;
+    return false;
+}
+
 async function buildItems(pdfDoc, outline, level = 0) {
     const items = [];
     for (const item of outline) {
+        if (isRawDestTitle(item.title)) continue;
         const pageNum = await resolveDestToPage(pdfDoc, item.dest);
         items.push({ title: item.title, pageNum, level, bold: item.bold, italic: item.italic });
         if (item.items && item.items.length) {
