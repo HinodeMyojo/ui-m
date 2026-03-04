@@ -7,13 +7,13 @@ const UPSTREAM_PROXY = process.env.UPSTREAM_PROXY;
 const PORT = 3001;
 
 const TARGETS = {
-    '/deepl-free':   { host: 'api-free.deepl.com',                    ssl: true  },
-    '/deepl-pro':    { host: 'api.deepl.com',                         ssl: true  },
-    '/gemini-api':   { host: 'generativelanguage.googleapis.com',      ssl: true  },
-    '/claude-api':   { host: 'api.anthropic.com',                      ssl: true  },
-    '/openai-api':   { host: 'api.openai.com',                         ssl: true  },
-    '/gigachat-auth':{ host: 'ngw.devices.sberbank.ru', port: 9443,    ssl: true  },
-    '/gigachat-api': { host: 'gigachat.devices.sberbank.ru',           ssl: true  },
+    '/deepl-free':   { host: 'api-free.deepl.com',                    ssl: true,  useProxy: true  },
+    '/deepl-pro':    { host: 'api.deepl.com',                         ssl: true,  useProxy: true  },
+    '/gemini-api':   { host: 'generativelanguage.googleapis.com',      ssl: true,  useProxy: true  },
+    '/claude-api':   { host: 'api.anthropic.com',                      ssl: true,  useProxy: true  },
+    '/openai-api':   { host: 'api.openai.com',                         ssl: true,  useProxy: true  },
+    '/gigachat-auth':{ host: 'ngw.devices.sberbank.ru', port: 9443,    ssl: true,  useProxy: false },
+    '/gigachat-api': { host: 'gigachat.devices.sberbank.ru',           ssl: true,  useProxy: false },
 };
 
 const agent = UPSTREAM_PROXY ? new HttpsProxyAgent(UPSTREAM_PROXY) : undefined;
@@ -55,7 +55,7 @@ const server = http.createServer((req, res) => {
         method: req.method,
         headers,
         rejectUnauthorized: false, // needed for sberbank self-signed cert
-        agent: target.ssl ? agent : undefined,
+        agent: (target.useProxy && target.ssl) ? agent : undefined,
     };
 
     console.log(`[proxy] ${req.method} ${req.url} → ${url}`);
