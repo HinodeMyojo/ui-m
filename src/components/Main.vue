@@ -11,6 +11,8 @@ import {
 } from "./api.js";
 import { useRouter } from "vue-router";
 
+import holiColors from "../assets/gif/rocket_1f680.gif"
+
 import TaskDetails from "@/components/modals/TaskDetails.vue";
 
 import TimeTrackerMini from "./elements/TimeTrackerMini.vue";
@@ -78,13 +80,18 @@ const createEmptyTaskForm = () => ({
   isGlobal: false,
 });
 
+function openMdToPdfPage() {
+  const { href } = router.resolve({ name: 'mdToPdf', params: { id: 1 } });
+  window.open(href, '_blank');
+}
+
 function celebrateTaskCreation() {
   setTimeout(() => {
     CONFETTI_PRESETS.forEach((preset) =>
       confetti({
         ...preset,
         colors: CONFETTI_COLORS,
-      })
+      }),
     );
   }, CONFETTI_DELAY_MS);
 }
@@ -107,10 +114,10 @@ const daysInMonth = ref(getDaysInMonth(currentMonth.value, currentYear.value));
 const reloadTasksForCurrentDate = () => loadTasks(currentDate);
 
 const monthStart = computed(
-  () => new Date(currentYear.value, currentMonth.value, 1)
+  () => new Date(currentYear.value, currentMonth.value, 1),
 );
 const monthEnd = computed(
-  () => new Date(currentYear.value, currentMonth.value, daysInMonth.value)
+  () => new Date(currentYear.value, currentMonth.value, daysInMonth.value),
 );
 
 const visibleTasks = computed(() => {
@@ -234,7 +241,7 @@ function changeMonth(offset) {
   const targetDate = new Date(
     currentYear.value,
     currentMonth.value + offset,
-    10
+    10,
   );
 
   currentYear.value = targetDate.getFullYear();
@@ -284,6 +291,7 @@ function formatDate(date) {
 }
 
 const showAddModal = ref(false);
+const showNyamaModals = ref(false);
 const newTask = ref(createEmptyTaskForm());
 
 function resetNewTaskForm() {
@@ -311,6 +319,12 @@ function openAddModal() {
   showAddModal.value = true;
   resetNewTaskForm();
 }
+
+// открывает модалку берти бонс
+function openNyamaModal() {
+  showNyamaModals.value = true;
+}
+
 function closeAddModal() {
   showAddModal.value = false;
 }
@@ -407,8 +421,8 @@ function formatShortDateRange(start, end) {
     .getFullYear()
     .toString()
     .slice(-2)} – ${end.getDate()} ${end.toLocaleString("ru", {
-    month: "short",
-  })} ${end.getFullYear().toString().slice(-2)}`;
+      month: "short",
+    })} ${end.getFullYear().toString().slice(-2)}`;
 }
 
 const showEditModal = ref(false);
@@ -542,6 +556,7 @@ function openTimeStats() {
 function closeTimeStats() {
   showTimeStats.value = false;
 }
+
 </script>
 
 <template>
@@ -549,30 +564,23 @@ function closeTimeStats() {
   <div class="main">
     <div class="header">
       <div class="header-left">
-        <div class="salary-viewer"><SalaryViewer /></div>
+        <div class="salary-viewer">
+          <SalaryViewer />
+        </div>
       </div>
       <div class="header-center">
-        <v-icon
-          icon="mdi-chevron-left"
-          size="large"
-          class="month-nav-icon"
-          @click="handlePrevMonth"
-        />
+        <v-icon icon="mdi-chevron-left" size="large" class="month-nav-icon" @click="handlePrevMonth" />
         <div class="month-block">
           <h3>{{ getMonthName(currentMonth) }}</h3>
           <span class="year-label">{{ currentYear }}</span>
         </div>
-        <v-icon
-          icon="mdi-chevron-right"
-          size="large"
-          class="month-nav-icon"
-          @click="handleNextMonth"
-        />
+        <v-icon icon="mdi-chevron-right" size="large" class="month-nav-icon" @click="handleNextMonth" />
       </div>
       <div class="time-tracker-widget">
         <TimeTrackerMini @openStats="openTimeStats" />
       </div>
       <div class="header-right">
+        <button class="add-task-btn" @click="openNyamaModal">Вкусняхи</button>
         <button class="add-task-btn" @click="openAddModal">
           + Добавить задачу
         </button>
@@ -585,147 +593,91 @@ function closeTimeStats() {
           <h3>Canvas</h3>
         </div>
       </div>
-      <div
-        class="columns-container"
-        ref="calendarRef"
-        @dragover="handleDragOver"
-        @drop="handleDrop"
-      >
-        <div
-          v-for="col in daysInMonth"
-          :key="col"
-          ref="columnRef"
-          class="column active"
-          :class="{
-            today:
-              getToday().getFullYear() === currentYear &&
-              getToday().getMonth() === currentMonth &&
-              col === getToday().getDate(),
-          }"
-        >
+      <div class="columns-container" ref="calendarRef" @dragover="handleDragOver" @drop="handleDrop">
+        <div v-for="col in daysInMonth" :key="col" ref="columnRef" class="column active" :class="{
+          today:
+            getToday().getFullYear() === currentYear &&
+            getToday().getMonth() === currentMonth &&
+            col === getToday().getDate(),
+        }">
           <div class="column-number">{{ col }}</div>
         </div>
         <div class="tasks-container">
           <template v-for="(task, index) in visibleTasks" :key="task.title">
-            <div
-              v-if="dropIndex === index"
-              class="drop-indicator"
-              :style="{
-                top: `${TASKS_TOP_OFFSET + index * TASK_TOTAL_HEIGHT}px`,
-              }"
-            ></div>
+            <div v-if="dropIndex === index" class="drop-indicator" :style="{
+              top: `${TASKS_TOP_OFFSET + index * TASK_TOTAL_HEIGHT}px`,
+            }"></div>
             <!-- <div>{{ task }}</div> -->
-            <div
-              class="task-item"
-              :class="{
-                'drag-over': dragOverTask === task,
-                dragging: draggedTask === task,
-              }"
-              :style="{
-                top: `${TASKS_TOP_OFFSET + index * TASK_TOTAL_HEIGHT}px`,
-                left: `${(task.startDay - 1) * (100 / daysInMonth)}%`,
-                width: calcTaskWidth(task) + 'px',
-                height: `${TASK_HEIGHT}px`,
-                // minWidth: getColumnWidth() + 'px',
-                marginBottom: `${TASK_MARGIN}px`,
-                background:
-                  hoveredTask === task
-                    ? `linear-gradient(120deg, ${task.color}ee 90%, #18343b 100%)`
-                    : `linear-gradient(120deg, ${task.color}cc 25%, #18343b 100%)`,
-              }"
-              draggable="true"
-              @dragstart="handleDragStart(task, $event)"
-              @dragend="handleDragEnd"
-              @mouseenter="hoveredTask = task"
-              @mouseleave="hoveredTask = null"
-              @click="openTaskDetails(task)"
-            >
+            <div class="task-item" :class="{
+              'drag-over': dragOverTask === task,
+              dragging: draggedTask === task,
+            }" :style="{
+              top: `${TASKS_TOP_OFFSET + index * TASK_TOTAL_HEIGHT}px`,
+              left: `${(task.startDay - 1) * (100 / daysInMonth)}%`,
+              width: calcTaskWidth(task) + 'px',
+              height: `${TASK_HEIGHT}px`,
+              // minWidth: getColumnWidth() + 'px',
+              marginBottom: `${TASK_MARGIN}px`,
+              background:
+                hoveredTask === task
+                  ? `linear-gradient(120deg, ${task.color}ee 90%, #18343b 100%)`
+                  : `linear-gradient(120deg, ${task.color}cc 25%, #18343b 100%)`,
+            }" draggable="true" @dragstart="handleDragStart(task, $event)" @dragend="handleDragEnd"
+              @mouseenter="hoveredTask = task" @mouseleave="hoveredTask = null" @click="openTaskDetails(task)">
               <div class="task-inner">
                 <div class="task-row">
-                  <span class="task-title" v-if="task.totalDays >= 2">{{
-                    task.title
-                  }}</span>
+                  <span class="task-title" v-if="task.totalDays >= 2">
+                    {{ task.title }}
+                  </span>
                   <!-- <span class="task-icon">📚</span> -->
                   <div class="task-progres">
-                    <div
-                      class="progress-thing"
-                      :style="{
-                        backgroundColor: checkProgressBackgroundColor(
-                          checkProgress(task)
-                        ),
-                      }"
-                    >
+                    <div class="progress-thing" :style="{
+                      backgroundColor: checkProgressBackgroundColor(
+                        checkProgress(task),
+                      ),
+                    }">
                       {{ task.completedSubtasks }} / {{ task.totalSubtasks }}
                     </div>
                     <div v-if="task.totalDays >= 2">
-                      <div
-                        class="progress-icon"
-                        v-if="checkProgress(task) === PROGRESS_DONE"
-                      >
+                      <div class="progress-icon" v-if="checkProgress(task) === PROGRESS_DONE">
                         ✅
                       </div>
-                      <div
-                        class="progress-icon"
-                        v-if="checkProgress(task) === PROGRESS_NORMAL"
-                      >
+                      <div class="progress-icon" v-if="checkProgress(task) === PROGRESS_NORMAL">
                         💨
                       </div>
-                      <div
-                        class="progress-icon"
-                        v-if="checkProgress(task) === PROGRESS_WARN"
-                      >
+                      <div class="progress-icon" v-if="checkProgress(task) === PROGRESS_WARN">
                         ⚠️
                       </div>
-                      <div
-                        class="progress-icon"
-                        v-if="checkProgress(task) === PROGRESS_URGENT"
-                      >
+                      <div class="progress-icon" v-if="checkProgress(task) === PROGRESS_URGENT">
                         ♨️
                       </div>
-                      <div
-                        class="progress-icon"
-                        v-if="checkProgress(task) === PROGRESS_FAILED"
-                      >
+                      <div class="progress-icon" v-if="checkProgress(task) === PROGRESS_FAILED">
                         🤡
                       </div>
                     </div>
                   </div>
                 </div>
                 <div class="task-down">
-                  <div
-                    class="task-dates"
-                    :title="
-                      formatDate(task.start) + ' – ' + formatDate(task.end)
-                    "
-                    :class="{
+                  <div class="task-dates" :title="formatDate(task.start) + ' – ' + formatDate(task.end)
+                    " :class="{
                       'task-dates-small':
                         task.steps > 12 || task.endDay - task.startDay + 1 < 4,
-                    }"
-                  >
+                    }">
                     {{ formatShortDateRange(task.start, task.end) }}
                   </div>
                   <div class="task-progress-bar-segments" v-if="task.steps > 0">
-                    <span
-                      v-for="n in task.steps"
-                      :key="n"
-                      class="segment"
-                      :class="{ filled: n <= task.stepActive }"
+                    <span v-for="n in task.steps" :key="n" class="segment" :class="{ filled: n <= task.stepActive }"
                       :style="{
                         backgroundColor: n <= task.stepActive ? task.color : '',
-                      }"
-                    ></span>
+                      }"></span>
                   </div>
                 </div>
               </div>
             </div>
           </template>
-          <div
-            v-if="dropIndex === tasks.length"
-            class="drop-indicator"
-            :style="{
-              top: `${TASKS_TOP_OFFSET + tasks.length * TASK_TOTAL_HEIGHT}px`,
-            }"
-          ></div>
+          <div v-if="dropIndex === tasks.length" class="drop-indicator" :style="{
+            top: `${TASKS_TOP_OFFSET + tasks.length * TASK_TOTAL_HEIGHT}px`,
+          }"></div>
         </div>
       </div>
     </div>
@@ -776,11 +728,7 @@ function closeTimeStats() {
     </div>
   </transition> -->
   <transition name="modal-fade">
-    <div
-      class="modal-overlay-2"
-      v-if="openedTask"
-      @click.self="closeTaskDetails"
-    >
+    <div class="modal-overlay-2" v-if="openedTask" @click.self="closeTaskDetails">
       <TaskDetails :task="openedTask" />
     </div>
   </transition>
@@ -794,57 +742,35 @@ function closeTimeStats() {
         <div class="modal-content">
           <h2 class="modal-title">Добавить задачу</h2>
           <form class="add-task-form" @submit.prevent="addTask">
-            <label
-              >Название задачи
-              <input
-                v-model="newTask.title"
-                type="text"
-                required
-                maxlength="200"
-              />
+            <label>
+              Название задачи
+              <input v-model="newTask.title" type="text" required maxlength="200" />
             </label>
-            <label
-              >Дата начала
+            <label>
+              Дата начала
               <input v-model="newTask.start" type="date" name="start" />
             </label>
-            <label
-              >Дата окончания
+            <label>
+              Дата окончания
               <input v-model="newTask.end" type="date" required />
             </label>
-            <label
-              >Цвет
-              <input
-                v-model="newTask.color"
-                type="color"
-                class="color-fullwidth"
-              />
+            <label>
+              Цвет
+              <input v-model="newTask.color" type="color" class="color-fullwidth" />
             </label>
 
             <!-- НОВЫЙ ЧЕКБОКС ДЛЯ ГЛОБАЛЬНОЙ ЗАДАЧИ -->
             <label class="checkbox-label">
-              <input
-                v-model="newTask.isGlobal"
-                type="checkbox"
-                class="checkbox-input"
-              />
+              <input v-model="newTask.isGlobal" type="checkbox" class="checkbox-input" />
               <span class="checkbox-text">Глобальная задача</span>
             </label>
 
             <label>
               Подзадачи
               <div class="subtasks-label">
-                <input
-                  v-model="newTask.subtaskInput"
-                  type="text"
-                  name="subtasks"
-                  placeholder="Введите подзадачу"
-                  @keyup.enter="addSubtask"
-                />
-                <button
-                  class="add-subtask"
-                  type="button"
-                  @click="addSubtask(newTask.subtaskInput)"
-                >
+                <input v-model="newTask.subtaskInput" type="text" name="subtasks" placeholder="Введите подзадачу"
+                  @keyup.enter="addSubtask" />
+                <button class="add-subtask" type="button" @click="addSubtask(newTask.subtaskInput)">
                   +
                 </button>
               </div>
@@ -853,11 +779,7 @@ function closeTimeStats() {
                   <div class="added-subtask">
                     {{ idx }}.
                     {{ sub.title }}
-                    <button
-                      type="button"
-                      @click="removeSubtask(idx)"
-                      style="margin-left: 8px"
-                    >
+                    <button type="button" @click="removeSubtask(idx)" style="margin-left: 8px">
                       ×
                     </button>
                   </div>
@@ -871,49 +793,44 @@ function closeTimeStats() {
     </div>
   </transition>
   <transition name="modal-fade">
-    <div
-      v-if="showEditModal"
-      class="modal-overlay"
-      @click.self="closeEditModal"
-    >
+    <div v-if="showNyamaModals" class="modal-nyama">
+      <!-- пока что хардкод)) пока что)) -->
+      <button class="nyamaaa" @click="openMdToPdfPage">
+        <div class="icon"><img :src="holiColors" alt=""></div>
+        <p class="text">MD TO PDF</p>
+      </button>
+      <button class="nyamaaa" @click="router.push('/pdfReader')">
+        <div class="icon">📄</div>
+        <p class="text">PDF Reader</p>
+      </button>
+    </div>
+  </transition>
+  <transition name="modal-fade">
+    <div v-if="showEditModal" class="modal-overlay" @click.self="closeEditModal">
       <div class="modal-card">
         <button class="modal-close" @click="closeEditModal">×</button>
         <div class="modal-content">
           <h2 class="modal-title">Редактировать задачу</h2>
           <form class="add-task-form" @submit.prevent="saveEditTask">
-            <label
-              >Название задачи
-              <input
-                v-model="editTaskForm.title"
-                type="text"
-                required
-                maxlength="200"
-              />
+            <label>
+              Название задачи
+              <input v-model="editTaskForm.title" type="text" required maxlength="200" />
             </label>
-            <label
-              >Дата начала
+            <label>
+              Дата начала
               <input v-model="editTaskForm.start" type="date" name="start" />
             </label>
-            <label
-              >Дата окончания
+            <label>
+              Дата окончания
               <input v-model="editTaskForm.end" type="date" required />
             </label>
-            <label
-              >Цвет
-              <input
-                v-model="editTaskForm.color"
-                type="color"
-                class="color-fullwidth"
-              />
+            <label>
+              Цвет
+              <input v-model="editTaskForm.color" type="color" class="color-fullwidth" />
             </label>
-            <label
-              >Подзадачи
-              <input
-                v-model.number="editTaskForm.subtasks"
-                type="number"
-                min="0"
-                max="25"
-              />
+            <label>
+              Подзадачи
+              <input v-model.number="editTaskForm.subtasks" type="number" min="0" max="25" />
             </label>
             <!-- <label
               >Выполнено шагов
@@ -934,18 +851,14 @@ function closeTimeStats() {
     </div>
   </transition>
   <transition name="modal-fade">
-    <div
-      v-if="showDeleteConfirm"
-      class="modal-overlay"
-      @click.self="cancelDeleteTask"
-    >
+    <div v-if="showDeleteConfirm" class="modal-overlay" @click.self="cancelDeleteTask">
       <div class="modal-card delete-confirm-card">
         <div class="modal-content delete-confirm-content">
           <h2 class="modal-title">Удалить задачу?</h2>
           <div class="delete-confirm-text">
             Вы уверены, что хотите удалить задачу
-            <b>{{ taskToDelete?.title }}</b
-            >?
+            <b>{{ taskToDelete?.title }}</b>
+            ?
           </div>
           <div class="delete-confirm-btns">
             <button class="add-task-submit delete-btn" @click="doDeleteTask">
@@ -1019,6 +932,7 @@ function closeTimeStats() {
   align-items: center;
   justify-content: center;
 }
+
 .taks-types-word h3 {
   transform: rotate(270deg);
   font-size: 15px;
@@ -1027,6 +941,7 @@ function closeTimeStats() {
   color: #fff;
   opacity: 0.8;
 }
+
 .columns-container {
   width: 100%;
   /* height: 100%; */
@@ -1054,6 +969,37 @@ function closeTimeStats() {
 .column.active.today {
   opacity: 1;
   background-color: #2e26601f;
+}
+
+.modal-nyama {
+  width: 90%;
+  height: 800px;
+  position: absolute;
+  background-color: #2122297C;
+  border-radius: 50px;
+  display: grid;
+  padding: 20px;
+}
+
+.nyamaaa {
+  width: 200px;
+  height: 200px;
+  border-radius: 30px;
+  background-color: hwb(231.43 10.2% 56.86% / 0.82);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  justify-content: center;
+}
+
+.nyamaaa img {
+  width: 100px;
+}
+
+.nyamaaa p {
+  font-weight: 700;
+  font-size: larger;
 }
 
 .column-number {
@@ -1085,9 +1031,13 @@ function closeTimeStats() {
   cursor: move;
   user-select: none;
   border-radius: 14px;
-  transition: top 0.35s cubic-bezier(0.4, 2, 0.6, 1),
-    box-shadow 0.25s cubic-bezier(0.4, 2, 0.6, 1), background 0.25s,
-    transform 0.25s, z-index 0.25s, border-radius 0.2s;
+  transition:
+    top 0.35s cubic-bezier(0.4, 2, 0.6, 1),
+    box-shadow 0.25s cubic-bezier(0.4, 2, 0.6, 1),
+    background 0.25s,
+    transform 0.25s,
+    z-index 0.25s,
+    border-radius 0.2s;
   will-change: top, box-shadow, background, transform, border-radius;
   z-index: 1;
   box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.18);
@@ -1099,7 +1049,8 @@ function closeTimeStats() {
 }
 
 .task-item:hover {
-  box-shadow: 0 6px 24px 0 rgba(80, 200, 255, 0.18),
+  box-shadow:
+    0 6px 24px 0 rgba(80, 200, 255, 0.18),
     0 1.5px 6px 0 rgba(0, 0, 0, 0.1);
   filter: brightness(1.08);
   border-radius: 18px;
@@ -1209,7 +1160,10 @@ function closeTimeStats() {
   background: rgba(60, 70, 80, 0.55);
   border: 1px solid rgba(80, 90, 100, 0.18);
   box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.08);
-  transition: background 0.2s, border 0.2s, box-shadow 0.2s;
+  transition:
+    background 0.2s,
+    border 0.2s,
+    box-shadow 0.2s;
 }
 
 .segment.filled {
@@ -1238,6 +1192,7 @@ function closeTimeStats() {
   justify-content: center;
   /* background-color: #6e4aff; */
 }
+
 .header-center {
   flex: 0.9;
   display: flex;
@@ -1297,7 +1252,9 @@ function closeTimeStats() {
   margin-left: 12px;
   cursor: pointer;
   box-shadow: none;
-  transition: background 0.18s, color 0.18s;
+  transition:
+    background 0.18s,
+    color 0.18s;
   opacity: 0.82;
 }
 
@@ -1325,7 +1282,9 @@ function closeTimeStats() {
   z-index: 5;
   pointer-events: none;
   opacity: 1;
-  transition: top 0.35s cubic-bezier(0.4, 2, 0.6, 1), opacity 0.2s;
+  transition:
+    top 0.35s cubic-bezier(0.4, 2, 0.6, 1),
+    opacity 0.2s;
 }
 
 /* Modal styles */
@@ -1333,10 +1292,12 @@ function closeTimeStats() {
 .modal-fade-leave-active {
   transition: opacity 0.25s cubic-bezier(0.4, 2, 0.6, 1);
 }
+
 .modal-fade-enter-from,
 .modal-fade-leave-to {
   opacity: 0;
 }
+
 .modal-overlay {
   position: fixed;
   top: 0;
@@ -1350,6 +1311,7 @@ function closeTimeStats() {
   justify-content: center;
   animation: modal-bg-fade 0.25s;
 }
+
 .modal-overlay-2 {
   position: fixed;
   top: 0;
@@ -1370,6 +1332,7 @@ function closeTimeStats() {
   flex-direction: row;
   align-items: center;
 }
+
 .added-subtask {
   display: flex;
   flex-direction: row;
@@ -1414,6 +1377,7 @@ function closeTimeStats() {
   align-items: flex-start;
   animation: modal-pop 0.28s cubic-bezier(0.4, 2, 0.6, 1);
 }
+
 .modal-close {
   position: absolute;
   top: 18px;
@@ -1427,9 +1391,11 @@ function closeTimeStats() {
   transition: opacity 0.2s;
   z-index: 2;
 }
+
 .modal-close:hover {
   opacity: 1;
 }
+
 .modal-content {
   width: 100%;
   display: flex;
@@ -1437,14 +1403,17 @@ function closeTimeStats() {
   align-items: flex-start;
   gap: 18px;
 }
+
 .modal-row {
   display: flex;
   align-items: center;
   gap: 16px;
 }
+
 .modal-icon {
   font-size: 2.1rem;
 }
+
 .modal-title {
   font-size: 1.45rem;
   font-weight: 700;
@@ -1452,12 +1421,14 @@ function closeTimeStats() {
   letter-spacing: 0.01em;
   line-height: 1.2;
 }
+
 .modal-dates {
   font-size: 1.13rem;
   color: #b7c9d1;
   font-weight: 500;
   margin-left: 2px;
 }
+
 .modal-progress-bar-segments {
   display: flex;
   gap: 8px;
@@ -1471,47 +1442,58 @@ function closeTimeStats() {
   box-sizing: border-box;
   justify-content: stretch;
 }
+
 .modal-segment {
   flex: 1 1 0;
   min-width: 0;
   max-width: none;
   height: 14px;
   border-radius: 4px;
-  background: rgba(60, 70, 80, 0.55);
+  background: rgba(84 102 121 / 0.55);
   border: 1px solid rgba(80, 90, 100, 0.18);
   box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.08);
-  transition: background 0.2s, border 0.2s, box-shadow 0.2s;
+  transition:
+    background 0.2s,
+    border 0.2s,
+    box-shadow 0.2s;
 }
+
 .modal-segment.filled {
   background: var(--segment-color, #25636a);
   opacity: 0.98;
   border: 1.5px solid #fff3;
   box-shadow: 0 2px 6px 0 rgba(0, 0, 0, 0.1);
 }
+
 .modal-progress-label {
   font-size: 1.08rem;
   color: #b7c9d1;
   margin-top: 2px;
   margin-left: 2px;
 }
+
 @keyframes modal-pop {
   0% {
     transform: scale(0.92) translateY(30px);
     opacity: 0;
   }
+
   100% {
     transform: scale(1) translateY(0);
     opacity: 1;
   }
 }
+
 @keyframes modal-bg-fade {
   0% {
     opacity: 0;
   }
+
   100% {
     opacity: 1;
   }
 }
+
 .add-task-form {
   display: flex;
   flex-direction: column;
@@ -1519,6 +1501,7 @@ function closeTimeStats() {
   width: 100%;
   margin-top: 10px;
 }
+
 .add-task-form label {
   color: #b7c9d1;
   font-size: 1.04rem;
@@ -1528,6 +1511,7 @@ function closeTimeStats() {
   gap: 4px;
   width: 100%;
 }
+
 .add-task-form input[type="text"],
 .add-task-form input[type="date"],
 .add-task-form input[type="number"] {
@@ -1543,11 +1527,13 @@ function closeTimeStats() {
   outline: none;
   transition: border 0.2s;
 }
+
 .add-task-form input[type="text"]:focus,
 .add-task-form input[type="date"]:focus,
 .add-task-form input[type="number"]:focus {
   border: 1.5px solid #6e4aff;
 }
+
 .add-task-form input[type="color"].color-fullwidth {
   width: 100%;
   min-width: 100px;
@@ -1562,6 +1548,7 @@ function closeTimeStats() {
   cursor: pointer;
   display: block;
 }
+
 .add-task-submit {
   background: linear-gradient(90deg, #2e2660 60%, #18191f 100%);
   color: #fff;
@@ -1573,12 +1560,16 @@ function closeTimeStats() {
   /* margin-top: 10px; */
   cursor: pointer;
   box-shadow: 0 2px 8px 0 rgba(0, 0, 0, 0.1);
-  transition: background 0.2s, box-shadow 0.2s;
+  transition:
+    background 0.2s,
+    box-shadow 0.2s;
 }
+
 .add-task-submit:hover {
   background: linear-gradient(90deg, #6e4aff 60%, #2e2660 100%);
   box-shadow: 0 4px 16px 0 rgba(0, 0, 0, 0.16);
 }
+
 .logout-btn {
   background: none;
   color: #b7c9d1;
@@ -1590,15 +1581,20 @@ function closeTimeStats() {
   margin-left: 16px;
   cursor: pointer;
   box-shadow: none;
-  transition: background 0.18s, color 0.18s, border 0.18s;
+  transition:
+    background 0.18s,
+    color 0.18s,
+    border 0.18s;
   opacity: 0.82;
 }
+
 .logout-btn:hover {
   background: #232b33;
   color: #fff;
   border-color: #6e4aff;
   opacity: 1;
 }
+
 .task-dates-small {
   font-size: 0.88rem;
   opacity: 0.85;
@@ -1607,6 +1603,7 @@ function closeTimeStats() {
   text-overflow: ellipsis;
   max-width: 100%;
 }
+
 @media (max-width: 700px) {
   .task-down {
     flex-direction: column;
@@ -1614,6 +1611,7 @@ function closeTimeStats() {
     gap: 4px;
   }
 }
+
 .time-tracker-widget {
   flex: 0.5;
   display: flex;
@@ -1634,16 +1632,19 @@ function closeTimeStats() {
   opacity: 0.7;
   transition: opacity 0.18s;
 }
+
 .edit-task-btn:hover {
   opacity: 1;
   color: #6e4aff;
 }
+
 .form-error {
   color: #ff7875;
   font-size: 1rem;
   margin-top: 2px;
   min-height: 22px;
 }
+
 .steps-disabled {
   background: #23232b !important;
   color: #888 !important;
@@ -1651,6 +1652,7 @@ function closeTimeStats() {
   opacity: 0.7;
   cursor: not-allowed;
 }
+
 .delete-task-btn {
   background: none;
   border: none;
@@ -1661,16 +1663,19 @@ function closeTimeStats() {
   opacity: 0.7;
   transition: opacity 0.18s;
 }
+
 .delete-task-btn:hover {
   opacity: 1;
   color: #ff7875;
 }
+
 .delete-confirm-card {
   min-width: 340px;
   max-width: 96vw;
   padding: 32px 32px 24px 32px;
   align-items: center;
 }
+
 .checkbox-label {
   display: flex;
   align-items: center;
@@ -1703,11 +1708,13 @@ function closeTimeStats() {
   width: 100%;
   gap: 18px;
 }
+
 .delete-confirm-text {
   margin-bottom: 18px;
   font-size: 1.08rem;
   color: #b7c9d1;
 }
+
 .delete-confirm-btns {
   display: flex;
   flex-direction: row;
@@ -1716,27 +1723,36 @@ function closeTimeStats() {
   align-items: center;
   width: 100%;
 }
+
 .delete-btn {
   background: linear-gradient(90deg, #ff7875 60%, #d7263d 100%) !important;
   color: #fff !important;
   border: none;
   font-weight: 600;
   box-shadow: 0 2px 8px 0 rgba(255, 0, 0, 0.1);
-  transition: background 0.18s, box-shadow 0.18s;
+  transition:
+    background 0.18s,
+    box-shadow 0.18s;
 }
+
 .delete-btn:hover {
   background: linear-gradient(90deg, #d7263d 60%, #ff7875 100%) !important;
   color: #fff !important;
   box-shadow: 0 4px 16px 0 rgba(255, 0, 0, 0.16);
 }
+
 .cancel-btn {
   background: #232b33 !important;
   color: #b7c9d1 !important;
   border: 1.5px solid #2e2660;
   font-weight: 500;
   box-shadow: none;
-  transition: background 0.18s, color 0.18s, border 0.18s;
+  transition:
+    background 0.18s,
+    color 0.18s,
+    border 0.18s;
 }
+
 .cancel-btn:hover {
   background: #23232b !important;
   color: #fff !important;
