@@ -67,7 +67,7 @@ let mockCanvases: Canvas[] = [
 // Флаг для переключения между моками и реальным API
 const USE_MOCKS = true;
 
-const API_BASE_URL = "http://localhost:5005";
+const API_BASE_URL = "${window.location.protocol}//82.202.136.167:5005";
 
 // Вспомогательная функция для имитации задержки сети
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
