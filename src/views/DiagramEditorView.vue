@@ -1,7 +1,15 @@
 <script setup>
-import { ref, reactive, computed, onMounted, onUnmounted, nextTick, watch } from "vue";
+import { ref, reactive, computed, onMounted, onUnmounted, watch } from "vue";
 import { useRouter, useRoute } from "vue-router";
 import { getDiagram, updateDiagram } from "@/api/diagrams.js";
+
+// UUID compatible with HTTP (no secure context required)
+function genId() {
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    return (c === "x" ? r : (r & 0x3) | 0x8).toString(16);
+  });
+}
 
 const router = useRouter();
 const route = useRoute();
@@ -285,7 +293,7 @@ function addNode(type, pos) {
   const w = isGroup ? 260 : isDiamond ? 120 : 160;
   const h = isGroup ? 160 : isDiamond ? 80 : 80;
   const node = {
-    id: crypto.randomUUID(),
+    id: genId(),
     type,
     x: pos.x - w / 2,
     y: pos.y - h / 2,
@@ -307,7 +315,7 @@ function addNode(type, pos) {
 // ─── Edge ────────────────────────────────────────────────────────────────────
 function addEdge(fromId, toId) {
   const edge = {
-    id: crypto.randomUUID(),
+    id: genId(),
     fromId,
     toId,
     type: "arrow",

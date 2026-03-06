@@ -51,7 +51,10 @@ function openModal() {
 }
 
 function formatDate(str) {
-  return new Date(str).toLocaleDateString("ru-RU", {
+  if (!str) return "";
+  const d = new Date(str);
+  if (isNaN(d)) return "";
+  return d.toLocaleDateString("ru-RU", {
     day: "numeric",
     month: "short",
     year: "numeric",
