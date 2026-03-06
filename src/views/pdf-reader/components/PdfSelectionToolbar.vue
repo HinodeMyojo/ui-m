@@ -5,6 +5,7 @@
             @click="emit('highlight', color)"></button>
         <div class="pdf-tb-divider" style="height:18px;margin:0 2px;"></div>
         <button class="pdf-tb-btn pdf-tb-sm" title="Перевести" @click="emit('translate')">🌐</button>
+        <button class="pdf-tb-btn pdf-tb-sm" title="В словарь" @click="emit('add-to-vocab')">📖</button>
         <button class="pdf-tb-btn pdf-tb-sm" title="Заметка" @click="toggleNote">📝</button>
         <button class="pdf-tb-btn pdf-tb-sm" title="Копировать" @click="emit('copy')">📋</button>
         <button class="pdf-tb-btn pdf-tb-sm" title="Закрыть" @click="emit('dismiss')">✕</button>
@@ -31,7 +32,7 @@ const props = defineProps({
     existingNote: { type: String, default: '' },
 });
 
-const emit = defineEmits(['highlight', 'note', 'copy', 'translate', 'dismiss', 'save-note']);
+const emit = defineEmits(['highlight', 'note', 'copy', 'translate', 'add-to-vocab', 'dismiss', 'save-note']);
 
 const colors = ['yellow', 'green', 'blue', 'red'];
 const colorLabels = { yellow: 'Жёлтый', green: 'Зелёный', blue: 'Синий', red: 'Красный' };

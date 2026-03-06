@@ -74,6 +74,7 @@
                 @highlight="onHighlight"
                 @copy="onCopySelection"
                 @translate="onSelectionTranslate"
+                @add-to-vocab="onSelectionAddToVocab"
                 @save-note="onSaveNote"
                 @dismiss="hideSelToolbar" />
 
@@ -92,14 +93,16 @@
                 :analyzeResult="analyzeResult"
                 :isAnalyzing="isAnalyzing"
                 :analyzeError="analyzeError"
-                @close="transModal.visible = false"
+                :openVocabTab="transModal.openVocabTab"
+                @close="transModal.visible = false; transModal.openVocabTab = false"
                 @translate="onModalTranslate"
                 @analyze="w => analyzeText(w)"
                 @speak-original="speakText(transModal.originalText, sourceLang)"
                 @speak-translation="speakText(lastTranslation?.translated ?? '', lastTranslation?.detectedLang ?? targetLang)"
                 @save-note="onTranslationNote"
                 @highlight="onTranslationHighlight"
-                @change-langs="onChangeLangs" />
+                @change-langs="onChangeLangs"
+                @add-to-vocab="onModalAddToVocab" />
 
             <!-- Translation settings -->
             <PdfTranslationSettings
@@ -148,6 +151,7 @@ import { usePdfThumbnails }     from './pdf-reader/composables/usePdfThumbnails.
 import { usePdfAnnotations }    from './pdf-reader/composables/usePdfAnnotations.js';
 import { usePdfBookmarks }      from './pdf-reader/composables/usePdfBookmarks.js';
 import { usePdfTranslation }    from './pdf-reader/composables/usePdfTranslation.js';
+import { addVocabCard }         from '@/components/api.js';
 import PdfDropZone              from './pdf-reader/components/PdfDropZone.vue';
 import PdfToolbar               from './pdf-reader/components/PdfToolbar.vue';
 import PdfPageCanvas            from './pdf-reader/components/PdfPageCanvas.vue';
@@ -495,6 +499,31 @@ function showToast(msg) {
     toastMsg.value = msg;
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => { toastMsg.value = ''; }, 1800);
+}
+
+// ── Vocabulary ────────────────────────────────────────────────────────────
+async function onSelectionAddToVocab() {
+    if (!pendingSelection) return;
+    const word = pendingSelection.selectedText?.trim() ?? '';
+    hideSelToolbar();
+    // Open translate modal on vocab tab with word pre-filled
+    transModal.originalText = word;
+    transModal.existingNote = '';
+    transModal.pendingSelection = { ...pendingSelection };
+    transModal.visible = true;
+    // Kick off translation to pre-fill vocab translation field
+    await translate(word, sourceLang.value, targetLang.value);
+    // Signal modal to switch to vocab tab — done via a small reactive flag
+    transModal.openVocabTab = true;
+}
+
+async function onModalAddToVocab(card) {
+    try {
+        await addVocabCard(card);
+        showToast('📖 Добавлено в словарь!');
+    } catch {
+        showToast('Ошибка при добавлении в словарь');
+    }
 }
 
 // ── Keyboard shortcuts ────────────────────────────────────────────────────

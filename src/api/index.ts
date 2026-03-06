@@ -67,7 +67,7 @@ let mockCanvases: Canvas[] = [
 // Флаг для переключения между моками и реальным API
 const USE_MOCKS = true;
 
-const API_BASE_URL = "http://82.202.136.167:5005/api";
+const API_BASE_URL = "http://localhost:5005";
 
 // Вспомогательная функция для имитации задержки сети
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -75,7 +75,7 @@ const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 // Вспомогательная функция для API запросов
 async function apiRequest<T>(
   endpoint: string,
-  options?: RequestInit
+  options?: RequestInit,
 ): Promise<T> {
   if (USE_MOCKS) {
     // Имитируем задержку сети
@@ -108,7 +108,7 @@ export async function getGroups(): Promise<SkillGroup[]> {
 }
 
 export async function createGroup(
-  data: Omit<SkillGroup, "id">
+  data: Omit<SkillGroup, "id">,
 ): Promise<{ id: string }> {
   if (USE_MOCKS) {
     await delay(300);
@@ -122,7 +122,7 @@ export async function createGroup(
 
 export async function updateGroup(
   id: string,
-  data: Partial<SkillGroup>
+  data: Partial<SkillGroup>,
 ): Promise<void> {
   if (USE_MOCKS) {
     await delay(300);
@@ -164,13 +164,13 @@ export async function getSkills(params?: {
       filtered = filtered.filter(
         (s) =>
           s.name.toLowerCase().includes(query) ||
-          s.goalDescription?.toLowerCase().includes(query)
+          s.goalDescription?.toLowerCase().includes(query),
       );
     }
 
     if (params?.tags && params.tags.length > 0) {
       filtered = filtered.filter((s) =>
-        params.tags!.some((tag) => s.tags.includes(tag))
+        params.tags!.some((tag) => s.tags.includes(tag)),
       );
     }
 
@@ -186,7 +186,7 @@ export async function getSkills(params?: {
 }
 
 export async function getSkill(
-  id: string
+  id: string,
 ): Promise<Skill & { parts: SkillPart[] }> {
   if (USE_MOCKS) {
     await delay(200);
@@ -204,7 +204,7 @@ export async function getSkill(
 }
 
 export async function createSkill(
-  data: CreateSkillRequest
+  data: CreateSkillRequest,
 ): Promise<{ id: string }> {
   if (USE_MOCKS) {
     await delay(300);
@@ -218,7 +218,7 @@ export async function createSkill(
 
 export async function updateSkill(
   id: string,
-  data: UpdateSkillRequest
+  data: UpdateSkillRequest,
 ): Promise<void> {
   if (USE_MOCKS) {
     await delay(300);
@@ -244,7 +244,7 @@ export async function deleteSkill(id: string): Promise<void> {
 
 export async function createSkillPart(
   skillId: string,
-  data: Omit<CreateSkillPartRequest, "skillId">
+  data: Omit<CreateSkillPartRequest, "skillId">,
 ): Promise<{ id: string }> {
   if (USE_MOCKS) {
     await delay(300);
@@ -259,7 +259,7 @@ export async function createSkillPart(
 export async function updateSkillPart(
   skillId: string,
   partId: string,
-  data: Partial<SkillPart>
+  data: Partial<SkillPart>,
 ): Promise<void> {
   if (USE_MOCKS) {
     await delay(300);
@@ -273,7 +273,7 @@ export async function updateSkillPart(
 
 export async function deleteSkillPart(
   skillId: string,
-  partId: string
+  partId: string,
 ): Promise<void> {
   if (USE_MOCKS) {
     await delay(300);
@@ -286,7 +286,7 @@ export async function deleteSkillPart(
 
 export async function setPartStatus(
   partId: string,
-  status: "not-started" | "in-progress" | "done"
+  status: "not-started" | "in-progress" | "done",
 ): Promise<void> {
   if (USE_MOCKS) {
     await delay(200);
@@ -313,13 +313,13 @@ export async function getProjects(params?: {
       filtered = filtered.filter(
         (p) =>
           p.name.toLowerCase().includes(query) ||
-          p.description?.toLowerCase().includes(query)
+          p.description?.toLowerCase().includes(query),
       );
     }
 
     if (params?.skillId) {
       filtered = filtered.filter((p) =>
-        p.skills?.some((s) => s.id === params.skillId)
+        p.skills?.some((s) => s.id === params.skillId),
       );
     }
 
@@ -345,7 +345,7 @@ export async function getProject(id: string): Promise<PetProject> {
 }
 
 export async function createProject(
-  data: CreatePetProjectRequest
+  data: CreatePetProjectRequest,
 ): Promise<{ id: string }> {
   if (USE_MOCKS) {
     await delay(300);
@@ -359,7 +359,7 @@ export async function createProject(
 
 export async function updateProject(
   id: string,
-  data: Partial<PetProject>
+  data: Partial<PetProject>,
 ): Promise<void> {
   if (USE_MOCKS) {
     await delay(300);
@@ -383,7 +383,7 @@ export async function deleteProject(id: string): Promise<void> {
 
 export async function attachSkillsToProject(
   projectId: string,
-  data: AttachSkillsRequest
+  data: AttachSkillsRequest,
 ): Promise<void> {
   if (USE_MOCKS) {
     await delay(300);
@@ -397,7 +397,7 @@ export async function attachSkillsToProject(
 
 export async function attachPartsToProject(
   projectId: string,
-  data: AttachPartsRequest
+  data: AttachPartsRequest,
 ): Promise<void> {
   if (USE_MOCKS) {
     await delay(300);
@@ -411,7 +411,7 @@ export async function attachPartsToProject(
 
 export async function detachSkillFromProject(
   projectId: string,
-  skillId: string
+  skillId: string,
 ): Promise<void> {
   if (USE_MOCKS) {
     await delay(300);
@@ -425,7 +425,7 @@ export async function detachSkillFromProject(
 
 export async function detachPartFromProject(
   projectId: string,
-  partId: string
+  partId: string,
 ): Promise<void> {
   if (USE_MOCKS) {
     await delay(300);
@@ -449,7 +449,7 @@ export async function getSessions(params: {
     await delay(200);
     return mockSessions.filter(
       (s) =>
-        s.entityType === params.entityType && s.entityId === params.entityId
+        s.entityType === params.entityType && s.entityId === params.entityId,
     );
   }
 
@@ -522,7 +522,7 @@ export async function getCanvas(id: string): Promise<Canvas> {
 }
 
 export async function createCanvas(
-  data: CreateCanvasRequest
+  data: CreateCanvasRequest,
 ): Promise<{ id: string }> {
   if (USE_MOCKS) {
     await delay(300);
@@ -550,7 +550,7 @@ export async function createCanvas(
 
 export async function updateCanvas(
   id: string,
-  data: UpdateCanvasRequest
+  data: UpdateCanvasRequest,
 ): Promise<void> {
   if (USE_MOCKS) {
     await delay(300);

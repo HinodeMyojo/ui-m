@@ -5,6 +5,7 @@ import SkillsView from "../views/SkillsView.vue";
 import CanvasView from "../views/CanvasView.vue";
 import MdToMdfView from "@/views/MdToMdfView.vue";
 import PdfReaderView from "@/views/PdfReaderView.vue";
+import VocabularyView from "@/views/VocabularyView.vue";
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -38,6 +39,11 @@ const router = createRouter({
       path: "/canvas",
       name: "CanvasList",
       component: CanvasView,
+    },
+    {
+      path: "/vocabulary",
+      name: "Vocabulary",
+      component: VocabularyView,
     },
     {
       path: "/canvas/:id",
