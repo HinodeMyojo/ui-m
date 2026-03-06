@@ -16,11 +16,12 @@ import type {
 } from "../types";
 
 import type {
-  Canvas,
-  CanvasElement,
-  CreateCanvasRequest,
-  UpdateCanvasRequest,
-} from "../types/canvas";
+  Diagram,
+  DiagramNode,
+  DiagramEdge,
+  CreateDiagramRequest,
+  UpdateDiagramRequest,
+} from "../types/diagram";
 
 import {
   mockGroups,
@@ -36,36 +37,8 @@ import {
   getProjectById,
 } from "../mocks";
 
-// Моки для Canvas
-let mockCanvases: Canvas[] = [
-  {
-    id: "cv-1",
-    name: "Архитектура микросервисов",
-    description: "Схема взаимодействия сервисов",
-    elements: [],
-    zoom: 1,
-    panX: 0,
-    panY: 0,
-    backgroundColor: "#1a1b26",
-    createdAt: "2025-12-01T10:00:00Z",
-    updatedAt: "2025-12-15T14:30:00Z",
-  },
-  {
-    id: "cv-2",
-    name: "Roadmap обучения",
-    description: "План изучения технологий",
-    elements: [],
-    zoom: 1,
-    panX: 0,
-    panY: 0,
-    backgroundColor: "#1a1b26",
-    createdAt: "2025-12-10T09:00:00Z",
-    updatedAt: "2025-12-18T16:00:00Z",
-  },
-];
-
 // Флаг для переключения между моками и реальным API
-const USE_MOCKS = true;
+const USE_MOCKS = false;
 
 const API_BASE_URL = "${window.location.protocol}//82.202.136.167:5005";
 
@@ -501,82 +474,32 @@ export async function getSummary(params: {
   return apiRequest<SkillsSummary>(`/skills/summary?${queryParams}`);
 }
 
-// === CANVAS API ===
+// === DIAGRAM API ===
 
-export async function getCanvases(): Promise<Canvas[]> {
-  if (USE_MOCKS) {
-    await delay(250);
-    return mockCanvases;
-  }
-  return apiRequest<Canvas[]>("/canvas");
+export async function getDiagrams(): Promise<Diagram[]> {
+  return apiRequest<Diagram[]>("/diagrams");
 }
 
-export async function getCanvas(id: string): Promise<Canvas> {
-  if (USE_MOCKS) {
-    await delay(200);
-    const canvas = mockCanvases.find((c) => c.id === id);
-    if (!canvas) throw new Error("Canvas not found");
-    return canvas;
-  }
-  return apiRequest<Canvas>(`/canvas/${id}`);
+export async function getDiagram(id: string): Promise<Diagram> {
+  return apiRequest<Diagram>(`/diagrams/${id}`);
 }
 
-export async function createCanvas(
-  data: CreateCanvasRequest,
-): Promise<{ id: string }> {
-  if (USE_MOCKS) {
-    await delay(300);
-    const newId = `cv-${Date.now()}`;
-    const newCanvas: Canvas = {
-      id: newId,
-      name: data.name,
-      description: data.description,
-      elements: [],
-      zoom: 1,
-      panX: 0,
-      panY: 0,
-      backgroundColor: "#1a1b26",
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-    mockCanvases.push(newCanvas);
-    return { id: newId };
-  }
-  return apiRequest<{ id: string }>("/canvas", {
+export async function createDiagram(data: CreateDiagramRequest): Promise<{ id: string }> {
+  return apiRequest<{ id: string }>("/diagrams", {
     method: "POST",
     body: JSON.stringify(data),
   });
 }
 
-export async function updateCanvas(
-  id: string,
-  data: UpdateCanvasRequest,
-): Promise<void> {
-  if (USE_MOCKS) {
-    await delay(300);
-    const index = mockCanvases.findIndex((c) => c.id === id);
-    if (index !== -1) {
-      mockCanvases[index] = {
-        ...mockCanvases[index],
-        ...data,
-        updatedAt: new Date().toISOString(),
-      };
-    }
-    return;
-  }
-  return apiRequest<void>(`/canvas/${id}`, {
+export async function updateDiagram(id: string, data: UpdateDiagramRequest): Promise<void> {
+  return apiRequest<void>(`/diagrams/${id}`, {
     method: "PUT",
     body: JSON.stringify(data),
   });
 }
 
-export async function deleteCanvas(id: string): Promise<void> {
-  if (USE_MOCKS) {
-    await delay(300);
-    mockCanvases = mockCanvases.filter((c) => c.id !== id);
-    return;
-  }
-  return apiRequest<void>(`/canvas/${id}`, {
+export async function deleteDiagram(id: string): Promise<void> {
+  return apiRequest<void>(`/diagrams/${id}`, {
     method: "DELETE",
   });
 }

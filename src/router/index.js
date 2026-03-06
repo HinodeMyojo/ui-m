@@ -2,7 +2,6 @@ import { createRouter, createWebHistory } from "vue-router";
 import HomeView from "../views/HomeView.vue";
 import LoginView from "../views/LoginView.vue";
 import SkillsView from "../views/SkillsView.vue";
-import CanvasView from "../views/CanvasView.vue";
 import MdToMdfView from "@/views/MdToMdfView.vue";
 import PdfReaderView from "@/views/PdfReaderView.vue";
 import VocabularyView from "@/views/VocabularyView.vue";
@@ -36,19 +35,19 @@ const router = createRouter({
       component: PdfReaderView,
     },
     {
-      path: "/canvas",
-      name: "CanvasList",
-      component: CanvasView,
-    },
-    {
       path: "/vocabulary",
       name: "Vocabulary",
       component: VocabularyView,
     },
     {
-      path: "/canvas/:id",
-      name: "CanvasEditor",
-      component: () => import("../components/canvas/CanvasEditor.vue"),
+      path: "/diagrams",
+      name: "Diagrams",
+      component: () => import("../views/DiagramsView.vue"),
+    },
+    {
+      path: "/diagrams/:id",
+      name: "DiagramEditor",
+      component: () => import("../views/DiagramEditorView.vue"),
     },
   ],
 });

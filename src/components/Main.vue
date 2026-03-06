@@ -601,9 +601,9 @@ function closeTimeStats() {
       </div>
     </div>
     <div class="body">
-      <div class="taks-types-main-menu" @click="router.push('/canvas')" title="Открыть Canvas">
+      <div class="taks-types-main-menu" @click="router.push('/diagrams')" title="Открыть Диаграммы">
         <div class="taks-types-word">
-          <h3>Canvas</h3>
+          <h3>Диаграммы</h3>
         </div>
       </div>
       <div class="columns-container" ref="calendarRef" @dragover="handleDragOver" @drop="handleDrop">
@@ -816,10 +816,9 @@ function closeTimeStats() {
           <div class="icon"><img :src="gifLantern" alt=""></div>
           <p class="text">PDF Reader</p>
         </button>
-        <button class="nyamaaa nyamaaa-soon" disabled title="Скоро">
+        <button class="nyamaaa" @click="router.push('/diagrams')">
           <div class="icon">🗺️</div>
-          <p class="text">Архитектор</p>
-          <span class="nyama-badge">Скоро</span>
+          <p class="text">Диаграммы</p>
         </button>
         <button class="nyamaaa" @click="router.push('/vocabulary')">
           <div class="icon">🗣️</div>
