@@ -1,6 +1,6 @@
 import router from "@/router";
 
-const API_BASE_URL = `http://localhost:5005`;
+const API_BASE_URL = `${window.location.protocol}//82.202.136.167:5005`;
 
 async function authorizedFetch(url, options = {}) {
   const token = localStorage.getItem("token");
