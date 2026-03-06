@@ -26,6 +26,7 @@
                 <div class="pdf-tm-tabs">
                     <button class="pdf-tm-tab" :class="{ active: activeTab === 'translate' }" @click="activeTab = 'translate'">Перевод</button>
                     <button class="pdf-tm-tab" :class="{ active: activeTab === 'analyze' }" @click="onTabAnalyze">Разбор</button>
+                    <button class="pdf-tm-tab" :class="{ active: activeTab === 'vocab' }" @click="onTabVocab">📖 В словарь</button>
                 </div>
 
                 <!-- ── TRANSLATE TAB ── -->
@@ -81,6 +82,55 @@
                     </div>
                 </template>
 
+                <!-- ── VOCAB TAB ── -->
+                <template v-else-if="activeTab === 'vocab'">
+                    <div class="pdf-tm-section">
+                        <div class="pdf-tm-section-header">
+                            <span class="pdf-tm-label">Слово</span>
+                            <span v-if="vocabLookupLoading" style="font-size:11px;color:#6b7a9a;">⏳ ищем…</span>
+                            <span v-else-if="vocabLookupDone" style="font-size:11px;color:#73d13d;font-weight:600;">✓ найдено</span>
+                        </div>
+                        <input class="pdf-tm-vocab-input" v-model="vocabWord" placeholder="Слово (EN)" />
+                    </div>
+
+                    <!-- All POS groups + translation chips -->
+                    <div v-if="vocabDefs.length" class="pdf-tm-section pdf-tm-vocab-defs">
+                        <div v-for="def in vocabDefs" :key="def.pos + def.text" class="vocab-def-group">
+                            <span class="vocab-def-pos">{{ def.pos }}</span>
+                            <span v-if="def.ts" class="vocab-def-ts">[{{ def.ts }}]</span>
+                            <div class="vocab-chips">
+                                <button
+                                    v-for="tr in def.tr"
+                                    :key="tr.text"
+                                    type="button"
+                                    :class="['vocab-chip', vocabTranslation === tr.text && 'active']"
+                                    @click="pickVocabTranslation(def, tr)"
+                                >{{ tr.text }}</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="pdf-tm-section">
+                        <div class="pdf-tm-section-header"><span class="pdf-tm-label">Перевод</span></div>
+                        <input class="pdf-tm-vocab-input" v-model="vocabTranslation" placeholder="Перевод (RU)" />
+                    </div>
+                    <div class="pdf-tm-section">
+                        <div class="pdf-tm-section-header"><span class="pdf-tm-label">Транскрипция</span></div>
+                        <input class="pdf-tm-vocab-input" v-model="vocabTranscription" placeholder="напр. ɪˈfem(ə)rəl" />
+                    </div>
+                    <div class="pdf-tm-section">
+                        <div class="pdf-tm-section-header"><span class="pdf-tm-label">Часть речи</span></div>
+                        <input class="pdf-tm-vocab-input" v-model="vocabPos" placeholder="noun / verb / adjective…" />
+                    </div>
+                    <div v-if="vocabSaved" class="pdf-tm-vocab-success">✓ Добавлено в словарь!</div>
+                    <div v-if="vocabError" class="pdf-tm-vocab-error">⚠ {{ vocabError }}</div>
+                    <div class="pdf-tm-actions" style="justify-content:flex-end;">
+                        <button class="pdf-tm-save-btn" :disabled="vocabSaving || !vocabWord || !vocabTranslation" @click="onSaveToVocab">
+                            {{ vocabSaving ? '…' : '📖 Добавить в словарь' }}
+                        </button>
+                    </div>
+                </template>
+
                 <!-- ── ANALYZE TAB ── -->
                 <template v-else>
                     <div class="pdf-tm-section pdf-tm-analyze-scroll">
@@ -111,6 +161,7 @@
 
 <script setup>
 import { ref, computed, watch } from 'vue';
+import { lookupVocabWord } from '@/components/api.js';
 
 const props = defineProps({
     visible: Boolean,
@@ -126,11 +177,12 @@ const props = defineProps({
     analyzeResult: { type: String, default: '' },
     isAnalyzing: Boolean,
     analyzeError: { type: String, default: '' },
+    openVocabTab: { type: Boolean, default: false },
 });
 
 const emit = defineEmits([
     'close', 'translate', 'analyze', 'speak-original', 'speak-translation',
-    'save-note', 'highlight', 'change-langs',
+    'save-note', 'highlight', 'change-langs', 'add-to-vocab',
 ]);
 
 const colors = ['yellow', 'green', 'blue', 'red'];
@@ -139,13 +191,108 @@ const colorLabels = { yellow: 'Жёлтый', green: 'Зелёный', blue: 'С
 const activeTab = ref('translate');
 const noteText = ref('');
 
+// Vocab tab state
+const vocabWord = ref('');
+const vocabTranslation = ref('');
+const vocabTranscription = ref('');
+const vocabPos = ref('');
+const vocabSaving = ref(false);
+const vocabSaved = ref(false);
+const vocabError = ref('');
+const vocabLookupLoading = ref(false);
+const vocabLookupDone = ref(false);
+const vocabDefs = ref([]); // full def[] from Yandex
+
+let vocabLookupTimer = null;
+watch(vocabWord, (val) => {
+    clearTimeout(vocabLookupTimer);
+    vocabLookupDone.value = false;
+    vocabDefs.value = [];
+    const trimmed = val.trim();
+    if (trimmed.length < 2) return;
+    vocabLookupTimer = setTimeout(() => doVocabLookup(trimmed), 600);
+});
+
+async function doVocabLookup(word) {
+    vocabLookupLoading.value = true;
+    vocabLookupDone.value = false;
+    vocabDefs.value = [];
+    try {
+        const data = await lookupVocabWord(word);
+        if (!data?.def?.length) return;
+        vocabDefs.value = data.def;
+        const def = data.def[0];
+        const tr = def.tr?.[0];
+        if (tr) {
+            if (!vocabTranslation.value) vocabTranslation.value = tr.text ?? '';
+            if (!vocabPos.value) vocabPos.value = def.pos ?? '';
+            if (!vocabTranscription.value) vocabTranscription.value = def.ts ?? '';
+            vocabLookupDone.value = true;
+        }
+    } catch { /* silent */ } finally {
+        vocabLookupLoading.value = false;
+    }
+}
+
+function pickVocabTranslation(def, tr) {
+    vocabTranslation.value = tr.text;
+    vocabPos.value = def.pos ?? vocabPos.value;
+    if (def.ts) vocabTranscription.value = def.ts;
+}
+
 watch(() => props.existingNote, (v) => { noteText.value = v ?? ''; }, { immediate: true });
 watch(() => props.visible, (v) => {
     if (v) {
         noteText.value = props.existingNote ?? '';
-        activeTab.value = 'translate';
+        activeTab.value = props.openVocabTab ? 'vocab' : 'translate';
+        vocabSaved.value = false;
+        vocabError.value = '';
+        if (props.openVocabTab) {
+            vocabWord.value = props.originalText?.trim() ?? '';
+            vocabTranslation.value = props.translatedText?.trim() ?? '';
+        }
     }
 });
+
+watch(() => props.openVocabTab, (v) => {
+    if (v && props.visible) {
+        activeTab.value = 'vocab';
+        vocabWord.value = props.originalText?.trim() ?? '';
+        vocabTranslation.value = props.translatedText?.trim() ?? '';
+    }
+});
+
+// Pre-fill vocab fields when switching to vocab tab
+function onTabVocab() {
+    activeTab.value = 'vocab';
+    vocabSaved.value = false;
+    vocabError.value = '';
+    if (!vocabWord.value) vocabWord.value = props.originalText?.trim() ?? '';
+    if (!vocabTranslation.value) vocabTranslation.value = props.translatedText?.trim() ?? '';
+}
+
+async function onSaveToVocab() {
+    vocabSaving.value = true;
+    vocabSaved.value = false;
+    vocabError.value = '';
+    try {
+        await emit('add-to-vocab', {
+            word: vocabWord.value.trim(),
+            translation: vocabTranslation.value.trim(),
+            transcription: vocabTranscription.value.trim(),
+            partOfSpeech: vocabPos.value.trim(),
+        });
+        vocabSaved.value = true;
+        vocabWord.value = '';
+        vocabTranslation.value = '';
+        vocabTranscription.value = '';
+        vocabPos.value = '';
+    } catch (e) {
+        vocabError.value = e?.message ?? 'Ошибка';
+    } finally {
+        vocabSaving.value = false;
+    }
+}
 
 function onChangeSrc(e) { emit('change-langs', e.target.value, props.targetLang); }
 function onChangeTgt(e) { emit('change-langs', props.sourceLang, e.target.value); }
@@ -261,3 +408,67 @@ const analyzeHtml = computed(() => {
     return out.join('');
 });
 </script>
+
+<style scoped>
+.pdf-tm-vocab-input {
+    width: 100%;
+    box-sizing: border-box;
+    background: rgba(23, 103, 253, 0.06);
+    border: 1px solid rgba(23, 103, 253, 0.2);
+    border-radius: 8px;
+    padding: 8px 12px;
+    color: #e8eaf0;
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.2s;
+}
+.pdf-tm-vocab-input:focus { border-color: rgba(23, 103, 253, 0.5); }
+.pdf-tm-vocab-success {
+    margin: 0 16px 4px;
+    padding: 8px 12px;
+    background: rgba(82, 196, 26, 0.15);
+    border: 1px solid rgba(82, 196, 26, 0.35);
+    border-radius: 8px;
+    color: #73d13d;
+    font-size: 13px;
+    font-weight: 600;
+}
+.pdf-tm-vocab-error {
+    margin: 0 16px 4px;
+    padding: 8px 12px;
+    background: rgba(255, 77, 79, 0.12);
+    border: 1px solid rgba(255, 77, 79, 0.3);
+    border-radius: 8px;
+    color: #ff7875;
+    font-size: 13px;
+}
+
+/* Vocab lookup def groups */
+.pdf-tm-vocab-defs {
+    background: rgba(23, 103, 253, 0.06);
+    border: 1px solid rgba(23, 103, 253, 0.2) !important;
+    border-radius: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.vocab-def-group { display: flex; flex-direction: column; gap: 4px; }
+.vocab-def-pos {
+    font-size: 10px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.8px; color: #9b7fff;
+}
+.vocab-def-ts { font-size: 10px; color: #6b7a9a; margin-left: 6px; }
+.vocab-chips { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 2px; }
+.vocab-chip {
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 20px;
+    padding: 2px 10px;
+    font-size: 12px;
+    color: #c8d4f0;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+.vocab-chip:hover { background: rgba(23, 103, 253, 0.2); border-color: rgba(23, 103, 253, 0.4); color: #fff; }
+.vocab-chip.active { background: rgba(23, 103, 253, 0.3); border-color: rgba(23, 103, 253, 0.6); color: #fff; font-weight: 600; }
+</style>

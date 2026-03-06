@@ -85,7 +85,56 @@
              @click.stop>
             <button class="note-tooltip-btn" @click="saveNote">📌 Сохранить заметку</button>
             <button class="note-tooltip-btn note-tooltip-ai-btn" @click="openAiWithSelection">🤖 Спросить Claude</button>
+            <button class="note-tooltip-btn" @click="openVocabFromSelection">📖 В словарь</button>
             <button class="note-tooltip-close" @click="noteTooltipVisible = false">✕</button>
+        </div>
+
+        <!-- Vocab quick-add modal -->
+        <div v-if="vocabModalOpen" class="modal-overlay" @click.self="vocabModalOpen = false">
+            <div class="modal-card" @click.stop>
+                <button class="modal-close" @click="vocabModalOpen = false">×</button>
+                <h2 class="modal-title">
+                    Добавить в словарь
+                    <span v-if="vocabLookupLoading" style="font-size:12px;font-weight:400;color:#6b7a9a;margin-left:8px;">⏳ ищем…</span>
+                </h2>
+                <div class="modal-form">
+                    <label>
+                        <span class="label-text">Слово (EN)</span>
+                        <input v-model="vocabForm.word" class="form-input" placeholder="word" />
+                    </label>
+                    <!-- All POS groups + translation chips -->
+                    <div v-if="vocabDefs.length" class="vocab-lookup-defs">
+                        <div v-for="def in vocabDefs" :key="def.pos + def.text" class="vocab-lookup-group">
+                            <span class="vocab-lookup-pos">{{ def.pos }}</span>
+                            <span v-if="def.ts" class="vocab-lookup-ts">[{{ def.ts }}]</span>
+                            <div class="vocab-lookup-chips">
+                                <button
+                                    v-for="tr in def.tr"
+                                    :key="tr.text"
+                                    type="button"
+                                    :class="['vocab-lookup-chip', vocabForm.translation === tr.text && 'active']"
+                                    @click="pickVocabChip(def, tr)"
+                                >{{ tr.text }}</button>
+                            </div>
+                        </div>
+                    </div>
+                    <label>
+                        <span class="label-text">Перевод (RU)</span>
+                        <input v-model="vocabForm.translation" class="form-input" placeholder="перевод" />
+                    </label>
+                    <label>
+                        <span class="label-text">Часть речи</span>
+                        <input v-model="vocabForm.partOfSpeech" class="form-input" placeholder="noun / verb…" />
+                    </label>
+                    <div v-if="vocabSaveMsg" :class="vocabSaveError ? 'vocab-msg-error' : 'vocab-msg-ok'">{{ vocabSaveMsg }}</div>
+                    <div class="modal-actions">
+                        <button class="btn-secondary" type="button" @click="vocabModalOpen = false">Отмена</button>
+                        <button class="btn-primary" type="button" :disabled="vocabSaving || !vocabForm.word" @click="submitVocab">
+                            {{ vocabSaving ? '…' : 'Добавить' }}
+                        </button>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <!-- AI Key Modal + Chat Panel -->
@@ -180,8 +229,9 @@
 </template>
 
 <script setup>
-import { watch, nextTick } from 'vue';
+import { watch, nextTick, ref } from 'vue';
 import { useRouter } from 'vue-router';
+import { addVocabCard, lookupVocabWord } from '@/components/api.js';
 const router = useRouter();
 import { useViewState }       from './md-editor/composables/useViewState.js';
 import { useMarkdownParser }  from './md-editor/composables/useMarkdownParser.js';
@@ -246,6 +296,70 @@ function openAiWithSelection() {
     if (sel?.text) setContextFromSelection(sel.text);
 }
 
+// ── Vocabulary ────────────────────────────────────────────────────────────
+const vocabModalOpen = ref(false);
+const vocabForm = ref({ word: '', translation: '', partOfSpeech: '' });
+const vocabSaving = ref(false);
+const vocabSaveMsg = ref('');
+const vocabSaveError = ref(false);
+const vocabLookupLoading = ref(false);
+const vocabDefs = ref([]);
+
+let vocabLookupTimer = null;
+
+function openVocabFromSelection() {
+    const sel = pendingSelection.value;
+    noteTooltipVisible.value = false;
+    const word = sel?.text?.trim() ?? '';
+    vocabForm.value = { word, translation: '', partOfSpeech: '' };
+    vocabSaveMsg.value = '';
+    vocabSaveError.value = false;
+    vocabDefs.value = [];
+    vocabModalOpen.value = true;
+    if (word.length >= 2) {
+        clearTimeout(vocabLookupTimer);
+        vocabLookupTimer = setTimeout(() => doVocabLookup(word), 300);
+    }
+}
+
+async function doVocabLookup(word) {
+    vocabLookupLoading.value = true;
+    vocabDefs.value = [];
+    try {
+        const data = await lookupVocabWord(word);
+        if (!data?.def?.length) return;
+        vocabDefs.value = data.def;
+        const def = data.def[0];
+        const tr = def.tr?.[0];
+        if (tr && !vocabForm.value.translation) vocabForm.value.translation = tr.text ?? '';
+        if (def.pos && !vocabForm.value.partOfSpeech) vocabForm.value.partOfSpeech = def.pos;
+    } catch { /* silent */ } finally {
+        vocabLookupLoading.value = false;
+    }
+}
+
+function pickVocabChip(def, tr) {
+    vocabForm.value.translation = tr.text;
+    if (def.pos) vocabForm.value.partOfSpeech = def.pos;
+}
+
+async function submitVocab() {
+    if (!vocabForm.value.word) return;
+    vocabSaving.value = true;
+    vocabSaveMsg.value = '';
+    vocabSaveError.value = false;
+    try {
+        await addVocabCard({ ...vocabForm.value });
+        vocabSaveMsg.value = '✓ Добавлено в словарь!';
+        setTimeout(() => { vocabModalOpen.value = false; }, 1000);
+    } catch {
+        vocabSaveMsg.value = 'Ошибка при добавлении';
+        vocabSaveError.value = true;
+    } finally {
+        vocabSaving.value = false;
+    }
+}
+
 // ── Keyboard shortcuts ──────────────────────────────────────────────────────
 function onFullscreenKeydown(e) {
     if (e.ctrlKey && e.key === 'f') { e.preventDefault(); openSearch(); return; }
@@ -283,6 +397,66 @@ watch(fullscreenHtml, () => {
 *::before,
 *::after {
     box-sizing: border-box;
+}
+
+/* Vocab lookup chips */
+.vocab-lookup-defs {
+    background: rgba(23,103,253,0.06);
+    border: 1px solid rgba(23,103,253,0.2);
+    border-radius: 10px;
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.vocab-lookup-group { display: flex; flex-direction: column; gap: 4px; }
+.vocab-lookup-pos {
+    font-size: 10px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.8px; color: #9b7fff;
+}
+.vocab-lookup-ts { font-size: 10px; color: #6b7a9a; margin-left: 6px; }
+.vocab-lookup-chips { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 2px; }
+.vocab-lookup-chip {
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 20px;
+    padding: 2px 10px;
+    font-size: 12px;
+    color: #c8d4f0;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+.vocab-lookup-chip:hover { background: rgba(23,103,253,0.2); border-color: rgba(23,103,253,0.4); color: #fff; }
+.vocab-lookup-chip.active { background: rgba(23,103,253,0.3); border-color: rgba(23,103,253,0.6); color: #fff; font-weight: 600; }
+
+.vocab-msg-ok {
+    padding: 8px 12px;
+    background: rgba(82, 196, 26, 0.15);
+    border: 1px solid rgba(82, 196, 26, 0.35);
+    border-radius: 8px;
+    color: #73d13d;
+    font-size: 13px;
+    font-weight: 600;
+}
+.vocab-msg-error {
+    padding: 8px 12px;
+    background: rgba(255, 77, 79, 0.12);
+    border: 1px solid rgba(255, 77, 79, 0.3);
+    border-radius: 8px;
+    color: #ff7875;
+    font-size: 13px;
+}
+.btn-primary {
+    background: linear-gradient(135deg, #1767fd, #6e4aff);
+    border: none; border-radius: 10px; padding: 10px 20px;
+    color: #fff; font-size: 14px; font-weight: 600; cursor: pointer;
+    transition: opacity 0.2s;
+}
+.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-secondary {
+    background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 10px; padding: 10px 20px; color: #b7c9d1;
+    font-size: 14px; cursor: pointer;
 }
 
 /* ===== FULLSCREEN PREVIEW ===== */

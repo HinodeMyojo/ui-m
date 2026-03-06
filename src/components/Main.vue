@@ -821,10 +821,9 @@ function closeTimeStats() {
           <p class="text">Архитектор</p>
           <span class="nyama-badge">Скоро</span>
         </button>
-        <button class="nyamaaa nyamaaa-soon" disabled title="Скоро">
+        <button class="nyamaaa" @click="router.push('/vocabulary')">
           <div class="icon">🗣️</div>
           <p class="text">English Coach</p>
-          <span class="nyama-badge">Скоро</span>
         </button>
         <button class="nyamaaa nyamaaa-soon" disabled title="Скоро">
           <div class="icon">🧠</div>

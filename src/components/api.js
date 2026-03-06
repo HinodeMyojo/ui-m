@@ -1,6 +1,6 @@
 import router from "@/router";
 
-const API_BASE_URL = `${window.location.protocol}//82.202.136.167:5005`;
+const API_BASE_URL = `http://localhost:5005`;
 
 async function authorizedFetch(url, options = {}) {
   const token = localStorage.getItem("token");
@@ -54,7 +54,7 @@ export async function login(password) {
 export async function fetchTimeEntries(date) {
   const formattedDate = date.toISOString().split("T")[0];
   const response = await authorizedFetch(
-    `${API_BASE_URL}/api/v1/time/${formattedDate}`
+    `${API_BASE_URL}/api/v1/time/${formattedDate}`,
   );
   return await response.json();
 }
@@ -85,7 +85,7 @@ export async function fetchTimeStats(startDate, endDate) {
   const end = endDate.toISOString().split("T")[0];
 
   const response = await authorizedFetch(
-    `${API_BASE_URL}/api/v1/time/stats?start=${start}&end=${end}`
+    `${API_BASE_URL}/api/v1/time/stats?start=${start}&end=${end}`,
   );
   return await response.json();
 }
@@ -134,7 +134,7 @@ export async function fetchSalaries() {
 
 export async function fetchSalary(id) {
   const response = await authorizedFetch(
-    `${API_BASE_URL}/api/v1/salaries/${id}`
+    `${API_BASE_URL}/api/v1/salaries/${id}`,
   );
   const data = await response.json();
   return data;
@@ -167,7 +167,7 @@ export async function fetchTasks(date) {
   const formattedDate = date.value.toISOString().substring(0, 10);
 
   const response = await authorizedFetch(
-    `${API_BASE_URL}/api/v1/tasks/?date=${formattedDate}`
+    `${API_BASE_URL}/api/v1/tasks/?date=${formattedDate}`,
   );
   const data = await response.json();
   return data;
@@ -192,7 +192,7 @@ export async function checkTask(id, isCompleted) {
 
 export async function fetchProgress(taskId) {
   const response = await authorizedFetch(
-    `${API_BASE_URL}/api/v1/tasks/progress/${taskId}`
+    `${API_BASE_URL}/api/v1/tasks/progress/${taskId}`,
   );
   const data = await response.json();
   return data;
@@ -238,6 +238,45 @@ export async function deleteTaskAPI(id) {
   await authorizedFetch(`${API_BASE_URL}/api/v1/tasks/?id=${id}`, {
     method: "DELETE",
   });
+}
+
+// vocabulary api
+export async function fetchVocabCards() {
+  const response = await authorizedFetch(`${API_BASE_URL}/api/v1/vocab`);
+  return await response.json();
+}
+
+export async function fetchDueCards() {
+  const response = await authorizedFetch(`${API_BASE_URL}/api/v1/vocab/due`);
+  return await response.json();
+}
+
+export async function addVocabCard(card) {
+  const response = await authorizedFetch(`${API_BASE_URL}/api/v1/vocab`, {
+    method: "POST",
+    body: JSON.stringify(card),
+  });
+  return await response.json();
+}
+
+export async function reviewVocabCard(id, quality) {
+  await authorizedFetch(`${API_BASE_URL}/api/v1/vocab/${id}/review`, {
+    method: "POST",
+    body: JSON.stringify({ quality }),
+  });
+}
+
+export async function deleteVocabCard(id) {
+  await authorizedFetch(`${API_BASE_URL}/api/v1/vocab/${id}`, {
+    method: "DELETE",
+  });
+}
+
+export async function lookupVocabWord(word) {
+  const response = await authorizedFetch(
+    `${API_BASE_URL}/api/v1/vocab/lookup?word=${encodeURIComponent(word)}`,
+  );
+  return await response.json();
 }
 
 export async function updateTaskAPI(id, patch) {
