@@ -23,24 +23,24 @@
             <button class="pdf-tb-btn" @click="emit('zoom-out')" title="Уменьшить">−</button>
             <span class="pdf-zoom-label">{{ Math.round(zoomLevel * 100) }}%</span>
             <button class="pdf-tb-btn" @click="emit('zoom-in')" title="Увеличить">+</button>
-            <button class="pdf-tb-btn pdf-tb-sm" @click="emit('fit-width')" title="По ширине">⇔</button>
-            <button class="pdf-tb-btn pdf-tb-sm" @click="emit('fit-page')" title="По странице">⛶</button>
+            <button class="pdf-tb-btn pdf-tb-sm pdf-tb-secondary" @click="emit('fit-width')" title="По ширине">⇔</button>
+            <button class="pdf-tb-btn pdf-tb-sm pdf-tb-secondary" @click="emit('fit-page')" title="По странице">⛶</button>
             <div class="pdf-tb-divider"></div>
             <button class="pdf-tb-btn" @click="emit('toggle-search')" :class="{ active: searchOpen }" title="Поиск (Ctrl+F)">🔍</button>
-            <button class="pdf-tb-btn" @click="emit('toggle-sidebar')" :class="{ active: showSidebar }" title="Панель">☰</button>
-            <button class="pdf-tb-btn" @click="emit('toggle-thumbnails')" :class="{ active: showThumbnails }" title="Миниатюры">⊞</button>
-            <div class="pdf-tb-divider"></div>
-            <button class="pdf-tb-btn" @click="emit('toggle-bookmark')"
+            <button class="pdf-tb-btn pdf-tb-secondary" @click="emit('toggle-sidebar')" :class="{ active: showSidebar }" title="Панель">☰</button>
+            <button class="pdf-tb-btn pdf-tb-secondary" @click="emit('toggle-thumbnails')" :class="{ active: showThumbnails }" title="Миниатюры">⊞</button>
+            <div class="pdf-tb-divider pdf-tb-secondary"></div>
+            <button class="pdf-tb-btn pdf-tb-secondary" @click="emit('toggle-bookmark')"
                 :class="{ bookmarked: isCurrentPageBookmarked }"
                 :title="isCurrentPageBookmarked ? 'Удалить закладку (B)' : 'Добавить закладку (B)'">🔖</button>
-            <div class="pdf-tb-divider"></div>
-            <button class="pdf-tb-btn" @click="emit('toggle-fullscreen')" :title="isFullscreen ? 'Выйти из полного экрана' : 'Полный экран'">
+            <div class="pdf-tb-divider pdf-tb-secondary"></div>
+            <button class="pdf-tb-btn pdf-tb-secondary" @click="emit('toggle-fullscreen')" :title="isFullscreen ? 'Выйти из полного экрана' : 'Полный экран'">
                 <span v-if="isFullscreen">✕fs</span><span v-else>⛶</span>
             </button>
             <template v-if="nightMode">
-                <button class="pdf-tb-btn pdf-tb-sm" @click="emit('night-brightness-down')" :disabled="nightBrightness <= 30" title="Темнее">☾−</button>
-                <span class="pdf-zoom-label">{{ nightBrightness }}%</span>
-                <button class="pdf-tb-btn pdf-tb-sm" @click="emit('night-brightness-up')" :disabled="nightBrightness >= 100" title="Ярче">☾+</button>
+                <button class="pdf-tb-btn pdf-tb-sm pdf-tb-secondary" @click="emit('night-brightness-down')" :disabled="nightBrightness <= 30" title="Темнее">☾−</button>
+                <span class="pdf-zoom-label pdf-tb-secondary">{{ nightBrightness }}%</span>
+                <button class="pdf-tb-btn pdf-tb-sm pdf-tb-secondary" @click="emit('night-brightness-up')" :disabled="nightBrightness >= 100" title="Ярче">☾+</button>
             </template>
             <button class="pdf-tb-btn" @click="emit('toggle-night')"
                 :class="{ active: nightMode }" :title="nightMode ? 'Выключить ночной режим' : 'Ночной режим страниц'">
@@ -49,10 +49,10 @@
             <button class="pdf-tb-btn" @click="emit('toggle-dark')" :title="darkMode ? 'Светлая тема' : 'Тёмная тема'">
                 {{ darkMode ? '☀️' : '💡' }}
             </button>
-            <div class="pdf-tb-divider"></div>
-            <button class="pdf-tb-btn" @click="emit('toggle-hover-translate')"
+            <div class="pdf-tb-divider pdf-tb-secondary"></div>
+            <button class="pdf-tb-btn pdf-tb-secondary" @click="emit('toggle-hover-translate')"
                 :class="{ active: hoverTranslate }" title="Перевод при наведении">🌐</button>
-            <button class="pdf-tb-btn pdf-tb-sm" @click="emit('open-translate-settings')" title="Настройки перевода">⚙️</button>
+            <button class="pdf-tb-btn pdf-tb-sm pdf-tb-secondary" @click="emit('open-translate-settings')" title="Настройки перевода">⚙️</button>
         </div>
 
         <div class="pdf-progress-bar-line" :style="{ width: (readProgress * 100) + '%' }"></div>
