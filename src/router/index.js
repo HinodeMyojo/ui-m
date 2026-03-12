@@ -49,6 +49,11 @@ const router = createRouter({
       name: "DiagramEditor",
       component: () => import("../views/DiagramEditorView.vue"),
     },
+    {
+      path: "/budget",
+      name: "Budget",
+      component: () => import("../views/budget/BudgetView.vue"),
+    },
   ],
 });
 

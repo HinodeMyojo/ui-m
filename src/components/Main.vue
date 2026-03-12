@@ -824,14 +824,14 @@ function closeTimeStats() {
           <div class="icon">🗣️</div>
           <p class="text">English Coach</p>
         </button>
+        <button class="nyamaaa" @click="router.push('/budget')">
+          <div class="icon">💰</div>
+          <p class="text">Бюджет</p>
+        </button>
         <button class="nyamaaa nyamaaa-soon" disabled title="Скоро">
           <div class="icon">🧠</div>
           <p class="text">Mind Map</p>
           <span class="nyama-badge">Скоро</span>
-        </button>
-        <button class="nyamaaa nyamaaa-soon nyamaaa-unknown" disabled>
-          <div class="icon">❓</div>
-          <span class="nyama-badge">Неизвестно</span>
         </button>
         <button class="nyamaaa nyamaaa-soon nyamaaa-unknown" disabled>
           <div class="icon">❓</div>
