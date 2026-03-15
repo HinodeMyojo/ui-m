@@ -134,6 +134,9 @@ watch(
 
 <style scoped>
 .budget-page {
+  width: 100%;
+  max-width: 1400px;
+  margin: 0 auto;
   min-height: 100vh;
   background: #0e0f1a;
   color: #fff;
