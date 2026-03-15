@@ -11,6 +11,7 @@ const editingId = ref<string | null>(null);
 const form = ref<CreateAccountRequest>({
   name: "",
   type: "card",
+  bank: "",
   balance: 0,
   currency: "RUB",
   interestRate: undefined,
@@ -20,6 +21,9 @@ const form = ref<CreateAccountRequest>({
   dailyCommission: undefined,
   minPaymentPercent: undefined,
 });
+
+// Load banks on mount
+if (!store.banks.length) store.fetchBanks();
 
 const ACCOUNT_TYPES: { value: AccountType; label: string; icon: string }[] = [
   { value: "card", label: "Карта", icon: "💳" },
@@ -39,7 +43,7 @@ function getTypeInfo(type: AccountType) {
 
 function openAdd() {
   editingId.value = null;
-  form.value = { name: "", type: "card", balance: 0, currency: "RUB" };
+  form.value = { name: "", type: "card", bank: "", balance: 0, currency: "RUB" };
   showModal.value = true;
 }
 
@@ -50,6 +54,7 @@ function openEdit(id: string) {
   form.value = {
     name: acc.name,
     type: acc.type,
+    bank: acc.bank ?? "",
     balance: acc.balance,
     currency: acc.currency,
     interestRate: acc.interestRate,
@@ -104,6 +109,21 @@ function utilizationPercent(acc: { balance: number; creditLimit?: number }) {
   if (!acc.creditLimit || acc.creditLimit <= 0) return 0;
   return Math.min(100, Math.round((Math.abs(acc.balance) / acc.creditLimit) * 100));
 }
+
+// Banks management
+const newBankName = ref("");
+
+async function addBank() {
+  const name = newBankName.value.trim();
+  if (!name) return;
+  await store.createBank(name);
+  newBankName.value = "";
+}
+
+async function removeBank(id: string, name: string) {
+  if (!confirm(`Удалить банк «${name}»?`)) return;
+  await store.deleteBank(id);
+}
 </script>
 
 <template>
@@ -142,6 +162,7 @@ function utilizationPercent(acc: { balance: number; creditLimit?: number }) {
         <div class="acc-top">
           <span class="acc-type-icon">{{ getTypeInfo(acc.type).icon }}</span>
           <span class="acc-type-label">{{ getTypeInfo(acc.type).label }}</span>
+          <span v-if="acc.bank" class="acc-bank-badge">{{ acc.bank }}</span>
           <button class="acc-delete" @click.stop="handleDelete(acc.id)" title="Удалить">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
           </button>
@@ -217,6 +238,13 @@ function utilizationPercent(acc: { balance: number; creditLimit?: number }) {
               <input v-model="form.name" type="text" required placeholder="Тинькофф Чёрная" />
             </label>
             <label>
+              <span>Банк</span>
+              <select v-model="form.bank">
+                <option value="">Не указан</option>
+                <option v-for="b in store.banks" :key="b.id" :value="b.name">{{ b.name }}</option>
+              </select>
+            </label>
+            <label>
               <span>Баланс (₽)</span>
               <input v-model.number="form.balance" type="number" step="0.01" required />
             </label>
@@ -254,6 +282,21 @@ function utilizationPercent(acc: { balance: number; creditLimit?: number }) {
         </div>
       </div>
     </Teleport>
+
+    <!-- Banks section -->
+    <div class="banks-section">
+      <h4 class="banks-title">Банки</h4>
+      <div class="banks-list">
+        <div v-for="b in store.banks" :key="b.id" class="bank-chip">
+          <span>{{ b.name }}</span>
+          <button class="bank-remove" @click="removeBank(b.id, b.name)" title="Удалить">×</button>
+        </div>
+        <form class="bank-add-form" @submit.prevent="addBank">
+          <input v-model="newBankName" type="text" placeholder="Новый банк..." class="bank-add-input" />
+          <button type="submit" class="bank-add-btn" :disabled="!newBankName.trim()">+</button>
+        </form>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -308,6 +351,10 @@ function utilizationPercent(acc: { balance: number; creditLimit?: number }) {
 .acc-top { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
 .acc-type-icon { font-size: 22px; }
 .acc-type-label { font-size: 12px; color: #6b7fa3; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px; flex: 1; }
+.acc-bank-badge {
+  font-size: 10px; color: #7eb0ff; background: rgba(23, 103, 253, 0.12);
+  padding: 2px 8px; border-radius: 6px; font-weight: 500;
+}
 
 .acc-delete {
   background: none; border: none;
@@ -373,12 +420,15 @@ function utilizationPercent(acc: { balance: number; creditLimit?: number }) {
 
 .modal-form { display: flex; flex-direction: column; gap: 14px; }
 .modal-form label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: #7eb0ff; }
-.modal-form input {
+.modal-form input,
+.modal-form select {
   background: rgba(23, 103, 253, 0.06);
   border: 1px solid rgba(23, 103, 253, 0.2); border-radius: 10px;
   padding: 10px 14px; color: #fff; font-size: 14px; outline: none;
 }
-.modal-form input:focus { border-color: rgba(23, 103, 253, 0.5); }
+.modal-form input:focus,
+.modal-form select:focus { border-color: rgba(23, 103, 253, 0.5); }
+.modal-form select option { background: #1a1b2e; color: #fff; }
 
 .type-grid {
   display: grid;
@@ -402,6 +452,54 @@ function utilizationPercent(acc: { balance: number; creditLimit?: number }) {
   font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s; margin-top: 4px;
 }
 .btn-submit:hover { transform: translateY(-1px); box-shadow: 0 4px 16px rgba(23, 103, 253, 0.3); }
+
+/* Banks */
+.banks-section {
+  margin-top: 8px;
+  padding: 16px 20px;
+  background: linear-gradient(135deg, rgba(18, 19, 31, 0.95), rgba(23, 25, 40, 0.95));
+  border: 1px solid rgba(23, 103, 253, 0.1);
+  border-radius: 14px;
+}
+.banks-title {
+  font-size: 14px; font-weight: 600; color: #7eb0ff; margin: 0 0 12px;
+}
+.banks-list {
+  display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+}
+.bank-chip {
+  display: flex; align-items: center; gap: 6px;
+  background: rgba(23, 103, 253, 0.1);
+  border: 1px solid rgba(23, 103, 253, 0.2);
+  border-radius: 8px; padding: 6px 12px;
+  font-size: 13px; color: #c8daf0;
+}
+.bank-remove {
+  background: none; border: none; color: #6b7fa3;
+  cursor: pointer; font-size: 16px; padding: 0 2px;
+  transition: color 0.2s;
+}
+.bank-remove:hover { color: #f87171; }
+.bank-add-form {
+  display: flex; gap: 4px;
+}
+.bank-add-input {
+  background: rgba(23, 103, 253, 0.06);
+  border: 1px solid rgba(23, 103, 253, 0.2);
+  border-radius: 8px; padding: 6px 10px;
+  color: #fff; font-size: 13px; outline: none;
+  width: 140px;
+}
+.bank-add-input:focus { border-color: rgba(23, 103, 253, 0.5); }
+.bank-add-btn {
+  background: rgba(23, 103, 253, 0.15);
+  border: 1px solid rgba(23, 103, 253, 0.3);
+  border-radius: 8px; color: #7eb0ff;
+  width: 32px; cursor: pointer; font-size: 18px;
+  transition: all 0.2s;
+}
+.bank-add-btn:hover:not(:disabled) { background: rgba(23, 103, 253, 0.3); color: #fff; }
+.bank-add-btn:disabled { opacity: 0.4; cursor: default; }
 
 @media (max-width: 768px) {
   .acc-toolbar { flex-direction: column; align-items: stretch; }

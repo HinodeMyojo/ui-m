@@ -35,6 +35,7 @@ onMounted(async () => {
     await Promise.all([
       store.fetchCategories(),
       store.fetchAccounts(),
+      store.fetchBanks(),
       store.fetchGoals(),
       store.fetchPlannedExpenses(),
       store.fetchDashboard(store.currentMonth),

@@ -42,6 +42,7 @@ export interface Transaction {
   amount: number;
   description?: string;
   date: string;           // ISO date "2026-03-12"
+  bank?: string;
   fromAccountId?: string; // for transfer
   toAccountId?: string;   // for transfer
   accountId?: string;     // for income/expense — linked account
@@ -54,6 +55,7 @@ export interface CreateTransactionRequest {
   amount: number;
   description?: string;
   date: string;
+  bank?: string;
   fromAccountId?: string;
   toAccountId?: string;
   accountId?: string;
@@ -69,6 +71,7 @@ export interface TransactionImportItem {
   amount: number;
   description?: string;
   date: string;
+  bank?: string;              // bank name (e.g. "Сбербанк")
   accountName?: string;       // for income/expense — linked account name
   fromAccountName?: string;   // for transfer — source account name
   toAccountName?: string;     // for transfer — destination account name
@@ -84,6 +87,7 @@ export interface Account {
   id: string;
   name: string;
   type: AccountType;
+  bank?: string;
   balance: number;
   currency: string;       // "RUB"
   interestRate?: number;  // annual %, e.g. 13.5
@@ -99,6 +103,7 @@ export interface Account {
 export interface CreateAccountRequest {
   name: string;
   type: AccountType;
+  bank?: string;
   balance: number;
   currency?: string;
   interestRate?: number;

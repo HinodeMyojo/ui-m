@@ -24,6 +24,7 @@ export const useBudgetStore = defineStore("budget", () => {
   const dashboard = ref<BudgetDashboard | null>(null);
   const monthlyStats = ref<Map<string, MonthlyStats>>(new Map());
   const installments = ref<Installment[]>([]);
+  const banks = ref<{ id: string; name: string }[]>([]);
 
   const loading = ref(false);
   const error = ref<string | null>(null);
@@ -135,6 +136,46 @@ export const useBudgetStore = defineStore("budget", () => {
 
   async function exportAccounts() {
     return api.exportAccounts();
+  }
+
+  async function fetchBanks() {
+    try {
+      banks.value = await api.getBanks();
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : "Failed to fetch banks";
+    }
+  }
+
+  async function createBank(name: string) {
+    try {
+      const { id } = await api.createBank({ name });
+      banks.value.push({ id, name });
+      return id;
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : "Failed to create bank";
+      throw e;
+    }
+  }
+
+  async function updateBank(id: string, name: string) {
+    try {
+      await api.updateBank(id, { name });
+      const idx = banks.value.findIndex((b) => b.id === id);
+      if (idx !== -1) banks.value[idx].name = name;
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : "Failed to update bank";
+      throw e;
+    }
+  }
+
+  async function deleteBank(id: string) {
+    try {
+      await api.deleteBank(id);
+      banks.value = banks.value.filter((b) => b.id !== id);
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : "Failed to delete bank";
+      throw e;
+    }
   }
 
   // Transactions
@@ -504,6 +545,7 @@ export const useBudgetStore = defineStore("budget", () => {
     error,
     currentMonth,
     installments,
+    banks,
 
     // Getters
     expenseCategories,
@@ -535,6 +577,10 @@ export const useBudgetStore = defineStore("budget", () => {
     updateAccount,
     deleteAccount,
     exportAccounts,
+    fetchBanks,
+    createBank,
+    updateBank,
+    deleteBank,
 
     fetchGoals,
     createGoal,

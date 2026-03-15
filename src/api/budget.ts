@@ -161,8 +161,34 @@ export async function deleteAccount(id: string): Promise<void> {
   });
 }
 
-export async function exportAccounts(): Promise<{ name: string; type: string }[]> {
-  return budgetRequest<{ name: string; type: string }[]>("/accounts/export");
+export async function exportAccounts(): Promise<{ name: string; type: string; bank: string }[]> {
+  return budgetRequest<{ name: string; type: string; bank: string }[]>("/accounts/export");
+}
+
+// === BANKS ===
+
+export async function getBanks(): Promise<{ id: string; name: string }[]> {
+  return budgetRequest<{ id: string; name: string }[]>("/banks");
+}
+
+export async function createBank(data: { name: string }): Promise<{ id: string }> {
+  return budgetRequest<{ id: string }>("/banks", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function updateBank(id: string, data: { name: string }): Promise<void> {
+  return budgetRequest<void>(`/banks/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deleteBank(id: string): Promise<void> {
+  return budgetRequest<void>(`/banks/${id}`, {
+    method: "DELETE",
+  });
 }
 
 // === SAVINGS GOALS ===

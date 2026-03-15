@@ -15,10 +15,14 @@ const form = ref<CreateTransactionRequest>({
   amount: 0,
   description: "",
   date: new Date().toISOString().slice(0, 10),
+  bank: "",
   fromAccountId: "",
   toAccountId: "",
   accountId: "",
 });
+
+// Load banks on mount
+if (!store.banks.length) store.fetchBanks();
 
 const filteredTransactions = computed(() => {
   if (filterType.value === "all") return store.transactions;
@@ -48,6 +52,7 @@ async function submitTransaction() {
       amount: form.value.amount,
       description: form.value.description,
       date: form.value.date,
+      bank: form.value.bank || undefined,
       fromAccountId: form.value.fromAccountId,
       toAccountId: form.value.toAccountId,
     };
@@ -64,6 +69,7 @@ async function submitTransaction() {
       amount: form.value.amount,
       description: form.value.description,
       date: form.value.date,
+      bank: form.value.bank || undefined,
       accountId: form.value.accountId || undefined,
     };
     try {
@@ -81,6 +87,7 @@ function resetForm() {
     amount: 0,
     description: "",
     date: new Date().toISOString().slice(0, 10),
+    bank: "",
     fromAccountId: "",
     toAccountId: "",
     accountId: "",
@@ -105,9 +112,10 @@ async function downloadAiContext() {
   const context = {
     categories: cats.map((c) => ({ name: c.name, type: c.type })),
     accounts: accs,
+    banks: store.banks.map((b) => b.name),
     format: {
-      expense_or_income: { categoryName: "string", type: "expense|income", amount: 0, date: "YYYY-MM-DD", description: "optional", accountName: "optional" },
-      transfer: { type: "transfer", fromAccountName: "string", toAccountName: "string", amount: 0, date: "YYYY-MM-DD", description: "optional" },
+      expense_or_income: { categoryName: "string", type: "expense|income", amount: 0, date: "YYYY-MM-DD", description: "optional", bank: "optional", accountName: "optional" },
+      transfer: { type: "transfer", fromAccountName: "string", toAccountName: "string", amount: 0, date: "YYYY-MM-DD", description: "optional", bank: "optional" },
     },
   };
   const blob = new Blob([JSON.stringify(context, null, 2)], { type: "application/json" });
@@ -155,6 +163,7 @@ async function confirmImport() {
         amount: item.amount,
         description: item.description,
         date: item.date,
+        bank: item.bank,
         fromAccountId: fromId,
         toAccountId: toId,
       };
@@ -169,6 +178,7 @@ async function confirmImport() {
         amount: item.amount,
         description: item.description,
         date: item.date,
+        bank: item.bank,
         accountId: item.accountName ? resolveAccountByName(item.accountName) : undefined,
       };
     }
@@ -243,7 +253,10 @@ function getAccountName(accId?: string) {
           </div>
           <div class="tx-right">
             <span class="tx-amount transfer">{{ fmt(tx.amount) }} ₽</span>
-            <span class="tx-date">{{ new Date(tx.date).toLocaleDateString('ru', { day: 'numeric', month: 'short' }) }}</span>
+            <span class="tx-date">
+              {{ new Date(tx.date).toLocaleDateString('ru', { day: 'numeric', month: 'short' }) }}
+              <span v-if="tx.bank" class="tx-bank">{{ tx.bank }}</span>
+            </span>
           </div>
         </template>
         <!-- Income/Expense row -->
@@ -259,7 +272,10 @@ function getAccountName(accId?: string) {
             <span class="tx-amount" :class="tx.type">
               {{ tx.type === 'income' ? '+' : '-' }}{{ fmt(tx.amount) }} ₽
             </span>
-            <span class="tx-date">{{ new Date(tx.date).toLocaleDateString('ru', { day: 'numeric', month: 'short' }) }}</span>
+            <span class="tx-date">
+              {{ new Date(tx.date).toLocaleDateString('ru', { day: 'numeric', month: 'short' }) }}
+              <span v-if="tx.bank" class="tx-bank">{{ tx.bank }}</span>
+            </span>
           </div>
         </template>
         <button class="tx-delete" @click="handleDelete(tx.id)" title="Удалить">
@@ -335,6 +351,13 @@ function getAccountName(accId?: string) {
               </label>
             </template>
 
+            <label>
+              <span>Банк</span>
+              <select v-model="form.bank">
+                <option value="">Не указан</option>
+                <option v-for="b in store.banks" :key="b.id" :value="b.name">{{ b.name }}</option>
+              </select>
+            </label>
             <label>
               <span>Сумма (₽)</span>
               <input v-model.number="form.amount" type="number" min="1" step="0.01" required />
@@ -521,6 +544,16 @@ function getAccountName(accId?: string) {
 .tx-amount.expense { color: #f87171; }
 .tx-amount.transfer { color: #60a5fa; }
 .tx-date { font-size: 11px; color: #6b7fa3; }
+.tx-bank {
+  display: inline-block;
+  font-size: 9px;
+  color: #7eb0ff;
+  background: rgba(23, 103, 253, 0.12);
+  padding: 1px 6px;
+  border-radius: 4px;
+  margin-left: 4px;
+  font-weight: 500;
+}
 
 .tx-delete {
   background: none;
