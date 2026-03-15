@@ -8,6 +8,8 @@ import type {
   PlannedExpense,
   BudgetDashboard,
   MonthlyStats,
+  Installment,
+  InstallmentSchedulePayment,
 } from "../types/budget";
 import * as api from "../api/budget";
 
@@ -21,6 +23,7 @@ export const useBudgetStore = defineStore("budget", () => {
   const plannedExpenses = ref<PlannedExpense[]>([]);
   const dashboard = ref<BudgetDashboard | null>(null);
   const monthlyStats = ref<Map<string, MonthlyStats>>(new Map());
+  const installments = ref<Installment[]>([]);
 
   const loading = ref(false);
   const error = ref<string | null>(null);
@@ -47,6 +50,26 @@ export const useBudgetStore = defineStore("budget", () => {
 
   const getCategoryById = computed(() => (id: string) =>
     categories.value.find((c) => c.id === id)
+  );
+
+  const activeInstallments = computed(() =>
+    installments.value.filter((i) => i.status === "active")
+  );
+
+  const totalDebt = computed(() =>
+    accounts.value
+      .filter((a) => ["credit", "credit_line", "installment"].includes(a.type) && a.balance < 0)
+      .reduce((sum, a) => sum + Math.abs(a.balance), 0)
+  );
+
+  const netWorth = computed(() => totalBalance.value - totalDebt.value);
+
+  const creditAccounts = computed(() =>
+    accounts.value.filter((a) => ["credit", "credit_line", "installment"].includes(a.type))
+  );
+
+  const monthlyTransfers = computed(() =>
+    transactions.value.filter((t) => t.type === "transfer")
   );
 
   // --- Actions ---
@@ -349,6 +372,86 @@ export const useBudgetStore = defineStore("budget", () => {
     }
   }
 
+  // Installments
+  async function fetchInstallments(params?: Parameters<typeof api.getInstallments>[0]) {
+    loading.value = true;
+    error.value = null;
+    try {
+      installments.value = await api.getInstallments(params);
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : "Failed to fetch installments";
+      throw e;
+    } finally {
+      loading.value = false;
+    }
+  }
+
+  async function createInstallment(data: Parameters<typeof api.createInstallment>[0]) {
+    error.value = null;
+    try {
+      const { id } = await api.createInstallment(data);
+      installments.value.push({
+        id,
+        ...data,
+        monthlyPayment: data.monthlyPayment ?? Math.ceil(data.totalAmount / data.totalInstallments),
+        paidInstallments: 0,
+        remainingAmount: data.totalAmount,
+        gracePeriodDays: data.gracePeriodDays ?? 0,
+        status: "active",
+      });
+      return id;
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : "Failed to create installment";
+      throw e;
+    }
+  }
+
+  async function updateInstallment(id: string, data: Parameters<typeof api.updateInstallment>[0 | 1] extends string ? Parameters<typeof api.updateInstallment>[1] : never) {
+    error.value = null;
+    try {
+      await api.updateInstallment(id, data);
+      const idx = installments.value.findIndex((i) => i.id === id);
+      if (idx !== -1) installments.value[idx] = { ...installments.value[idx], ...data };
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : "Failed to update installment";
+      throw e;
+    }
+  }
+
+  async function deleteInstallment(id: string) {
+    error.value = null;
+    try {
+      await api.deleteInstallment(id);
+      installments.value = installments.value.filter((i) => i.id !== id);
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : "Failed to delete installment";
+      throw e;
+    }
+  }
+
+  async function payInstallment(id: string, data: Parameters<typeof api.payInstallment>[1]) {
+    error.value = null;
+    try {
+      await api.payInstallment(id, data);
+      // Refresh installments and accounts after payment
+      await Promise.all([fetchInstallments(), fetchAccounts()]);
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : "Failed to pay installment";
+      throw e;
+    }
+  }
+
+  async function fetchInstallmentSchedule(id: string): Promise<InstallmentSchedulePayment[]> {
+    error.value = null;
+    try {
+      const result = await api.getInstallmentSchedule(id);
+      return result.payments;
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : "Failed to fetch schedule";
+      throw e;
+    }
+  }
+
   // Dashboard
   async function fetchDashboard(month?: string) {
     loading.value = true;
@@ -396,6 +499,7 @@ export const useBudgetStore = defineStore("budget", () => {
     loading,
     error,
     currentMonth,
+    installments,
 
     // Getters
     expenseCategories,
@@ -403,6 +507,11 @@ export const useBudgetStore = defineStore("budget", () => {
     totalBalance,
     activeGoals,
     getCategoryById,
+    activeInstallments,
+    totalDebt,
+    netWorth,
+    creditAccounts,
+    monthlyTransfers,
 
     // Actions
     fetchCategories,
@@ -431,6 +540,13 @@ export const useBudgetStore = defineStore("budget", () => {
     createPlannedExpense,
     updatePlannedExpense,
     deletePlannedExpense,
+
+    fetchInstallments,
+    createInstallment,
+    updateInstallment,
+    deleteInstallment,
+    payInstallment,
+    fetchInstallmentSchedule,
 
     fetchDashboard,
     fetchMonthlyStats,

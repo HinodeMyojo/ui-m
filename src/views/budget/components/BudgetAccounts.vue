@@ -15,6 +15,10 @@ const form = ref<CreateAccountRequest>({
   currency: "RUB",
   interestRate: undefined,
   maturityDate: undefined,
+  creditLimit: undefined,
+  gracePeriodDays: undefined,
+  dailyCommission: undefined,
+  minPaymentPercent: undefined,
 });
 
 const ACCOUNT_TYPES: { value: AccountType; label: string; icon: string }[] = [
@@ -22,7 +26,12 @@ const ACCOUNT_TYPES: { value: AccountType; label: string; icon: string }[] = [
   { value: "deposit", label: "Вклад", icon: "🏦" },
   { value: "savings", label: "Накопительный", icon: "🐷" },
   { value: "cash", label: "Наличные", icon: "💵" },
+  { value: "credit", label: "Кредитная", icon: "🔴" },
+  { value: "credit_line", label: "Кубышка", icon: "🏧" },
+  { value: "installment", label: "Рассрочка", icon: "📦" },
 ];
+
+const CREDIT_TYPES: AccountType[] = ["credit", "credit_line", "installment"];
 
 function getTypeInfo(type: AccountType) {
   return ACCOUNT_TYPES.find((t) => t.value === type) ?? ACCOUNT_TYPES[0];
@@ -45,6 +54,10 @@ function openEdit(id: string) {
     currency: acc.currency,
     interestRate: acc.interestRate,
     maturityDate: acc.maturityDate,
+    creditLimit: acc.creditLimit,
+    gracePeriodDays: acc.gracePeriodDays,
+    dailyCommission: acc.dailyCommission,
+    minPaymentPercent: acc.minPaymentPercent,
   };
   showModal.value = true;
 }
@@ -78,6 +91,19 @@ const monthlyPassiveTotal = computed(() => {
 });
 
 const showInterest = computed(() => form.value.type === "deposit" || form.value.type === "savings");
+const showCreditFields = computed(() => CREDIT_TYPES.includes(form.value.type));
+const showGracePeriod = computed(() => form.value.type === "credit" || form.value.type === "credit_line");
+const showDailyCommission = computed(() => form.value.type === "credit_line");
+const showMinPayment = computed(() => form.value.type === "credit");
+
+function isCreditType(type: AccountType) {
+  return CREDIT_TYPES.includes(type);
+}
+
+function utilizationPercent(acc: { balance: number; creditLimit?: number }) {
+  if (!acc.creditLimit || acc.creditLimit <= 0) return 0;
+  return Math.min(100, Math.round((Math.abs(acc.balance) / acc.creditLimit) * 100));
+}
 </script>
 
 <template>
@@ -87,6 +113,14 @@ const showInterest = computed(() => form.value.type === "deposit" || form.value.
         <div class="summary-item">
           <span class="summary-label">Общий баланс</span>
           <span class="summary-value">{{ fmt(store.totalBalance) }} ₽</span>
+        </div>
+        <div class="summary-item" v-if="store.totalDebt > 0">
+          <span class="summary-label">Долги</span>
+          <span class="summary-value red">-{{ fmt(store.totalDebt) }} ₽</span>
+        </div>
+        <div class="summary-item">
+          <span class="summary-label">Чистыми</span>
+          <span class="summary-value" :class="store.netWorth >= 0 ? '' : 'red'">{{ fmt(store.netWorth) }} ₽</span>
         </div>
         <div class="summary-item">
           <span class="summary-label">Пассивный доход/мес</span>
@@ -113,13 +147,44 @@ const showInterest = computed(() => form.value.type === "deposit" || form.value.
           </button>
         </div>
         <div class="acc-name">{{ acc.name }}</div>
-        <div class="acc-balance">{{ fmt(acc.balance) }} ₽</div>
+
+        <!-- Balance -->
+        <div class="acc-balance" :class="{ 'acc-balance-debt': acc.balance < 0 && isCreditType(acc.type) }">
+          <template v-if="acc.balance < 0 && isCreditType(acc.type)">
+            Долг: {{ fmt(Math.abs(acc.balance)) }} ₽
+          </template>
+          <template v-else>
+            {{ fmt(acc.balance) }} ₽
+          </template>
+        </div>
+
+        <!-- Credit utilization -->
+        <div v-if="isCreditType(acc.type) && acc.creditLimit" class="acc-credit-bar">
+          <div class="credit-bar-track">
+            <div
+              class="credit-bar-fill"
+              :style="{ width: utilizationPercent(acc) + '%' }"
+              :class="{ 'credit-bar-high': utilizationPercent(acc) > 70 }"
+            ></div>
+          </div>
+          <span class="credit-bar-label">{{ utilizationPercent(acc) }}% из {{ fmt(acc.creditLimit) }} ₽</span>
+        </div>
+
+        <!-- Interest info -->
         <div class="acc-meta" v-if="acc.interestRate">
           <span class="acc-rate">{{ acc.interestRate }}% годовых</span>
           <span class="acc-monthly">~{{ fmt(Math.round((acc.balance * acc.interestRate) / 100 / 12)) }} ₽/мес</span>
         </div>
         <div class="acc-meta" v-if="acc.maturityDate">
           <span class="acc-maturity">до {{ new Date(acc.maturityDate).toLocaleDateString('ru') }}</span>
+        </div>
+
+        <!-- Credit-specific meta -->
+        <div class="acc-meta" v-if="acc.gracePeriodDays">
+          <span class="acc-grace">Грейс: {{ acc.gracePeriodDays }} дн.</span>
+        </div>
+        <div class="acc-meta" v-if="acc.dailyCommission">
+          <span class="acc-commission">Комиссия: {{ acc.dailyCommission }}%/день</span>
         </div>
       </div>
     </div>
@@ -153,8 +218,10 @@ const showInterest = computed(() => form.value.type === "deposit" || form.value.
             </label>
             <label>
               <span>Баланс (₽)</span>
-              <input v-model.number="form.balance" type="number" min="0" step="0.01" required />
+              <input v-model.number="form.balance" type="number" step="0.01" required />
             </label>
+
+            <!-- Deposit / Savings fields -->
             <label v-if="showInterest">
               <span>Процентная ставка (% годовых)</span>
               <input v-model.number="form.interestRate" type="number" min="0" max="100" step="0.1" placeholder="13.5" />
@@ -163,6 +230,25 @@ const showInterest = computed(() => form.value.type === "deposit" || form.value.
               <span>Дата окончания вклада</span>
               <input v-model="form.maturityDate" type="date" />
             </label>
+
+            <!-- Credit fields -->
+            <label v-if="showCreditFields">
+              <span>Кредитный лимит (₽)</span>
+              <input v-model.number="form.creditLimit" type="number" min="0" step="1" placeholder="100000" />
+            </label>
+            <label v-if="showGracePeriod">
+              <span>Грейс-период (дней)</span>
+              <input v-model.number="form.gracePeriodDays" type="number" min="0" step="1" placeholder="55" />
+            </label>
+            <label v-if="showMinPayment">
+              <span>Минимальный платёж (%)</span>
+              <input v-model.number="form.minPaymentPercent" type="number" min="0" max="100" step="0.1" placeholder="5" />
+            </label>
+            <label v-if="showDailyCommission">
+              <span>Комиссия за день (%)</span>
+              <input v-model.number="form.dailyCommission" type="number" min="0" max="10" step="0.01" placeholder="0.03" />
+            </label>
+
             <button type="submit" class="btn-submit">{{ editingId ? 'Сохранить' : 'Создать' }}</button>
           </form>
         </div>
@@ -182,11 +268,12 @@ const showInterest = computed(() => form.value.type === "deposit" || form.value.
   gap: 12px;
 }
 
-.acc-summary { display: flex; gap: 24px; }
+.acc-summary { display: flex; gap: 24px; flex-wrap: wrap; }
 .summary-item { display: flex; flex-direction: column; gap: 2px; }
 .summary-label { font-size: 12px; color: #6b7fa3; }
 .summary-value { font-size: 20px; font-weight: 700; color: #fff; }
 .summary-value.green { color: #34d399; }
+.summary-value.red { color: #f87171; }
 
 .btn-add {
   background: linear-gradient(135deg, #1767fd, #6e4aff);
@@ -233,11 +320,32 @@ const showInterest = computed(() => form.value.type === "deposit" || form.value.
 
 .acc-name { font-size: 16px; font-weight: 600; color: #e1e8f0; margin-bottom: 4px; }
 .acc-balance { font-size: 24px; font-weight: 700; color: #fff; margin-bottom: 8px; }
+.acc-balance-debt { color: #f87171; }
+
+/* Credit utilization bar */
+.acc-credit-bar { margin-bottom: 8px; }
+.credit-bar-track {
+  height: 4px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-bottom: 4px;
+}
+.credit-bar-fill {
+  height: 100%;
+  border-radius: 2px;
+  background: #60a5fa;
+  transition: width 0.4s ease;
+}
+.credit-bar-fill.credit-bar-high { background: #f87171; }
+.credit-bar-label { font-size: 11px; color: #6b7fa3; }
 
 .acc-meta { display: flex; gap: 12px; font-size: 12px; margin-top: 4px; }
 .acc-rate { color: #34d399; font-weight: 500; }
 .acc-monthly { color: #7eb0ff; }
 .acc-maturity { color: #fbbf24; }
+.acc-grace { color: #c084fc; }
+.acc-commission { color: #f97316; }
 
 .empty-hint { color: #4a5c7a; font-size: 14px; text-align: center; padding: 40px; grid-column: 1 / -1; }
 
@@ -300,6 +408,6 @@ const showInterest = computed(() => form.value.type === "deposit" || form.value.
   .acc-summary { justify-content: space-between; }
   .acc-grid { grid-template-columns: 1fr; }
   .acc-delete { opacity: 1; }
-  .type-grid { grid-template-columns: repeat(2, 1fr); }
+  .type-grid { grid-template-columns: repeat(3, 1fr); }
 }
 </style>

@@ -17,6 +17,11 @@ import type {
   UpdatePlannedExpenseRequest,
   MonthlyStats,
   BudgetDashboard,
+  Installment,
+  CreateInstallmentRequest,
+  UpdateInstallmentRequest,
+  InstallmentPayRequest,
+  InstallmentSchedulePayment,
 } from "../types/budget";
 
 const API_BASE_URL = `${window.location.protocol}//82.202.136.167:5005`;
@@ -212,6 +217,49 @@ export async function deletePlannedExpense(id: string): Promise<void> {
   return budgetRequest<void>(`/planned-expenses/${id}`, {
     method: "DELETE",
   });
+}
+
+// === INSTALLMENTS ===
+
+export async function getInstallments(params?: {
+  status?: string;
+  accountId?: string;
+}): Promise<Installment[]> {
+  const qp = new URLSearchParams();
+  if (params?.status) qp.append("status", params.status);
+  if (params?.accountId) qp.append("accountId", params.accountId);
+  return budgetRequest<Installment[]>(`/installments?${qp}`);
+}
+
+export async function createInstallment(data: CreateInstallmentRequest): Promise<{ id: string }> {
+  return budgetRequest<{ id: string }>("/installments", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function updateInstallment(id: string, data: UpdateInstallmentRequest): Promise<void> {
+  return budgetRequest<void>(`/installments/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deleteInstallment(id: string): Promise<void> {
+  return budgetRequest<void>(`/installments/${id}`, {
+    method: "DELETE",
+  });
+}
+
+export async function payInstallment(id: string, data: InstallmentPayRequest): Promise<void> {
+  return budgetRequest<void>(`/installments/${id}/pay`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function getInstallmentSchedule(id: string): Promise<{ payments: InstallmentSchedulePayment[] }> {
+  return budgetRequest<{ payments: InstallmentSchedulePayment[] }>(`/installments/${id}/schedule`);
 }
 
 // === DASHBOARD / STATS ===

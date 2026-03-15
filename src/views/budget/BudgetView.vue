@@ -7,6 +7,7 @@ import BudgetCategories from "./components/BudgetCategories.vue";
 import BudgetAccounts from "./components/BudgetAccounts.vue";
 import BudgetGoals from "./components/BudgetGoals.vue";
 import BudgetPlanned from "./components/BudgetPlanned.vue";
+import BudgetInstallments from "./components/BudgetInstallments.vue";
 import { useRouter } from "vue-router";
 
 const router = useRouter();
@@ -19,6 +20,7 @@ const tabs = [
   { id: "accounts", label: "Счета", icon: "🏦" },
   { id: "goals", label: "Цели", icon: "🎯" },
   { id: "planned", label: "Планы", icon: "📅" },
+  { id: "installments", label: "Рассрочки", icon: "📦" },
 ] as const;
 
 type TabId = (typeof tabs)[number]["id"];
@@ -37,6 +39,7 @@ onMounted(async () => {
       store.fetchPlannedExpenses(),
       store.fetchDashboard(store.currentMonth),
       store.fetchTransactions({ month: store.currentMonth }),
+      store.fetchInstallments(),
     ]);
   } catch {
     // errors handled in store
@@ -128,6 +131,7 @@ watch(
       <BudgetAccounts v-else-if="activeTab === 'accounts'" />
       <BudgetGoals v-else-if="activeTab === 'goals'" />
       <BudgetPlanned v-else-if="activeTab === 'planned'" />
+      <BudgetInstallments v-else-if="activeTab === 'installments'" />
     </main>
   </div>
 </template>

@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { ref, computed } from "vue";
 import { useBudgetStore } from "@/stores/budget";
-import type { CreateTransactionRequest, TransactionImportItem } from "@/types/budget";
+import type { CreateTransactionRequest, TransactionImportItem, TransactionType } from "@/types/budget";
 
 const store = useBudgetStore();
 
-const filterType = ref<"all" | "income" | "expense">("all");
+const filterType = ref<"all" | "income" | "expense" | "transfer">("all");
 const showAddModal = ref(false);
 const showImportModal = ref(false);
 
@@ -15,6 +15,9 @@ const form = ref<CreateTransactionRequest>({
   amount: 0,
   description: "",
   date: new Date().toISOString().slice(0, 10),
+  fromAccountId: "",
+  toAccountId: "",
+  accountId: "",
 });
 
 const filteredTransactions = computed(() => {
@@ -26,13 +29,49 @@ const availableCategories = computed(() =>
   form.value.type === "income" ? store.incomeCategories : store.expenseCategories
 );
 
+const isTransfer = computed(() => form.value.type === "transfer");
+
+function setFormType(type: TransactionType) {
+  form.value.type = type;
+  form.value.categoryId = "";
+  form.value.fromAccountId = "";
+  form.value.toAccountId = "";
+  form.value.accountId = "";
+}
+
 async function submitTransaction() {
-  if (!form.value.categoryId || form.value.amount <= 0) return;
-  try {
-    await store.createTransaction({ ...form.value });
-    showAddModal.value = false;
-    resetForm();
-  } catch {}
+  if (isTransfer.value) {
+    if (!form.value.fromAccountId || !form.value.toAccountId || form.value.fromAccountId === form.value.toAccountId) return;
+    if (form.value.amount <= 0) return;
+    const payload: CreateTransactionRequest = {
+      type: "transfer",
+      amount: form.value.amount,
+      description: form.value.description,
+      date: form.value.date,
+      fromAccountId: form.value.fromAccountId,
+      toAccountId: form.value.toAccountId,
+    };
+    try {
+      await store.createTransaction(payload);
+      showAddModal.value = false;
+      resetForm();
+    } catch {}
+  } else {
+    if (!form.value.categoryId || form.value.amount <= 0) return;
+    const payload: CreateTransactionRequest = {
+      categoryId: form.value.categoryId,
+      type: form.value.type,
+      amount: form.value.amount,
+      description: form.value.description,
+      date: form.value.date,
+      accountId: form.value.accountId || undefined,
+    };
+    try {
+      await store.createTransaction(payload);
+      showAddModal.value = false;
+      resetForm();
+    } catch {}
+  }
 }
 
 function resetForm() {
@@ -42,6 +81,9 @@ function resetForm() {
     amount: 0,
     description: "",
     date: new Date().toISOString().slice(0, 10),
+    fromAccountId: "",
+    toAccountId: "",
+    accountId: "",
   };
 }
 
@@ -92,7 +134,7 @@ async function confirmImport() {
   }
 
   try {
-    const result = await store.importTransactions({ transactions: resolved });
+    await store.importTransactions({ transactions: resolved });
     showImportModal.value = false;
     importJson.value = "";
     importPreview.value = [];
@@ -104,8 +146,14 @@ function fmt(n: number) {
   return n.toLocaleString("ru");
 }
 
-function getCatInfo(catId: string) {
+function getCatInfo(catId?: string) {
+  if (!catId) return undefined;
   return store.getCategoryById(catId);
+}
+
+function getAccountName(accId?: string) {
+  if (!accId) return "";
+  return store.accounts.find((a) => a.id === accId)?.name ?? "";
 }
 </script>
 
@@ -117,6 +165,7 @@ function getCatInfo(catId: string) {
         <button :class="{ active: filterType === 'all' }" @click="filterType = 'all'">Все</button>
         <button :class="{ active: filterType === 'expense' }" @click="filterType = 'expense'">Расходы</button>
         <button :class="{ active: filterType === 'income' }" @click="filterType = 'income'">Доходы</button>
+        <button :class="{ active: filterType === 'transfer' }" @click="filterType = 'transfer'">Переводы</button>
       </div>
       <div class="tx-actions">
         <button class="btn-import" @click="showImportModal = true">
@@ -136,19 +185,37 @@ function getCatInfo(catId: string) {
         class="tx-row"
         :class="tx.type"
       >
-        <div class="tx-cat-icon">
-          {{ getCatInfo(tx.categoryId)?.icon ?? '❓' }}
-        </div>
-        <div class="tx-info">
-          <span class="tx-cat-name">{{ getCatInfo(tx.categoryId)?.name ?? 'Без категории' }}</span>
-          <span v-if="tx.description" class="tx-desc">{{ tx.description }}</span>
-        </div>
-        <div class="tx-right">
-          <span class="tx-amount" :class="tx.type">
-            {{ tx.type === 'income' ? '+' : '-' }}{{ fmt(tx.amount) }} ₽
-          </span>
-          <span class="tx-date">{{ new Date(tx.date).toLocaleDateString('ru', { day: 'numeric', month: 'short' }) }}</span>
-        </div>
+        <!-- Transfer row -->
+        <template v-if="tx.type === 'transfer'">
+          <div class="tx-cat-icon tx-transfer-icon">↔</div>
+          <div class="tx-info">
+            <span class="tx-cat-name">Перевод</span>
+            <span class="tx-desc">
+              {{ getAccountName(tx.fromAccountId) }} → {{ getAccountName(tx.toAccountId) }}
+              <template v-if="tx.description"> · {{ tx.description }}</template>
+            </span>
+          </div>
+          <div class="tx-right">
+            <span class="tx-amount transfer">{{ fmt(tx.amount) }} ₽</span>
+            <span class="tx-date">{{ new Date(tx.date).toLocaleDateString('ru', { day: 'numeric', month: 'short' }) }}</span>
+          </div>
+        </template>
+        <!-- Income/Expense row -->
+        <template v-else>
+          <div class="tx-cat-icon">
+            {{ getCatInfo(tx.categoryId)?.icon ?? '❓' }}
+          </div>
+          <div class="tx-info">
+            <span class="tx-cat-name">{{ getCatInfo(tx.categoryId)?.name ?? 'Без категории' }}</span>
+            <span v-if="tx.description" class="tx-desc">{{ tx.description }}</span>
+          </div>
+          <div class="tx-right">
+            <span class="tx-amount" :class="tx.type">
+              {{ tx.type === 'income' ? '+' : '-' }}{{ fmt(tx.amount) }} ₽
+            </span>
+            <span class="tx-date">{{ new Date(tx.date).toLocaleDateString('ru', { day: 'numeric', month: 'short' }) }}</span>
+          </div>
+        </template>
         <button class="tx-delete" @click="handleDelete(tx.id)" title="Удалить">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
         </button>
@@ -163,18 +230,65 @@ function getCatInfo(catId: string) {
           <h3 class="modal-title">Новая операция</h3>
           <form @submit.prevent="submitTransaction" class="modal-form">
             <div class="type-switch">
-              <button type="button" :class="{ active: form.type === 'expense' }" @click="form.type = 'expense'; form.categoryId = ''">Расход</button>
-              <button type="button" :class="{ active: form.type === 'income' }" @click="form.type = 'income'; form.categoryId = ''">Доход</button>
+              <button type="button" :class="{ active: form.type === 'expense' }" @click="setFormType('expense')">Расход</button>
+              <button type="button" :class="{ active: form.type === 'income' }" @click="setFormType('income')">Доход</button>
+              <button type="button" :class="{ active: form.type === 'transfer' }" @click="setFormType('transfer')">Перевод</button>
             </div>
-            <label>
-              <span>Категория</span>
-              <select v-model="form.categoryId" required>
-                <option value="" disabled>Выберите...</option>
-                <option v-for="cat in availableCategories" :key="cat.id" :value="cat.id">
-                  {{ cat.icon }} {{ cat.name }}
-                </option>
-              </select>
-            </label>
+
+            <!-- Transfer fields -->
+            <template v-if="isTransfer">
+              <label>
+                <span>Откуда</span>
+                <select v-model="form.fromAccountId" required>
+                  <option value="" disabled>Выберите счёт...</option>
+                  <option
+                    v-for="acc in store.accounts.filter(a => a.isActive)"
+                    :key="acc.id"
+                    :value="acc.id"
+                    :disabled="acc.id === form.toAccountId"
+                  >
+                    {{ acc.name }} ({{ fmt(acc.balance) }} ₽)
+                  </option>
+                </select>
+              </label>
+              <label>
+                <span>Куда</span>
+                <select v-model="form.toAccountId" required>
+                  <option value="" disabled>Выберите счёт...</option>
+                  <option
+                    v-for="acc in store.accounts.filter(a => a.isActive)"
+                    :key="acc.id"
+                    :value="acc.id"
+                    :disabled="acc.id === form.fromAccountId"
+                  >
+                    {{ acc.name }} ({{ fmt(acc.balance) }} ₽)
+                  </option>
+                </select>
+              </label>
+            </template>
+
+            <!-- Income/Expense fields -->
+            <template v-else>
+              <label>
+                <span>Категория</span>
+                <select v-model="form.categoryId" required>
+                  <option value="" disabled>Выберите...</option>
+                  <option v-for="cat in availableCategories" :key="cat.id" :value="cat.id">
+                    {{ cat.icon }} {{ cat.name }}
+                  </option>
+                </select>
+              </label>
+              <label>
+                <span>Счёт</span>
+                <select v-model="form.accountId">
+                  <option value="">Не указан</option>
+                  <option v-for="acc in store.accounts.filter(a => a.isActive)" :key="acc.id" :value="acc.id">
+                    {{ acc.name }}
+                  </option>
+                </select>
+              </label>
+            </template>
+
             <label>
               <span>Сумма (₽)</span>
               <input v-model.number="form.amount" type="number" min="1" step="0.01" required />
@@ -335,6 +449,12 @@ function getCatInfo(catId: string) {
   flex-shrink: 0;
 }
 
+.tx-transfer-icon {
+  font-size: 20px;
+  color: #60a5fa;
+  background: rgba(96, 165, 250, 0.1);
+}
+
 .tx-info { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .tx-cat-name { font-size: 14px; font-weight: 600; color: #e1e8f0; }
 .tx-desc { font-size: 12px; color: #6b7fa3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -343,6 +463,7 @@ function getCatInfo(catId: string) {
 .tx-amount { font-size: 15px; font-weight: 700; }
 .tx-amount.income { color: #34d399; }
 .tx-amount.expense { color: #f87171; }
+.tx-amount.transfer { color: #60a5fa; }
 .tx-date { font-size: 11px; color: #6b7fa3; }
 
 .tx-delete {
@@ -577,6 +698,8 @@ function getCatInfo(catId: string) {
 /* Mobile */
 @media (max-width: 768px) {
   .tx-toolbar { flex-direction: column; align-items: stretch; }
+  .filter-pills { overflow-x: auto; scrollbar-width: none; }
+  .filter-pills::-webkit-scrollbar { display: none; }
   .tx-actions { justify-content: stretch; }
   .tx-actions button { flex: 1; justify-content: center; }
   .tx-delete { opacity: 1; }

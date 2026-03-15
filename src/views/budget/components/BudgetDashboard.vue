@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, onMounted, watch } from "vue";
+import { computed, ref } from "vue";
 import { useBudgetStore } from "@/stores/budget";
 import { Chart as ChartJS, ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement, PointElement, LineElement, Filler } from "chart.js";
 import { Doughnut, Bar, Line } from "vue-chartjs";
@@ -159,6 +159,25 @@ const trendOptions = {
 function fmt(n: number | undefined) {
   return (n ?? 0).toLocaleString("ru");
 }
+
+// Combine upcoming expenses and installment payments, sorted by date
+const upcomingPayments = computed(() => {
+  const expenses = (dash.value?.upcomingExpenses ?? []).map((pe) => ({
+    type: "planned" as const,
+    name: pe.name,
+    amount: pe.amount,
+    date: pe.date,
+    icon: "📋",
+  }));
+  const installments = (dash.value?.upcomingInstallmentPayments ?? []).map((ip) => ({
+    type: "installment" as const,
+    name: ip.installmentName,
+    amount: ip.amount,
+    date: ip.date,
+    icon: "💳",
+  }));
+  return [...expenses, ...installments].sort((a, b) => a.date.localeCompare(b.date));
+});
 </script>
 
 <template>
@@ -168,8 +187,22 @@ function fmt(n: number | undefined) {
       <div class="stat-card stat-balance">
         <div class="stat-icon">💰</div>
         <div class="stat-info">
-          <span class="stat-label">Общий баланс</span>
+          <span class="stat-label">Активы</span>
           <span class="stat-value">{{ fmt(dash?.totalBalance) }} ₽</span>
+        </div>
+      </div>
+      <div class="stat-card stat-debt" v-if="(dash?.totalDebt ?? 0) > 0">
+        <div class="stat-icon">🔴</div>
+        <div class="stat-info">
+          <span class="stat-label">Долги</span>
+          <span class="stat-value red">-{{ fmt(dash?.totalDebt) }} ₽</span>
+        </div>
+      </div>
+      <div class="stat-card stat-networth">
+        <div class="stat-icon">💎</div>
+        <div class="stat-info">
+          <span class="stat-label">Чистыми</span>
+          <span class="stat-value" :class="(dash?.netWorth ?? 0) >= 0 ? '' : 'red'">{{ fmt(dash?.netWorth) }} ₽</span>
         </div>
       </div>
       <div class="stat-card stat-income">
@@ -241,7 +274,58 @@ function fmt(n: number | undefined) {
       </div>
     </div>
 
-    <!-- Bottom row: goals + upcoming -->
+    <!-- Debt & Installments row -->
+    <div class="debt-row" v-if="(dash?.creditAccounts?.length ?? 0) > 0 || (dash?.activeInstallments?.length ?? 0) > 0">
+      <!-- Credit accounts -->
+      <div class="panel-card" v-if="dash?.creditAccounts?.length">
+        <h3 class="panel-title">🔴 Кредитные счета</h3>
+        <div v-for="ca in dash.creditAccounts" :key="ca.id" class="credit-row">
+          <div class="credit-top">
+            <span class="credit-name">{{ ca.name }}</span>
+            <span class="credit-debt red">{{ fmt(Math.abs(ca.balance)) }} ₽</span>
+          </div>
+          <div class="progress-track">
+            <div
+              class="progress-fill"
+              :style="{ width: ca.utilizationPercent + '%' }"
+              :class="{ 'progress-fill-high': ca.utilizationPercent > 70 }"
+            ></div>
+          </div>
+          <div class="credit-bottom">
+            <span class="credit-util">{{ ca.utilizationPercent }}% использовано</span>
+            <span class="credit-limit">Лимит: {{ fmt(ca.creditLimit) }} ₽</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Active installments -->
+      <div class="panel-card" v-if="dash?.activeInstallments?.length">
+        <h3 class="panel-title">📦 Активные рассрочки</h3>
+        <div class="inst-total" v-if="dash?.installmentsTotalRemaining">
+          Осталось выплатить: <strong>{{ fmt(dash.installmentsTotalRemaining) }} ₽</strong>
+        </div>
+        <div v-for="inst in dash.activeInstallments" :key="inst.id" class="inst-row">
+          <div class="inst-top">
+            <span class="inst-name">{{ inst.name }}</span>
+            <span class="inst-remaining">{{ fmt(inst.remainingAmount) }} ₽</span>
+          </div>
+          <div class="progress-track">
+            <div
+              class="progress-fill progress-fill-purple"
+              :style="{ width: inst.progressPercent + '%' }"
+            ></div>
+          </div>
+          <div class="inst-bottom">
+            <span class="inst-pct">{{ inst.progressPercent }}%</span>
+            <span class="inst-next" v-if="inst.nextPaymentDate">
+              Следующий: {{ new Date(inst.nextPaymentDate).toLocaleDateString('ru', { day: 'numeric', month: 'short' }) }}
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bottom row: goals + upcoming + compare -->
     <div class="bottom-row">
       <!-- Savings goals progress -->
       <div class="panel-card">
@@ -269,18 +353,19 @@ function fmt(n: number | undefined) {
         </div>
       </div>
 
-      <!-- Recommended saving + upcoming expenses -->
+      <!-- Upcoming payments (planned + installments combined) -->
       <div class="panel-card">
-        <h3 class="panel-title">📅 Ближайшие планы</h3>
+        <h3 class="panel-title">📅 Ближайшие платежи</h3>
         <div class="recommend-block" v-if="dash?.recommendedMonthlySaving">
           <span class="recommend-label">Рекомендуемые накопления/мес:</span>
           <span class="recommend-val">{{ fmt(dash.recommendedMonthlySaving) }} ₽</span>
         </div>
-        <div v-if="!dash?.upcomingExpenses?.length" class="empty-hint">Нет запланированных трат</div>
-        <div v-for="pe in dash?.upcomingExpenses" :key="pe.id" class="planned-row">
-          <span class="planned-date">{{ new Date(pe.date).toLocaleDateString('ru', { day: 'numeric', month: 'short' }) }}</span>
-          <span class="planned-name">{{ pe.name }}</span>
-          <span class="planned-amount">-{{ fmt(pe.amount) }} ₽</span>
+        <div v-if="!upcomingPayments.length" class="empty-hint">Нет запланированных платежей</div>
+        <div v-for="(pay, idx) in upcomingPayments" :key="idx" class="planned-row">
+          <span class="planned-icon">{{ pay.icon }}</span>
+          <span class="planned-date">{{ new Date(pay.date).toLocaleDateString('ru', { day: 'numeric', month: 'short' }) }}</span>
+          <span class="planned-name">{{ pay.name }}</span>
+          <span class="planned-amount">-{{ fmt(pay.amount) }} ₽</span>
         </div>
       </div>
 
@@ -332,7 +417,7 @@ function fmt(n: number | undefined) {
 /* Stat cards */
 .stat-cards {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 14px;
 }
 
@@ -461,6 +546,66 @@ function fmt(n: number | undefined) {
   50% { opacity: 0.4; }
 }
 
+/* Debt row */
+.debt-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 16px;
+}
+
+.credit-row {
+  margin-bottom: 14px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid rgba(23, 103, 253, 0.08);
+}
+.credit-row:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+.credit-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.credit-name { font-size: 14px; font-weight: 600; color: #e1e8f0; }
+.credit-debt { font-size: 15px; font-weight: 700; }
+.credit-bottom { display: flex; justify-content: space-between; margin-top: 6px; font-size: 12px; }
+.credit-util { color: #6b7fa3; }
+.credit-limit { color: #6b7fa3; }
+
+.inst-total {
+  font-size: 13px;
+  color: #c8daf0;
+  margin-bottom: 14px;
+  padding: 10px 14px;
+  background: rgba(139, 92, 246, 0.08);
+  border: 1px solid rgba(139, 92, 246, 0.2);
+  border-radius: 10px;
+}
+.inst-total strong { color: #c084fc; }
+
+.inst-row {
+  margin-bottom: 14px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid rgba(23, 103, 253, 0.08);
+}
+.inst-row:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+.inst-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.inst-name { font-size: 14px; font-weight: 600; color: #e1e8f0; }
+.inst-remaining { font-size: 14px; font-weight: 600; color: #c084fc; }
+.inst-bottom { display: flex; justify-content: space-between; margin-top: 6px; font-size: 12px; }
+.inst-pct { color: #c084fc; font-weight: 600; }
+.inst-next { color: #6b7fa3; }
+
+/* Progress bars */
+.progress-track {
+  height: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.progress-fill {
+  height: 100%;
+  border-radius: 3px;
+  background: #1767fd;
+  transition: width 0.5s ease;
+}
+.progress-fill-high { background: #f87171; }
+.progress-fill-purple { background: #8b5cf6; }
+
 /* Bottom row */
 .bottom-row {
   display: grid;
@@ -507,18 +652,6 @@ function fmt(n: number | undefined) {
 .goal-name { font-size: 14px; font-weight: 600; color: #fff; flex: 1; }
 .goal-amounts { font-size: 12px; color: #6b7fa3; }
 
-.progress-track {
-  height: 6px;
-  background: rgba(255, 255, 255, 0.06);
-  border-radius: 3px;
-  overflow: hidden;
-}
-.progress-fill {
-  height: 100%;
-  border-radius: 3px;
-  transition: width 0.5s ease;
-}
-
 .goal-bottom {
   display: flex;
   justify-content: space-between;
@@ -551,6 +684,7 @@ function fmt(n: number | undefined) {
   border-bottom: 1px solid rgba(23, 103, 253, 0.06);
 }
 .planned-row:last-child { border-bottom: none; }
+.planned-icon { font-size: 16px; flex-shrink: 0; }
 .planned-date { font-size: 12px; color: #6b7fa3; min-width: 60px; }
 .planned-name { font-size: 13px; color: #c8daf0; flex: 1; }
 .planned-amount { font-size: 14px; font-weight: 600; color: #f87171; }
@@ -571,11 +705,13 @@ function fmt(n: number | undefined) {
 .compare-diff { font-weight: 600; font-size: 12px; }
 .compare-diff.green { color: #34d399; }
 .compare-diff.red { color: #f87171; }
+.red { color: #f87171; }
 
 /* Mobile */
 @media (max-width: 768px) {
   .stat-cards { grid-template-columns: 1fr 1fr; }
   .charts-row { grid-template-columns: 1fr; }
+  .debt-row { grid-template-columns: 1fr; }
   .bottom-row { grid-template-columns: 1fr; }
   .stat-value { font-size: 16px; }
   .stat-icon { font-size: 22px; width: 40px; height: 40px; }

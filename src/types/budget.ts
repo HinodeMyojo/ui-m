@@ -4,10 +4,11 @@
 
 // --- Enums / Literals ---
 
-export type TransactionType = "income" | "expense";
-export type AccountType = "card" | "deposit" | "savings" | "cash";
+export type TransactionType = "income" | "expense" | "transfer";
+export type AccountType = "card" | "deposit" | "savings" | "cash" | "credit" | "credit_line" | "installment";
 export type GoalStatus = "active" | "completed" | "cancelled";
 export type PeriodType = "month" | "quarter" | "year" | "custom";
+export type InstallmentStatus = "active" | "paid_off" | "overdue";
 
 // --- Category ---
 
@@ -36,20 +37,26 @@ export interface UpdateCategoryRequest extends Partial<CreateCategoryRequest> {}
 
 export interface Transaction {
   id: string;
-  categoryId: string;
+  categoryId?: string;
   type: TransactionType;
   amount: number;
   description?: string;
   date: string;           // ISO date "2026-03-12"
+  fromAccountId?: string; // for transfer
+  toAccountId?: string;   // for transfer
+  accountId?: string;     // for income/expense — linked account
   createdAt: string;
 }
 
 export interface CreateTransactionRequest {
-  categoryId: string;
+  categoryId?: string;
   type: TransactionType;
   amount: number;
   description?: string;
   date: string;
+  fromAccountId?: string;
+  toAccountId?: string;
+  accountId?: string;
 }
 
 export interface UpdateTransactionRequest extends Partial<CreateTransactionRequest> {}
@@ -79,6 +86,10 @@ export interface Account {
   interestRate?: number;  // annual %, e.g. 13.5
   maturityDate?: string;  // ISO date when deposit ends
   isActive: boolean;
+  creditLimit?: number;       // for credit/credit_line/installment
+  gracePeriodDays?: number;   // for credit/credit_line
+  dailyCommission?: number;   // for credit_line
+  minPaymentPercent?: number; // for credit
   createdAt: string;
 }
 
@@ -89,6 +100,10 @@ export interface CreateAccountRequest {
   currency?: string;
   interestRate?: number;
   maturityDate?: string;
+  creditLimit?: number;
+  gracePeriodDays?: number;
+  dailyCommission?: number;
+  minPaymentPercent?: number;
 }
 
 export interface UpdateAccountRequest extends Partial<CreateAccountRequest> {
@@ -147,6 +162,50 @@ export interface UpdatePlannedExpenseRequest extends Partial<CreatePlannedExpens
   isCompleted?: boolean;
 }
 
+// --- Installment ---
+
+export interface Installment {
+  id: string;
+  accountId: string;
+  transactionId?: string;
+  name: string;
+  totalAmount: number;
+  monthlyPayment: number;
+  totalInstallments: number;
+  paidInstallments: number;
+  remainingAmount: number;
+  nextPaymentDate?: string;
+  startDate: string;
+  gracePeriodDays: number;
+  status: InstallmentStatus;
+}
+
+export interface CreateInstallmentRequest {
+  accountId: string;
+  name: string;
+  totalAmount: number;
+  totalInstallments: number;
+  monthlyPayment?: number;
+  startDate: string;
+  gracePeriodDays?: number;
+}
+
+export interface UpdateInstallmentRequest extends Partial<CreateInstallmentRequest> {
+  status?: InstallmentStatus;
+}
+
+export interface InstallmentPayRequest {
+  amount: number;
+  fromAccountId: string;
+}
+
+export interface InstallmentSchedulePayment {
+  number: number;
+  date: string;
+  amount: number;
+  status: "paid" | "upcoming" | "overdue";
+}
+
 // --- Budget Summary (computed by backend) ---
 
 export interface MonthlyStats {
@@ -168,6 +227,30 @@ export interface CategoryStats {
   isOverLimit: boolean;
 }
 
+export interface DashboardCreditAccount {
+  id: string;
+  name: string;
+  type: AccountType;
+  balance: number;
+  creditLimit: number;
+  utilizationPercent: number;
+}
+
+export interface DashboardActiveInstallment {
+  id: string;
+  name: string;
+  remainingAmount: number;
+  nextPaymentDate: string;
+  progressPercent: number;
+}
+
+export interface DashboardUpcomingInstallmentPayment {
+  installmentId: string;
+  installmentName: string;
+  amount: number;
+  date: string;
+}
+
 export interface BudgetDashboard {
   currentMonth: MonthlyStats;
   previousMonth: MonthlyStats;
@@ -177,4 +260,11 @@ export interface BudgetDashboard {
   upcomingExpenses: PlannedExpense[];  // next 30 days
   monthlyTrend: MonthlyStats[];       // last 6-12 months
   recommendedMonthlySaving: number;   // how much to save per month to reach goals
+  totalDebt: number;
+  netWorth: number;
+  creditAccounts: DashboardCreditAccount[];
+  activeInstallments: DashboardActiveInstallment[];
+  upcomingInstallmentPayments: DashboardUpcomingInstallmentPayment[];
+  installmentsTotalRemaining: number;
+  transfersTotal: number;
 }
