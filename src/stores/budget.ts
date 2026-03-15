@@ -183,9 +183,20 @@ export const useBudgetStore = defineStore("budget", () => {
     loading.value = true;
     error.value = null;
     try {
-      const result = await api.getTransactions(params);
-      transactions.value = result.items;
-      transactionsTotal.value = result.total;
+      // First fetch to get total count
+      const first = await api.getTransactions({ ...params, limit: 50, offset: 0 });
+      let allItems = [...first.items];
+      transactionsTotal.value = first.total;
+
+      // Load remaining if there are more
+      if (first.total > 50) {
+        const remaining = Math.ceil((first.total - 50) / 200);
+        for (let i = 0; i < remaining; i++) {
+          const batch = await api.getTransactions({ ...params, limit: 200, offset: 50 + i * 200 });
+          allItems = allItems.concat(batch.items);
+        }
+      }
+      transactions.value = allItems;
     } catch (e) {
       error.value = e instanceof Error ? e.message : "Failed to fetch transactions";
       throw e;

@@ -255,6 +255,34 @@ const spendingByBank = computed(() => {
 // Number of transactions
 const txCount = computed(() => expenses.value.length);
 
+// All days of month with spending
+const allDaysOfMonth = computed(() => {
+  const month = store.currentMonth;
+  const year = parseInt(month.slice(0, 4));
+  const mon = parseInt(month.slice(5, 7)) - 1;
+  const daysInMonth = new Date(year, mon + 1, 0).getDate();
+  const now = new Date();
+  const isCurrentMonth = now.getFullYear() === year && now.getMonth() === mon;
+  const lastDay = isCurrentMonth ? now.getDate() : daysInMonth;
+  const days: { date: string; day: number; amount: number; dow: string }[] = [];
+  const SHORT_DAYS = ["Вс", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб"];
+  for (let d = 1; d <= lastDay; d++) {
+    const key = `${month}-${String(d).padStart(2, "0")}`;
+    const dt = new Date(year, mon, d);
+    days.push({
+      date: key,
+      day: d,
+      amount: dailySpending.value.get(key) ?? 0,
+      dow: SHORT_DAYS[dt.getDay()],
+    });
+  }
+  return days;
+});
+
+const maxDayAmount = computed(() =>
+  Math.max(...allDaysOfMonth.value.map((d) => d.amount), 1)
+);
+
 // Days with zero spending
 const daysWithZeroSpend = computed(() => {
   const now = new Date();
@@ -459,6 +487,21 @@ const upcomingPayments = computed(() => {
         </div>
       </div>
 
+      <!-- Spending by bank -->
+      <div class="panel-card" v-if="spendingByBank.length">
+        <h3 class="panel-title">🏦 Расходы по банкам</h3>
+        <div v-for="b in spendingByBank" :key="b.bank" class="bank-stat-row">
+          <span class="bank-stat-name">{{ b.bank }}</span>
+          <div class="bank-stat-bar-track">
+            <div
+              class="bank-stat-bar-fill"
+              :style="{ width: (spendingByBank[0]?.amount ? b.amount / spendingByBank[0].amount * 100 : 0) + '%' }"
+            ></div>
+          </div>
+          <span class="bank-stat-amount">{{ fmt(b.amount) }} ₽</span>
+        </div>
+      </div>
+
       <!-- Spending by day of week -->
       <div class="panel-card">
         <h3 class="panel-title">📅 Расходы по дням недели</h3>
@@ -476,19 +519,25 @@ const upcomingPayments = computed(() => {
           </div>
         </div>
       </div>
+    </div>
 
-      <!-- Spending by bank -->
-      <div class="panel-card" v-if="spendingByBank.length">
-        <h3 class="panel-title">🏦 Расходы по банкам</h3>
-        <div v-for="b in spendingByBank" :key="b.bank" class="bank-stat-row">
-          <span class="bank-stat-name">{{ b.bank }}</span>
-          <div class="bank-stat-bar-track">
+    <!-- Daily spending chart — full width -->
+    <div class="panel-card daily-chart-card">
+      <h3 class="panel-title">📆 Расходы по дням месяца</h3>
+      <div class="daily-chart">
+        <div v-for="d in allDaysOfMonth" :key="d.date" class="daily-bar-col" :title="`${d.dow} ${d.day}: ${fmt(d.amount)} ₽`">
+          <span class="daily-bar-amount" :class="{ 'daily-bar-amount-hidden': d.amount === 0 }">
+            {{ d.amount >= 1000 ? Math.round(d.amount / 1000) + 'k' : d.amount > 0 ? d.amount : '' }}
+          </span>
+          <div class="daily-bar-track">
             <div
-              class="bank-stat-bar-fill"
-              :style="{ width: (spendingByBank[0]?.amount ? b.amount / spendingByBank[0].amount * 100 : 0) + '%' }"
+              class="daily-bar-fill"
+              :style="{ height: (d.amount / maxDayAmount * 100) + '%' }"
+              :class="{ 'daily-bar-top': d.amount === maxDayAmount }"
             ></div>
           </div>
-          <span class="bank-stat-amount">{{ fmt(b.amount) }} ₽</span>
+          <span class="daily-bar-day">{{ d.day }}</span>
+          <span class="daily-bar-dow">{{ d.dow }}</span>
         </div>
       </div>
     </div>
@@ -1070,6 +1119,64 @@ const upcomingPayments = computed(() => {
   transition: width 0.4s;
 }
 .bank-stat-amount { font-size: 14px; font-weight: 600; color: #fff; min-width: 80px; text-align: right; }
+
+/* Daily spending chart */
+.daily-chart-card {
+  background: linear-gradient(135deg, rgba(18, 19, 31, 0.95), rgba(23, 25, 40, 0.95));
+  border: 1px solid rgba(23, 103, 253, 0.15);
+  border-radius: 14px;
+  padding: 20px;
+}
+.daily-chart {
+  display: flex;
+  gap: 2px;
+  align-items: flex-end;
+  height: 200px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(23, 103, 253, 0.3) transparent;
+  padding-bottom: 4px;
+}
+.daily-bar-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  flex: 1;
+  min-width: 28px;
+}
+.daily-bar-amount {
+  font-size: 9px;
+  color: #7eb0ff;
+  font-weight: 600;
+  height: 14px;
+}
+.daily-bar-amount-hidden { visibility: hidden; }
+.daily-bar-track {
+  width: 100%;
+  height: 140px;
+  display: flex;
+  align-items: flex-end;
+}
+.daily-bar-fill {
+  width: 100%;
+  border-radius: 4px 4px 0 0;
+  background: linear-gradient(180deg, #1767fd, #6e4aff);
+  transition: height 0.4s;
+  min-height: 0;
+}
+.daily-bar-fill.daily-bar-top {
+  background: linear-gradient(180deg, #f87171, #fb923c);
+}
+.daily-bar-day {
+  font-size: 11px;
+  color: #c8daf0;
+  font-weight: 600;
+}
+.daily-bar-dow {
+  font-size: 9px;
+  color: #4a5c7a;
+}
 
 /* Mobile */
 @media (max-width: 768px) {
