@@ -8,12 +8,22 @@ ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarEle
 
 const store = useBudgetStore();
 const chartType = ref<"doughnut" | "bar">("doughnut");
+const categorySortOrder = ref<"desc" | "asc">("desc");
 
 const dash = computed(() => store.dashboard);
 
-// Doughnut chart — expenses by category
-const doughnutData = computed(() => {
+// Sorted categories by amount
+const sortedCategories = computed(() => {
   const stats = dash.value?.currentMonth?.byCategory?.filter((c) => c.amount > 0) ?? [];
+  const sorted = [...stats].sort((a, b) =>
+    categorySortOrder.value === "desc" ? b.amount - a.amount : a.amount - b.amount
+  );
+  return sorted;
+});
+
+// Doughnut chart — expenses by category (sorted)
+const doughnutData = computed(() => {
+  const stats = sortedCategories.value;
   return {
     labels: stats.map((c) => c.categoryName),
     datasets: [
@@ -48,9 +58,9 @@ const doughnutOptions = {
   },
 };
 
-// Bar chart — expenses by category
+// Bar chart — expenses by category (sorted)
 const barData = computed(() => {
-  const stats = dash.value?.currentMonth?.byCategory?.filter((c) => c.amount > 0) ?? [];
+  const stats = sortedCategories.value;
   return {
     labels: stats.map((c) => c.categoryName),
     datasets: [
@@ -160,6 +170,109 @@ function fmt(n: number | undefined) {
   return (n ?? 0).toLocaleString("ru");
 }
 
+// === EXTENDED SPENDING STATS (computed from transactions in store) ===
+
+const expenses = computed(() =>
+  store.transactions.filter((t) => t.type === "expense")
+);
+
+// Daily spending map
+const dailySpending = computed(() => {
+  const map = new Map<string, number>();
+  for (const tx of expenses.value) {
+    const d = tx.date.slice(0, 10);
+    map.set(d, (map.get(d) ?? 0) + tx.amount);
+  }
+  return map;
+});
+
+// Top 5 most expensive days
+const topDays = computed(() => {
+  return [...dailySpending.value.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([date, amount]) => ({ date, amount }));
+});
+
+// Average daily spend
+const avgDailySpend = computed(() => {
+  const days = dailySpending.value.size;
+  if (!days) return 0;
+  const total = [...dailySpending.value.values()].reduce((s, v) => s + v, 0);
+  return Math.round(total / days);
+});
+
+// Median daily spend
+const medianDailySpend = computed(() => {
+  const vals = [...dailySpending.value.values()].sort((a, b) => a - b);
+  if (!vals.length) return 0;
+  const mid = Math.floor(vals.length / 2);
+  return vals.length % 2 ? vals[mid] : Math.round((vals[mid - 1] + vals[mid]) / 2);
+});
+
+// Max single transaction
+const maxTransaction = computed(() => {
+  if (!expenses.value.length) return null;
+  return expenses.value.reduce((max, tx) => (tx.amount > max.amount ? tx : max));
+});
+
+// Spending by day of week (0=Mon..6=Sun)
+const DAY_NAMES = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
+const spendingByDayOfWeek = computed(() => {
+  const totals = [0, 0, 0, 0, 0, 0, 0];
+  const counts = [0, 0, 0, 0, 0, 0, 0];
+  for (const tx of expenses.value) {
+    const d = new Date(tx.date);
+    const dow = (d.getDay() + 6) % 7; // Mon=0
+    totals[dow] += tx.amount;
+    counts[dow]++;
+  }
+  return totals.map((total, i) => ({
+    day: DAY_NAMES[i],
+    total,
+    avg: counts[i] ? Math.round(total / counts[i]) : 0,
+    count: counts[i],
+  }));
+});
+
+// Most expensive day of week
+const mostExpensiveDow = computed(() => {
+  return spendingByDayOfWeek.value.reduce((max, d) => (d.total > max.total ? d : max), spendingByDayOfWeek.value[0]);
+});
+
+// Spending by bank
+const spendingByBank = computed(() => {
+  const map = new Map<string, number>();
+  for (const tx of expenses.value) {
+    const bank = tx.bank || "Не указан";
+    map.set(bank, (map.get(bank) ?? 0) + tx.amount);
+  }
+  return [...map.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([bank, amount]) => ({ bank, amount }));
+});
+
+// Number of transactions
+const txCount = computed(() => expenses.value.length);
+
+// Days with zero spending
+const daysWithZeroSpend = computed(() => {
+  const now = new Date();
+  const month = store.currentMonth;
+  const year = parseInt(month.slice(0, 4));
+  const mon = parseInt(month.slice(5, 7)) - 1;
+  const daysInMonth = new Date(year, mon + 1, 0).getDate();
+  const lastDay = (now.getFullYear() === year && now.getMonth() === mon)
+    ? now.getDate()
+    : daysInMonth;
+  let zero = 0;
+  for (let d = 1; d <= lastDay; d++) {
+    const key = `${month}-${String(d).padStart(2, "0")}`;
+    if (!dailySpending.value.has(key)) zero++;
+  }
+  return zero;
+});
+
 // Combine upcoming expenses and installment payments, sorted by date
 const upcomingPayments = computed(() => {
   const expenses = (dash.value?.upcomingExpenses ?? []).map((pe) => ({
@@ -248,13 +361,22 @@ const upcomingPayments = computed(() => {
       <div class="chart-card">
         <div class="chart-header">
           <h3>Расходы по категориям</h3>
-          <div class="chart-toggle">
-            <button :class="{ active: chartType === 'doughnut' }" @click="chartType = 'doughnut'">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 2v10l7 4"/></svg>
+          <div class="chart-controls">
+            <button
+              class="sort-btn"
+              @click="categorySortOrder = categorySortOrder === 'desc' ? 'asc' : 'desc'"
+              :title="categorySortOrder === 'desc' ? 'По убыванию' : 'По возрастанию'"
+            >
+              {{ categorySortOrder === 'desc' ? '↓' : '↑' }}
             </button>
-            <button :class="{ active: chartType === 'bar' }" @click="chartType = 'bar'">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="12" width="4" height="9"/><rect x="10" y="7" width="4" height="14"/><rect x="17" y="3" width="4" height="18"/></svg>
-            </button>
+            <div class="chart-toggle">
+              <button :class="{ active: chartType === 'doughnut' }" @click="chartType = 'doughnut'">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 2v10l7 4"/></svg>
+              </button>
+              <button :class="{ active: chartType === 'bar' }" @click="chartType = 'bar'">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="12" width="4" height="9"/><rect x="10" y="7" width="4" height="14"/><rect x="17" y="3" width="4" height="18"/></svg>
+              </button>
+            </div>
           </div>
         </div>
         <div class="chart-body">
@@ -264,7 +386,7 @@ const upcomingPayments = computed(() => {
         <!-- Legend -->
         <div class="category-legend" v-if="chartType === 'doughnut'">
           <div
-            v-for="cat in dash?.currentMonth?.byCategory?.filter(c => c.amount > 0)"
+            v-for="cat in sortedCategories"
             :key="cat.categoryId"
             class="legend-item"
           >
@@ -284,6 +406,89 @@ const upcomingPayments = computed(() => {
         </div>
         <div class="chart-body chart-body-line">
           <Line :data="trendData" :options="trendOptions" />
+        </div>
+      </div>
+    </div>
+
+    <!-- Spending Analytics -->
+    <div class="analytics-row">
+      <!-- Quick stats -->
+      <div class="panel-card">
+        <h3 class="panel-title">📊 Аналитика расходов</h3>
+        <div class="analytics-grid">
+          <div class="a-item">
+            <span class="a-label">Операций</span>
+            <span class="a-value">{{ txCount }}</span>
+          </div>
+          <div class="a-item">
+            <span class="a-label">Средний расход/день</span>
+            <span class="a-value">{{ fmt(avgDailySpend) }} ₽</span>
+          </div>
+          <div class="a-item">
+            <span class="a-label">Медиана/день</span>
+            <span class="a-value">{{ fmt(medianDailySpend) }} ₽</span>
+          </div>
+          <div class="a-item">
+            <span class="a-label">Дней без трат</span>
+            <span class="a-value green">{{ daysWithZeroSpend }}</span>
+          </div>
+          <div class="a-item a-item-wide" v-if="maxTransaction">
+            <span class="a-label">Макс. трата</span>
+            <span class="a-value red">{{ fmt(maxTransaction.amount) }} ₽</span>
+            <span class="a-sub">{{ maxTransaction.description || 'Без описания' }} · {{ new Date(maxTransaction.date).toLocaleDateString('ru', { day: 'numeric', month: 'short' }) }}</span>
+          </div>
+          <div class="a-item a-item-wide" v-if="mostExpensiveDow">
+            <span class="a-label">Самый дорогой день недели</span>
+            <span class="a-value">{{ mostExpensiveDow.day }}</span>
+            <span class="a-sub">{{ fmt(mostExpensiveDow.total) }} ₽ за месяц ({{ mostExpensiveDow.count }} операций)</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Top expensive days -->
+      <div class="panel-card">
+        <h3 class="panel-title">🔥 Самые дорогие дни</h3>
+        <div v-if="!topDays.length" class="empty-hint">Нет данных</div>
+        <div v-for="(day, i) in topDays" :key="day.date" class="top-day-row">
+          <span class="top-day-rank">{{ i + 1 }}</span>
+          <span class="top-day-date">{{ new Date(day.date).toLocaleDateString('ru', { weekday: 'short', day: 'numeric', month: 'short' }) }}</span>
+          <div class="top-day-bar-track">
+            <div class="top-day-bar-fill" :style="{ width: (topDays.length && topDays[0].amount ? day.amount / topDays[0].amount * 100 : 0) + '%' }"></div>
+          </div>
+          <span class="top-day-amount">{{ fmt(day.amount) }} ₽</span>
+        </div>
+      </div>
+
+      <!-- Spending by day of week -->
+      <div class="panel-card">
+        <h3 class="panel-title">📅 Расходы по дням недели</h3>
+        <div class="dow-grid">
+          <div v-for="d in spendingByDayOfWeek" :key="d.day" class="dow-item">
+            <span class="dow-name">{{ d.day }}</span>
+            <div class="dow-bar-track">
+              <div
+                class="dow-bar-fill"
+                :style="{ height: (spendingByDayOfWeek.length && Math.max(...spendingByDayOfWeek.map(x => x.total)) ? d.total / Math.max(...spendingByDayOfWeek.map(x => x.total)) * 100 : 0) + '%' }"
+              ></div>
+            </div>
+            <span class="dow-total">{{ d.total >= 1000 ? Math.round(d.total / 1000) + 'k' : fmt(d.total) }}</span>
+            <span class="dow-avg">~{{ fmt(d.avg) }}/д</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Spending by bank -->
+      <div class="panel-card" v-if="spendingByBank.length">
+        <h3 class="panel-title">🏦 Расходы по банкам</h3>
+        <div v-for="b in spendingByBank" :key="b.bank" class="bank-stat-row">
+          <span class="bank-stat-name">{{ b.bank }}</span>
+          <div class="bank-stat-bar-track">
+            <div
+              class="bank-stat-bar-fill"
+              :style="{ width: (spendingByBank[0]?.amount ? b.amount / spendingByBank[0].amount * 100 : 0) + '%' }"
+            ></div>
+          </div>
+          <span class="bank-stat-amount">{{ fmt(b.amount) }} ₽</span>
         </div>
       </div>
     </div>
@@ -754,11 +959,124 @@ const upcomingPayments = computed(() => {
 .compare-diff.red { color: #f87171; }
 .red { color: #f87171; }
 
+/* Chart controls */
+.chart-controls { display: flex; align-items: center; gap: 8px; }
+.sort-btn {
+  background: rgba(23, 103, 253, 0.1);
+  border: 1px solid rgba(23, 103, 253, 0.25);
+  color: #7eb0ff;
+  width: 32px; height: 32px;
+  border-radius: 8px; cursor: pointer;
+  font-size: 16px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.2s;
+}
+.sort-btn:hover { background: rgba(23, 103, 253, 0.25); color: #fff; }
+
+/* Analytics row */
+.analytics-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 16px;
+}
+
+.analytics-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.a-item {
+  display: flex; flex-direction: column; gap: 4px;
+  padding: 12px;
+  background: rgba(23, 103, 253, 0.04);
+  border-radius: 10px;
+}
+.a-item-wide { grid-column: span 2; }
+.a-label { font-size: 11px; color: #6b7fa3; text-transform: uppercase; letter-spacing: 0.3px; }
+.a-value { font-size: 18px; font-weight: 700; color: #fff; }
+.a-value.green { color: #34d399; }
+.a-value.red { color: #f87171; }
+.a-sub { font-size: 11px; color: #4a5c7a; }
+
+/* Top days */
+.top-day-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(23, 103, 253, 0.06);
+}
+.top-day-row:last-child { border-bottom: none; }
+.top-day-rank {
+  width: 24px; height: 24px;
+  background: rgba(248, 113, 113, 0.12);
+  border-radius: 6px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 700; color: #f87171;
+  flex-shrink: 0;
+}
+.top-day-date { font-size: 13px; color: #c8daf0; min-width: 90px; text-transform: capitalize; }
+.top-day-bar-track {
+  flex: 1; height: 6px;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 3px; overflow: hidden;
+}
+.top-day-bar-fill {
+  height: 100%; border-radius: 3px;
+  background: linear-gradient(90deg, #f87171, #fb923c);
+  transition: width 0.4s;
+}
+.top-day-amount { font-size: 14px; font-weight: 600; color: #f87171; min-width: 80px; text-align: right; }
+
+/* Day of week */
+.dow-grid {
+  display: flex; gap: 8px; align-items: flex-end;
+  height: 160px; padding-top: 10px;
+}
+.dow-item {
+  flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px;
+}
+.dow-name { font-size: 11px; color: #6b7fa3; font-weight: 500; order: 3; }
+.dow-bar-track {
+  width: 100%; height: 100px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 6px 6px 0 0;
+  display: flex; align-items: flex-end;
+  order: 1;
+}
+.dow-bar-fill {
+  width: 100%; border-radius: 6px 6px 0 0;
+  background: linear-gradient(180deg, #1767fd, #6e4aff);
+  transition: height 0.4s;
+  min-height: 2px;
+}
+.dow-total { font-size: 11px; color: #c8daf0; font-weight: 600; order: 2; }
+.dow-avg { font-size: 9px; color: #4a5c7a; order: 4; }
+
+/* Bank spending stats */
+.bank-stat-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(23, 103, 253, 0.06);
+}
+.bank-stat-row:last-child { border-bottom: none; }
+.bank-stat-name { font-size: 13px; color: #c8daf0; min-width: 100px; }
+.bank-stat-bar-track {
+  flex: 1; height: 6px;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 3px; overflow: hidden;
+}
+.bank-stat-bar-fill {
+  height: 100%; border-radius: 3px;
+  background: linear-gradient(90deg, #1767fd, #60a5fa);
+  transition: width 0.4s;
+}
+.bank-stat-amount { font-size: 14px; font-weight: 600; color: #fff; min-width: 80px; text-align: right; }
+
 /* Mobile */
 @media (max-width: 768px) {
   .stat-cards { grid-template-columns: 1fr 1fr; }
   .charts-row { grid-template-columns: 1fr; }
   .debt-row { grid-template-columns: 1fr; }
+  .analytics-row { grid-template-columns: 1fr; }
   .bottom-row { grid-template-columns: 1fr; }
   .stat-value { font-size: 16px; }
   .stat-icon { font-size: 22px; width: 40px; height: 40px; }
