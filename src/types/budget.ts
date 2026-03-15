@@ -263,7 +263,10 @@ export interface BudgetDashboard {
   currentMonth: MonthlyStats;
   previousMonth: MonthlyStats;
   totalBalance: number;           // all accounts sum
+  realMoney: number;              // only card + deposit + savings + cash
   monthlyPassiveIncome: number;   // from deposits/savings interest
+  totalMonthlyIncome: number;     // active income + passive income
+  forecastEndOfMonth: number;     // projected balance at month end
   savingsGoals: SavingsGoal[];
   upcomingExpenses: PlannedExpense[];  // next 30 days
   monthlyTrend: MonthlyStats[];       // last 6-12 months

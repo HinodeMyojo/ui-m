@@ -191,6 +191,14 @@ const upcomingPayments = computed(() => {
           <span class="stat-value">{{ fmt(dash?.totalBalance) }} ₽</span>
         </div>
       </div>
+      <div class="stat-card stat-real">
+        <div class="stat-icon">💵</div>
+        <div class="stat-info">
+          <span class="stat-label">Чистыми</span>
+          <span class="stat-value">{{ fmt(dash?.realMoney) }} ₽</span>
+          <span class="stat-sub">Карты + вклады + наличные</span>
+        </div>
+      </div>
       <div class="stat-card stat-debt" v-if="(dash?.totalDebt ?? 0) > 0">
         <div class="stat-icon">🔴</div>
         <div class="stat-info">
@@ -198,18 +206,21 @@ const upcomingPayments = computed(() => {
           <span class="stat-value red">-{{ fmt(dash?.totalDebt) }} ₽</span>
         </div>
       </div>
-      <div class="stat-card stat-networth">
-        <div class="stat-icon">💎</div>
-        <div class="stat-info">
-          <span class="stat-label">Чистыми</span>
-          <span class="stat-value" :class="(dash?.netWorth ?? 0) >= 0 ? '' : 'red'">{{ fmt(dash?.netWorth) }} ₽</span>
-        </div>
-      </div>
-      <div class="stat-card stat-income">
+      <div class="stat-card stat-total-income has-tooltip">
         <div class="stat-icon">📈</div>
         <div class="stat-info">
-          <span class="stat-label">Доходы за месяц</span>
-          <span class="stat-value green">+{{ fmt(dash?.currentMonth?.totalIncome) }} ₽</span>
+          <span class="stat-label">Общий доход за месяц</span>
+          <span class="stat-value green">+{{ fmt(dash?.totalMonthlyIncome) }} ₽</span>
+        </div>
+        <div class="stat-tooltip">
+          <div class="tooltip-row">
+            <span>Активный доход</span>
+            <span class="green">+{{ fmt(dash?.currentMonth?.totalIncome) }} ₽</span>
+          </div>
+          <div class="tooltip-row">
+            <span>Пассивный доход</span>
+            <span class="blue">+{{ fmt(dash?.monthlyPassiveIncome) }} ₽</span>
+          </div>
         </div>
       </div>
       <div class="stat-card stat-expense">
@@ -219,11 +230,14 @@ const upcomingPayments = computed(() => {
           <span class="stat-value red">-{{ fmt(dash?.currentMonth?.totalExpense) }} ₽</span>
         </div>
       </div>
-      <div class="stat-card stat-passive">
-        <div class="stat-icon">🏦</div>
+      <div class="stat-card stat-forecast">
+        <div class="stat-icon">🔮</div>
         <div class="stat-info">
-          <span class="stat-label">Пассивный доход/мес</span>
-          <span class="stat-value blue">+{{ fmt(dash?.monthlyPassiveIncome) }} ₽</span>
+          <span class="stat-label">Прогноз к концу месяца</span>
+          <span class="stat-value" :class="(dash?.forecastEndOfMonth ?? 0) >= 0 ? 'green' : 'red'">
+            {{ (dash?.forecastEndOfMonth ?? 0) >= 0 ? '+' : '' }}{{ fmt(dash?.forecastEndOfMonth) }} ₽
+          </span>
+          <span class="stat-sub">Доход − расход (темп)</span>
         </div>
       </div>
     </div>
@@ -454,6 +468,39 @@ const upcomingPayments = computed(() => {
 .stat-value.green { color: #34d399; }
 .stat-value.red { color: #f87171; }
 .stat-value.blue { color: #60a5fa; }
+.stat-sub { font-size: 10px; color: #4a5c7a; }
+
+/* Tooltip on hover */
+.has-tooltip {
+  position: relative;
+}
+.stat-tooltip {
+  display: none;
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(14, 15, 26, 0.98);
+  border: 1px solid rgba(23, 103, 253, 0.3);
+  border-radius: 10px;
+  padding: 12px 16px;
+  min-width: 220px;
+  z-index: 100;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+.has-tooltip:hover .stat-tooltip {
+  display: block;
+}
+.tooltip-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  font-size: 13px;
+  color: #c8daf0;
+  padding: 4px 0;
+}
+.tooltip-row .green { color: #34d399; font-weight: 600; }
+.tooltip-row .blue { color: #60a5fa; font-weight: 600; }
 
 /* Charts row */
 .charts-row {
