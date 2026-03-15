@@ -6,8 +6,7 @@ import BudgetTransactions from "./components/BudgetTransactions.vue";
 import BudgetCategories from "./components/BudgetCategories.vue";
 import BudgetAccounts from "./components/BudgetAccounts.vue";
 import BudgetGoals from "./components/BudgetGoals.vue";
-import BudgetPlanned from "./components/BudgetPlanned.vue";
-import BudgetInstallments from "./components/BudgetInstallments.vue";
+import BudgetPlanning from "./components/BudgetPlanning.vue";
 import { useRouter } from "vue-router";
 
 const router = useRouter();
@@ -18,9 +17,8 @@ const tabs = [
   { id: "transactions", label: "Операции", icon: "💳" },
   { id: "categories", label: "Категории", icon: "🏷️" },
   { id: "accounts", label: "Счета", icon: "🏦" },
+  { id: "planning", label: "Планирование", icon: "📋" },
   { id: "goals", label: "Цели", icon: "🎯" },
-  { id: "planned", label: "Планы", icon: "📅" },
-  { id: "installments", label: "Рассрочки", icon: "📦" },
 ] as const;
 
 type TabId = (typeof tabs)[number]["id"];
@@ -37,10 +35,8 @@ onMounted(async () => {
       store.fetchAccounts(),
       store.fetchBanks(),
       store.fetchGoals(),
-      store.fetchPlannedExpenses(),
       store.fetchDashboard(store.currentMonth),
       store.fetchTransactions({ month: store.currentMonth }),
-      store.fetchInstallments(),
     ]);
   } catch {
     // errors handled in store
@@ -130,9 +126,8 @@ watch(
       <BudgetTransactions v-else-if="activeTab === 'transactions'" />
       <BudgetCategories v-else-if="activeTab === 'categories'" />
       <BudgetAccounts v-else-if="activeTab === 'accounts'" />
+      <BudgetPlanning v-else-if="activeTab === 'planning'" />
       <BudgetGoals v-else-if="activeTab === 'goals'" />
-      <BudgetPlanned v-else-if="activeTab === 'planned'" />
-      <BudgetInstallments v-else-if="activeTab === 'installments'" />
     </main>
   </div>
 </template>

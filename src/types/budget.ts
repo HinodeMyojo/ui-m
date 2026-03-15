@@ -129,6 +129,11 @@ export interface SavingsGoal {
   icon: string;
   color: string;
   status: GoalStatus;
+  imageURL?: string;
+  priceMin?: number;
+  priceMax?: number;
+  links?: string[];
+  priority?: number;
   createdAt: string;
 }
 
@@ -139,6 +144,11 @@ export interface CreateSavingsGoalRequest {
   deadline: string;
   icon?: string;
   color?: string;
+  imageURL?: string;
+  priceMin?: number;
+  priceMax?: number;
+  links?: string[];
+  priority?: number;
 }
 
 export interface UpdateSavingsGoalRequest extends Partial<CreateSavingsGoalRequest> {
@@ -279,3 +289,67 @@ export interface BudgetDashboard {
   installmentsTotalRemaining: number;
   transfersTotal: number;
 }
+
+// --- Budget Planning ---
+
+export type PlanItemType = "income" | "expense" | "saving" | "deposit";
+
+export interface BudgetPlan {
+  id: string;
+  month: string;        // "2026-04" or "template"
+  isTemplate: boolean;
+  name: string;
+  createdAt: string;
+}
+
+export interface BudgetPlanItem {
+  id: string;
+  planId: string;
+  type: PlanItemType;
+  categoryId?: string;
+  name: string;
+  amount: number;
+  plannedDate: number;  // day of month (0 = no specific day)
+  depositRate?: number;
+  depositMonths?: number;
+  sortOrder: number;
+}
+
+export interface GoalTimelineProjection {
+  goalId: string;
+  goalName: string;
+  remaining: number;
+  monthsToReach: number;
+  estimatedDate: string;
+}
+
+export interface BudgetPlanSummary {
+  plan: BudgetPlan;
+  items: BudgetPlanItem[];
+  totalIncome: number;
+  totalExpense: number;
+  plannedSaving: number;
+  freeSaving: number;
+  depositIncome: number;
+  netMonthlySaving: number;
+  goalTimelines: GoalTimelineProjection[];
+}
+
+export interface CreateBudgetPlanRequest {
+  month: string;
+  isTemplate?: boolean;
+  name?: string;
+}
+
+export interface CreateBudgetPlanItemRequest {
+  type: PlanItemType;
+  categoryId?: string;
+  name: string;
+  amount: number;
+  plannedDate?: number;
+  depositRate?: number;
+  depositMonths?: number;
+  sortOrder?: number;
+}
+
+export interface UpdateBudgetPlanItemRequest extends Partial<CreateBudgetPlanItemRequest> {}

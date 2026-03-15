@@ -22,6 +22,11 @@ import type {
   UpdateInstallmentRequest,
   InstallmentPayRequest,
   InstallmentSchedulePayment,
+  BudgetPlan,
+  BudgetPlanSummary,
+  CreateBudgetPlanRequest,
+  CreateBudgetPlanItemRequest,
+  UpdateBudgetPlanItemRequest,
 } from "../types/budget";
 
 const API_BASE_URL = `${window.location.protocol}//82.202.136.167:5005`;
@@ -305,4 +310,65 @@ export async function getMonthlyStats(month: string): Promise<MonthlyStats> {
 
 export async function getStatsRange(from: string, to: string): Promise<MonthlyStats[]> {
   return budgetRequest<MonthlyStats[]>(`/stats/range?from=${from}&to=${to}`);
+}
+
+// === BUDGET PLANS ===
+
+export async function getPlans(): Promise<BudgetPlan[]> {
+  return budgetRequest<BudgetPlan[]>("/plans");
+}
+
+export async function createPlan(data: CreateBudgetPlanRequest): Promise<{ id: string }> {
+  return budgetRequest<{ id: string }>("/plans", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function getPlan(id: string): Promise<BudgetPlanSummary> {
+  return budgetRequest<BudgetPlanSummary>(`/plans/${id}`);
+}
+
+export async function getPlanByMonth(month: string): Promise<BudgetPlanSummary> {
+  return budgetRequest<BudgetPlanSummary>(`/plans/month/${month}`);
+}
+
+export async function updatePlan(id: string, data: { name?: string }): Promise<void> {
+  return budgetRequest<void>(`/plans/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deletePlan(id: string): Promise<void> {
+  return budgetRequest<void>(`/plans/${id}`, {
+    method: "DELETE",
+  });
+}
+
+export async function clonePlanFromTemplate(planId: string, month: string): Promise<{ id: string }> {
+  return budgetRequest<{ id: string }>(`/plans/${planId}/clone`, {
+    method: "POST",
+    body: JSON.stringify({ month }),
+  });
+}
+
+export async function addPlanItem(planId: string, data: CreateBudgetPlanItemRequest): Promise<{ id: string }> {
+  return budgetRequest<{ id: string }>(`/plans/${planId}/items`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function updatePlanItem(id: string, data: UpdateBudgetPlanItemRequest): Promise<void> {
+  return budgetRequest<void>(`/plans/items/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deletePlanItem(id: string): Promise<void> {
+  return budgetRequest<void>(`/plans/items/${id}`, {
+    method: "DELETE",
+  });
 }

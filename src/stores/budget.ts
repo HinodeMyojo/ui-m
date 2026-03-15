@@ -10,6 +10,8 @@ import type {
   MonthlyStats,
   Installment,
   InstallmentSchedulePayment,
+  BudgetPlan,
+  BudgetPlanSummary,
 } from "../types/budget";
 import * as api from "../api/budget";
 
@@ -25,6 +27,8 @@ export const useBudgetStore = defineStore("budget", () => {
   const monthlyStats = ref<Map<string, MonthlyStats>>(new Map());
   const installments = ref<Installment[]>([]);
   const banks = ref<{ id: string; name: string }[]>([]);
+  const plans = ref<BudgetPlan[]>([]);
+  const currentPlan = ref<BudgetPlanSummary | null>(null);
 
   const loading = ref(false);
   const error = ref<string | null>(null);
@@ -508,6 +512,103 @@ export const useBudgetStore = defineStore("budget", () => {
     }
   }
 
+  // Plans
+  async function fetchPlans() {
+    try {
+      plans.value = await api.getPlans();
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : "Failed to fetch plans";
+    }
+  }
+
+  async function fetchPlan(id: string) {
+    try {
+      currentPlan.value = await api.getPlan(id);
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : "Failed to fetch plan";
+      throw e;
+    }
+  }
+
+  async function fetchPlanByMonth(month: string) {
+    try {
+      currentPlan.value = await api.getPlanByMonth(month);
+    } catch {
+      currentPlan.value = null;
+    }
+  }
+
+  async function createPlan(data: Parameters<typeof api.createPlan>[0]) {
+    try {
+      const { id } = await api.createPlan(data);
+      await fetchPlans();
+      return id;
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : "Failed to create plan";
+      throw e;
+    }
+  }
+
+  async function deletePlan(id: string) {
+    try {
+      await api.deletePlan(id);
+      plans.value = plans.value.filter((p) => p.id !== id);
+      if (currentPlan.value?.plan.id === id) currentPlan.value = null;
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : "Failed to delete plan";
+      throw e;
+    }
+  }
+
+  async function clonePlanFromTemplate(planId: string, month: string) {
+    try {
+      const { id } = await api.clonePlanFromTemplate(planId, month);
+      await fetchPlans();
+      return id;
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : "Failed to clone plan";
+      throw e;
+    }
+  }
+
+  async function addPlanItem(planId: string, data: Parameters<typeof api.addPlanItem>[1]) {
+    try {
+      const { id } = await api.addPlanItem(planId, data);
+      // Refresh current plan to get updated summary
+      if (currentPlan.value?.plan.id === planId) {
+        await fetchPlan(planId);
+      }
+      return id;
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : "Failed to add plan item";
+      throw e;
+    }
+  }
+
+  async function updatePlanItem(id: string, data: Parameters<typeof api.updatePlanItem>[1]) {
+    try {
+      await api.updatePlanItem(id, data);
+      if (currentPlan.value) {
+        await fetchPlan(currentPlan.value.plan.id);
+      }
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : "Failed to update plan item";
+      throw e;
+    }
+  }
+
+  async function deletePlanItem(id: string) {
+    try {
+      await api.deletePlanItem(id);
+      if (currentPlan.value) {
+        await fetchPlan(currentPlan.value.plan.id);
+      }
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : "Failed to delete plan item";
+      throw e;
+    }
+  }
+
   // Dashboard
   async function fetchDashboard(month?: string) {
     loading.value = true;
@@ -557,6 +658,8 @@ export const useBudgetStore = defineStore("budget", () => {
     currentMonth,
     installments,
     banks,
+    plans,
+    currentPlan,
 
     // Getters
     expenseCategories,
@@ -609,6 +712,16 @@ export const useBudgetStore = defineStore("budget", () => {
     deleteInstallment,
     payInstallment,
     fetchInstallmentSchedule,
+
+    fetchPlans,
+    fetchPlan,
+    fetchPlanByMonth,
+    createPlan,
+    deletePlan,
+    clonePlanFromTemplate,
+    addPlanItem,
+    updatePlanItem,
+    deletePlanItem,
 
     fetchDashboard,
     fetchMonthlyStats,

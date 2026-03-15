@@ -29,6 +29,82 @@ const filteredTransactions = computed(() => {
   return store.transactions.filter((t) => t.type === filterType.value);
 });
 
+// Grouping
+const groupBy = ref<"none" | "category" | "date">("none");
+const collapsedGroups = ref(new Set<string>());
+
+function toggleGroup(key: string) {
+  if (collapsedGroups.value.has(key)) {
+    collapsedGroups.value.delete(key);
+  } else {
+    collapsedGroups.value.add(key);
+  }
+}
+
+interface TxGroup {
+  key: string;
+  label: string;
+  icon?: string;
+  total: number;
+  count: number;
+  transactions: typeof store.transactions;
+}
+
+const groupedTransactions = computed((): TxGroup[] => {
+  const txs = filteredTransactions.value;
+  if (groupBy.value === "none") {
+    return [{ key: "__all", label: "", icon: "", total: 0, count: txs.length, transactions: txs }];
+  }
+
+  const map = new Map<string, TxGroup>();
+
+  if (groupBy.value === "category") {
+    for (const tx of txs) {
+      let key: string, label: string, icon: string;
+      if (tx.type === "transfer") {
+        key = "__transfer";
+        label = "Переводы";
+        icon = "↔";
+      } else {
+        const cat = getCatInfo(tx.categoryId);
+        key = tx.categoryId ?? "__nocat";
+        label = cat?.name ?? "Без категории";
+        icon = cat?.icon ?? "❓";
+      }
+      if (!map.has(key)) {
+        map.set(key, { key, label, icon, total: 0, count: 0, transactions: [] });
+      }
+      const g = map.get(key)!;
+      g.total += tx.type === "income" ? tx.amount : -tx.amount;
+      g.count++;
+      g.transactions.push(tx);
+    }
+  } else {
+    // group by date
+    for (const tx of txs) {
+      const key = tx.date.slice(0, 10);
+      if (!map.has(key)) {
+        const d = new Date(key);
+        const label = d.toLocaleDateString("ru", { weekday: "long", day: "numeric", month: "long" });
+        map.set(key, { key, label, total: 0, count: 0, transactions: [] });
+      }
+      const g = map.get(key)!;
+      g.total += tx.type === "income" ? tx.amount : tx.type === "expense" ? -tx.amount : 0;
+      g.count++;
+      g.transactions.push(tx);
+    }
+  }
+
+  // Sort groups
+  const groups = [...map.values()];
+  if (groupBy.value === "date") {
+    groups.sort((a, b) => b.key.localeCompare(a.key)); // newest first
+  } else {
+    groups.sort((a, b) => Math.abs(b.total) - Math.abs(a.total)); // largest first
+  }
+  return groups;
+});
+
 const availableCategories = computed(() =>
   form.value.type === "income" ? store.incomeCategories : store.expenseCategories
 );
@@ -224,6 +300,11 @@ function getAccountName(accId?: string) {
         <button :class="{ active: filterType === 'transfer' }" @click="filterType = 'transfer'">Переводы</button>
       </div>
       <div class="tx-actions">
+        <div class="group-pills">
+          <button :class="{ active: groupBy === 'none' }" @click="groupBy = 'none'">Список</button>
+          <button :class="{ active: groupBy === 'category' }" @click="groupBy = 'category'">Категории</button>
+          <button :class="{ active: groupBy === 'date' }" @click="groupBy = 'date'">По дням</button>
+        </div>
         <button class="btn-import" @click="showImportModal = true">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
           JSON
@@ -232,15 +313,31 @@ function getAccountName(accId?: string) {
       </div>
     </div>
 
-    <!-- Transaction list -->
+    <!-- Transaction list (grouped) -->
     <div class="tx-list">
       <div v-if="!filteredTransactions.length" class="empty-hint">Нет операций за этот период</div>
-      <div
-        v-for="tx in filteredTransactions"
-        :key="tx.id"
-        class="tx-row"
-        :class="tx.type"
-      >
+      <template v-for="group in groupedTransactions" :key="group.key">
+        <!-- Group header (only when grouping is active) -->
+        <div
+          v-if="groupBy !== 'none'"
+          class="group-header"
+          @click="toggleGroup(group.key)"
+        >
+          <span class="group-icon" v-if="group.icon">{{ group.icon }}</span>
+          <span class="group-label">{{ group.label }}</span>
+          <span class="group-count">{{ group.count }}</span>
+          <span class="group-total" :class="group.total >= 0 ? 'green' : 'red'">
+            {{ group.total >= 0 ? '+' : '' }}{{ fmt(Math.abs(group.total)) }} ₽
+          </span>
+          <span class="group-chevron" :class="{ collapsed: collapsedGroups.has(group.key) }">▼</span>
+        </div>
+        <template v-if="!collapsedGroups.has(group.key)">
+          <div
+            v-for="tx in group.transactions"
+            :key="tx.id"
+            class="tx-row"
+            :class="tx.type"
+          >
         <!-- Transfer row -->
         <template v-if="tx.type === 'transfer'">
           <div class="tx-cat-icon tx-transfer-icon">↔</div>
@@ -282,6 +379,8 @@ function getAccountName(accId?: string) {
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
         </button>
       </div>
+        </template>
+      </template>
     </div>
 
     <!-- Add transaction modal -->
@@ -458,7 +557,44 @@ function getAccountName(accId?: string) {
   color: #fff;
 }
 
-.tx-actions { display: flex; gap: 8px; }
+.tx-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+.group-pills {
+  display: flex; gap: 2px;
+  background: rgba(110, 74, 255, 0.06); border-radius: 8px; padding: 2px;
+}
+.group-pills button {
+  background: none; border: none; color: #6b7fa3;
+  padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 500;
+  cursor: pointer; transition: all 0.2s;
+}
+.group-pills button.active {
+  background: rgba(110, 74, 255, 0.2); color: #c084fc;
+}
+
+/* Group headers */
+.group-header {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 16px; margin-top: 8px;
+  background: rgba(23, 103, 253, 0.06);
+  border: 1px solid rgba(23, 103, 253, 0.12); border-radius: 10px;
+  cursor: pointer; transition: all 0.2s;
+  user-select: none;
+}
+.group-header:hover { background: rgba(23, 103, 253, 0.1); }
+.group-icon { font-size: 18px; }
+.group-label { font-size: 14px; font-weight: 600; color: #e1e8f0; flex: 1; text-transform: capitalize; }
+.group-count {
+  font-size: 11px; color: #6b7fa3; background: rgba(107, 127, 163, 0.15);
+  padding: 2px 8px; border-radius: 10px;
+}
+.group-total { font-size: 14px; font-weight: 700; }
+.group-total.green { color: #34d399; }
+.group-total.red { color: #f87171; }
+.group-chevron {
+  font-size: 10px; color: #6b7fa3; transition: transform 0.2s;
+}
+.group-chevron.collapsed { transform: rotate(-90deg); }
 
 .btn-import {
   display: flex;
