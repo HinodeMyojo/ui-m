@@ -64,11 +64,14 @@ export interface UpdateTransactionRequest extends Partial<CreateTransactionReque
 // --- Batch import (JSON from AI) ---
 
 export interface TransactionImportItem {
-  categoryName: string;   // AI provides name, frontend resolves to categoryId
+  categoryName?: string;      // AI provides name, frontend resolves to categoryId (for income/expense)
   type: TransactionType;
   amount: number;
   description?: string;
   date: string;
+  accountName?: string;       // for income/expense — linked account name
+  fromAccountName?: string;   // for transfer — source account name
+  toAccountName?: string;     // for transfer — destination account name
 }
 
 export interface TransactionImportPayload {

@@ -97,6 +97,28 @@ const importJson = ref("");
 const importError = ref("");
 const importPreview = ref<TransactionImportItem[]>([]);
 
+async function downloadAiContext() {
+  const [cats, accs] = await Promise.all([
+    store.exportCategories(),
+    store.exportAccounts(),
+  ]);
+  const context = {
+    categories: cats.map((c) => ({ name: c.name, type: c.type })),
+    accounts: accs,
+    format: {
+      expense_or_income: { categoryName: "string", type: "expense|income", amount: 0, date: "YYYY-MM-DD", description: "optional", accountName: "optional" },
+      transfer: { type: "transfer", fromAccountName: "string", toAccountName: "string", amount: 0, date: "YYYY-MM-DD", description: "optional" },
+    },
+  };
+  const blob = new Blob([JSON.stringify(context, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "budget-ai-context.json";
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 function parseImportJson() {
   importError.value = "";
   importPreview.value = [];
@@ -113,23 +135,47 @@ function parseImportJson() {
   }
 }
 
+function resolveAccountByName(name: string): string {
+  const acc = store.accounts.find(
+    (a) => a.isActive && a.name.toLowerCase() === name.toLowerCase()
+  );
+  return acc?.id ?? "";
+}
+
 async function confirmImport() {
-  const resolved: CreateTransactionRequest[] = importPreview.value.map((item) => {
-    const cat = store.categories.find(
-      (c) => c.name.toLowerCase() === item.categoryName.toLowerCase() && c.type === item.type
-    );
-    return {
-      categoryId: cat?.id ?? "",
-      type: item.type,
-      amount: item.amount,
-      description: item.description,
-      date: item.date,
-    };
+  const errors: string[] = [];
+  const resolved: CreateTransactionRequest[] = importPreview.value.map((item, i) => {
+    if (item.type === "transfer") {
+      const fromId = item.fromAccountName ? resolveAccountByName(item.fromAccountName) : "";
+      const toId = item.toAccountName ? resolveAccountByName(item.toAccountName) : "";
+      if (!fromId) errors.push(`#${i + 1}: счёт «${item.fromAccountName}» не найден`);
+      if (!toId) errors.push(`#${i + 1}: счёт «${item.toAccountName}» не найден`);
+      return {
+        type: item.type,
+        amount: item.amount,
+        description: item.description,
+        date: item.date,
+        fromAccountId: fromId,
+        toAccountId: toId,
+      };
+    } else {
+      const cat = store.categories.find(
+        (c) => c.name.toLowerCase() === (item.categoryName ?? "").toLowerCase() && c.type === item.type
+      );
+      if (!cat) errors.push(`#${i + 1}: категория «${item.categoryName}» не найдена`);
+      return {
+        categoryId: cat?.id ?? "",
+        type: item.type,
+        amount: item.amount,
+        description: item.description,
+        date: item.date,
+        accountId: item.accountName ? resolveAccountByName(item.accountName) : undefined,
+      };
+    }
   });
 
-  const unresolved = resolved.filter((r) => !r.categoryId);
-  if (unresolved.length) {
-    importError.value = `Не удалось сопоставить ${unresolved.length} категорий. Создайте их сначала.`;
+  if (errors.length) {
+    importError.value = errors.join("\n");
     return;
   }
 
@@ -314,14 +360,21 @@ function getAccountName(accId?: string) {
           <button class="modal-close" @click="showImportModal = false">×</button>
           <h3 class="modal-title">Импорт из JSON</h3>
           <p class="modal-hint">
-            Вставьте JSON от нейросети. Формат:<br>
+            Вставьте JSON от нейросети. Расходы/доходы:<br>
             <code>[{"categoryName": "Продукты", "type": "expense", "amount": 1500, "date": "2026-03-01", "description": "Пятёрочка"}]</code>
+            <br>Переводы:<br>
+            <code>[{"type": "transfer", "fromAccountName": "Дебетовая", "toAccountName": "Рассрочка", "amount": 5000, "date": "2026-03-01"}]</code>
+            <br>Можно смешивать все типы в одном массиве.
           </p>
+          <button class="btn-download-context" @click="downloadAiContext">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Скачать данные для ИИ
+          </button>
           <textarea
             v-model="importJson"
             class="import-textarea"
             rows="8"
-            placeholder='[{"categoryName": "...", "type": "expense", "amount": 0, "date": "2026-03-01"}]'
+            placeholder='[{"categoryName": "...", "type": "expense", "amount": 0, "date": "2026-03-01"}, {"type": "transfer", "fromAccountName": "...", "toAccountName": "...", "amount": 0, "date": "2026-03-01"}]'
           ></textarea>
           <div v-if="importError" class="import-error">{{ importError }}</div>
           <button class="btn-parse" @click="parseImportJson">Разобрать</button>
@@ -330,8 +383,11 @@ function getAccountName(accId?: string) {
             <h4>Предпросмотр ({{ importPreview.length }} записей)</h4>
             <div class="preview-list">
               <div v-for="(item, i) in importPreview" :key="i" class="preview-row">
-                <span class="preview-type" :class="item.type">{{ item.type === 'income' ? '+' : '-' }}</span>
-                <span class="preview-cat">{{ item.categoryName }}</span>
+                <span class="preview-type" :class="item.type">{{ item.type === 'transfer' ? '↔' : item.type === 'income' ? '+' : '-' }}</span>
+                <span class="preview-cat">
+                  <template v-if="item.type === 'transfer'">{{ item.fromAccountName }} → {{ item.toAccountName }}</template>
+                  <template v-else>{{ item.categoryName }}</template>
+                </span>
                 <span class="preview-amt">{{ fmt(item.amount) }} ₽</span>
                 <span class="preview-date">{{ item.date }}</span>
               </div>
@@ -652,6 +708,26 @@ function getAccountName(accId?: string) {
   color: #f87171;
   font-size: 13px;
   margin-top: 8px;
+  white-space: pre-line;
+}
+
+.btn-download-context {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(52, 211, 153, 0.1);
+  border: 1px solid rgba(52, 211, 153, 0.3);
+  color: #34d399;
+  padding: 8px 14px;
+  border-radius: 10px;
+  font-size: 12px;
+  cursor: pointer;
+  margin-bottom: 10px;
+  transition: all 0.2s;
+}
+.btn-download-context:hover {
+  background: rgba(52, 211, 153, 0.2);
+  color: #6ee7b7;
 }
 
 .btn-parse {
@@ -691,6 +767,7 @@ function getAccountName(accId?: string) {
 .preview-type { font-weight: 700; width: 16px; }
 .preview-type.income { color: #34d399; }
 .preview-type.expense { color: #f87171; }
+.preview-type.transfer { color: #60a5fa; }
 .preview-cat { color: #c8daf0; flex: 1; }
 .preview-amt { color: #fff; font-weight: 600; }
 .preview-date { color: #6b7fa3; font-size: 12px; }

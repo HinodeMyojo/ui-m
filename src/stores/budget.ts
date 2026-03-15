@@ -133,6 +133,10 @@ export const useBudgetStore = defineStore("budget", () => {
     return api.exportCategories();
   }
 
+  async function exportAccounts() {
+    return api.exportAccounts();
+  }
+
   // Transactions
   async function fetchTransactions(params?: Parameters<typeof api.getTransactions>[0]) {
     loading.value = true;
@@ -530,6 +534,7 @@ export const useBudgetStore = defineStore("budget", () => {
     createAccount,
     updateAccount,
     deleteAccount,
+    exportAccounts,
 
     fetchGoals,
     createGoal,

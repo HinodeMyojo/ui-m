@@ -161,6 +161,10 @@ export async function deleteAccount(id: string): Promise<void> {
   });
 }
 
+export async function exportAccounts(): Promise<{ name: string; type: string }[]> {
+  return budgetRequest<{ name: string; type: string }[]>("/accounts/export");
+}
+
 // === SAVINGS GOALS ===
 
 export async function getSavingsGoals(): Promise<SavingsGoal[]> {
