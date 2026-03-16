@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from "vue";
+import { ref, computed, watch } from "vue";
 import { useBudgetStore } from "@/stores/budget";
 import type { CreateTransactionRequest, TransactionImportItem, TransactionType } from "@/types/budget";
 
@@ -31,13 +31,27 @@ const filteredTransactions = computed(() => {
 
 // Grouping
 const groupBy = ref<"none" | "category" | "date">("none");
-const collapsedGroups = ref(new Set<string>());
+const expandedGroups = ref(new Set<string>());
+
+// When switching groupBy mode, collapse all
+watch(groupBy, () => {
+  expandedGroups.value = new Set();
+});
+
+// Navigation from dashboard: click on category → open transactions grouped by category with that category expanded
+watch(() => store.navigateTo, (nav) => {
+  if (nav?.tab === "transactions" && nav.categoryId) {
+    groupBy.value = "category";
+    expandedGroups.value = new Set([nav.categoryId]);
+    store.navigateTo = null;
+  }
+}, { immediate: true });
 
 function toggleGroup(key: string) {
-  if (collapsedGroups.value.has(key)) {
-    collapsedGroups.value.delete(key);
+  if (expandedGroups.value.has(key)) {
+    expandedGroups.value.delete(key);
   } else {
-    collapsedGroups.value.add(key);
+    expandedGroups.value.add(key);
   }
 }
 
@@ -329,9 +343,9 @@ function getAccountName(accId?: string) {
           <span class="group-total" :class="group.total >= 0 ? 'green' : 'red'">
             {{ group.total >= 0 ? '+' : '' }}{{ fmt(Math.abs(group.total)) }} ₽
           </span>
-          <span class="group-chevron" :class="{ collapsed: collapsedGroups.has(group.key) }">▼</span>
+          <span class="group-chevron" :class="{ collapsed: !expandedGroups.has(group.key) }">▼</span>
         </div>
-        <template v-if="!collapsedGroups.has(group.key)">
+        <template v-if="expandedGroups.has(group.key)">
           <div
             v-for="tx in group.transactions"
             :key="tx.id"

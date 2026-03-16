@@ -312,6 +312,10 @@ export async function getStatsRange(from: string, to: string): Promise<MonthlySt
   return budgetRequest<MonthlyStats[]>(`/stats/range?from=${from}&to=${to}`);
 }
 
+export async function exportAll(from: string, to: string): Promise<unknown> {
+  return budgetRequest<unknown>(`/export?from=${from}&to=${to}`);
+}
+
 // === BUDGET PLANS ===
 
 export async function getPlans(): Promise<BudgetPlan[]> {

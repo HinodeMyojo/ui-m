@@ -30,6 +30,9 @@ export const useBudgetStore = defineStore("budget", () => {
   const plans = ref<BudgetPlan[]>([]);
   const currentPlan = ref<BudgetPlanSummary | null>(null);
 
+  // Navigation state (for cross-tab navigation)
+  const navigateTo = ref<{ tab: string; categoryId?: string } | null>(null);
+
   const loading = ref(false);
   const error = ref<string | null>(null);
   const currentMonth = ref(
@@ -660,6 +663,7 @@ export const useBudgetStore = defineStore("budget", () => {
     banks,
     plans,
     currentPlan,
+    navigateTo,
 
     // Getters
     expenseCategories,

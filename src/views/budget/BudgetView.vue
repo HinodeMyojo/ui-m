@@ -24,6 +24,14 @@ const tabs = [
 type TabId = (typeof tabs)[number]["id"];
 const activeTab = ref<TabId>("dashboard");
 
+// React to cross-tab navigation requests
+watch(() => store.navigateTo, (nav) => {
+  if (nav) {
+    activeTab.value = nav.tab as TabId;
+    // Clear after navigating (component will read categoryId)
+  }
+}, { immediate: true });
+
 function goHome() {
   router.push("/");
 }

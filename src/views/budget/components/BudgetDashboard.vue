@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import { useBudgetStore } from "@/stores/budget";
+import * as api from "@/api/budget";
 import { Chart as ChartJS, ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement, PointElement, LineElement, Filler } from "chart.js";
 import { Doughnut, Bar, Line } from "vue-chartjs";
 
@@ -168,6 +169,28 @@ const trendOptions = {
 
 function fmt(n: number | undefined) {
   return (n ?? 0).toLocaleString("ru");
+}
+
+// Navigate to transactions filtered by category
+function goToCategory(categoryId: string) {
+  store.navigateTo = { tab: "transactions", categoryId };
+}
+
+// Export all data
+const exportFrom = ref(store.currentMonth + "-01");
+const exportTo = ref(new Date().toISOString().slice(0, 10));
+const showExportModal = ref(false);
+
+async function downloadExport() {
+  const data = await api.exportAll(exportFrom.value, exportTo.value);
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `budget-export-${exportFrom.value}-${exportTo.value}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showExportModal.value = false;
 }
 
 // === EXTENDED SPENDING STATS (computed from transactions in store) ===
@@ -383,6 +406,36 @@ const upcomingPayments = computed(() => {
       </div>
     </div>
 
+    <!-- Export button -->
+    <div class="export-bar">
+      <button class="btn-export" @click="showExportModal = true">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Экспорт для GPT
+      </button>
+    </div>
+
+    <!-- Export modal -->
+    <Teleport to="body">
+      <div v-if="showExportModal" class="modal-overlay" @click.self="showExportModal = false">
+        <div class="modal-card-sm">
+          <button class="modal-close-sm" @click="showExportModal = false">×</button>
+          <h3 style="color: #fff; margin: 0 0 16px; font-size: 16px;">Экспорт данных</h3>
+          <p style="color: #6b7fa3; font-size: 13px; margin: 0 0 14px;">Скачайте JSON со всеми данными для анализа в ChatGPT</p>
+          <div style="display: flex; gap: 10px; margin-bottom: 14px;">
+            <label style="flex: 1; display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: #7eb0ff;">
+              <span>С</span>
+              <input v-model="exportFrom" type="date" style="background: rgba(23,103,253,0.06); border: 1px solid rgba(23,103,253,0.2); border-radius: 8px; padding: 8px; color: #fff; outline: none;" />
+            </label>
+            <label style="flex: 1; display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: #7eb0ff;">
+              <span>По</span>
+              <input v-model="exportTo" type="date" style="background: rgba(23,103,253,0.06); border: 1px solid rgba(23,103,253,0.2); border-radius: 8px; padding: 8px; color: #fff; outline: none;" />
+            </label>
+          </div>
+          <button class="btn-export-download" @click="downloadExport">Скачать JSON</button>
+        </div>
+      </div>
+    </Teleport>
+
     <!-- Charts row -->
     <div class="charts-row">
       <!-- Category breakdown -->
@@ -416,7 +469,9 @@ const upcomingPayments = computed(() => {
           <div
             v-for="cat in sortedCategories"
             :key="cat.categoryId"
-            class="legend-item"
+            class="legend-item legend-clickable"
+            @click="goToCategory(cat.categoryId)"
+            title="Открыть операции по категории"
           >
             <span class="legend-dot" :style="{ background: cat.categoryColor }"></span>
             <span class="legend-name">{{ cat.categoryIcon }} {{ cat.categoryName }}</span>
@@ -833,6 +888,8 @@ const upcomingPayments = computed(() => {
   border-radius: 3px;
   flex-shrink: 0;
 }
+.legend-clickable { cursor: pointer; padding: 4px 6px; border-radius: 6px; transition: background 0.2s; }
+.legend-clickable:hover { background: rgba(23, 103, 253, 0.1); }
 .legend-name { color: #c8daf0; flex: 1; }
 .legend-val { color: #fff; font-weight: 600; }
 .legend-pct { color: #6b7fa3; font-size: 12px; min-width: 36px; text-align: right; }
@@ -1007,6 +1064,36 @@ const upcomingPayments = computed(() => {
 .compare-diff.green { color: #34d399; }
 .compare-diff.red { color: #f87171; }
 .red { color: #f87171; }
+
+/* Export */
+.export-bar { display: flex; justify-content: flex-end; }
+.btn-export {
+  display: flex; align-items: center; gap: 6px;
+  background: rgba(52, 211, 153, 0.1); border: 1px solid rgba(52, 211, 153, 0.3);
+  color: #34d399; padding: 8px 16px; border-radius: 10px;
+  font-size: 13px; cursor: pointer; transition: all 0.2s;
+}
+.btn-export:hover { background: rgba(52, 211, 153, 0.2); color: #6ee7b7; }
+
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.75); backdrop-filter: blur(8px);
+  display: flex; align-items: center; justify-content: center; z-index: 2000; padding: 16px;
+}
+.modal-card-sm {
+  background: linear-gradient(135deg, rgba(14,15,26,0.99), rgba(20,22,36,0.99));
+  border: 1px solid rgba(23,103,253,0.3); border-radius: 16px;
+  padding: 24px; width: 100%; max-width: 380px; position: relative;
+}
+.modal-close-sm {
+  position: absolute; top: 12px; right: 12px; background: none; border: none;
+  color: #6b7fa3; font-size: 20px; cursor: pointer;
+}
+.btn-export-download {
+  width: 100%; background: linear-gradient(135deg, #34d399, #059669);
+  border: none; color: #fff; padding: 12px; border-radius: 10px;
+  font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s;
+}
+.btn-export-download:hover { transform: translateY(-1px); box-shadow: 0 4px 16px rgba(52,211,153,0.3); }
 
 /* Chart controls */
 .chart-controls { display: flex; align-items: center; gap: 8px; }
