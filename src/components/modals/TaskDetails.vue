@@ -1293,24 +1293,18 @@ function getFileIcon(type) {
 @media (max-width: 768px) {
   .modal-cntnt {
     width: 100%;
-    border-radius: 20px 20px 0 0;
+    height: 90vh;
+    border-radius: 18px 18px 0 0;
     border-bottom-left-radius: 0;
-    max-height: 92vh;
+    border-bottom-right-radius: 0;
     overflow-y: auto;
   }
 
   .content {
-    padding: 4% 4% 3% 4%;
+    padding: 16px 16px 20px 16px;
     grid-template-rows: auto auto 1fr;
     gap: 10px;
-  }
-
-  .content-header {
-    grid-template-columns: 1fr auto;
-  }
-
-  .title h3 {
-    font-size: 1.1rem;
+    overflow-y: auto;
   }
 
   .subtask-buttons {
@@ -1319,25 +1313,16 @@ function getFileIcon(type) {
   }
 
   .subtask-btn {
-    padding: 8px 12px;
+    padding: 10px 14px;
     font-size: 0.85rem;
+    min-height: 42px;
+    flex: 1;
   }
 
   .subtasks {
-    max-height: 50vh;
-  }
-
-  .subtask {
-    grid-template-columns: 1fr auto;
-  }
-
-  .image-preview-modal {
-    padding: 10px;
-  }
-
-  .image-preview-content img {
-    max-width: 95vw;
-    max-height: 85vh;
+    flex: 1;
+    max-height: none;
+    overflow-y: auto;
   }
 }
 .subtask.selected {

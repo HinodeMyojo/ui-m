@@ -1223,4 +1223,131 @@ textarea {
     padding: 20px;
     color: black;
 }
+
+/* ====== MOBILE RESPONSIVE ====== */
+@media (max-width: 768px) {
+  .menu {
+    height: auto;
+    min-height: 100vh;
+    min-height: 100dvh;
+    padding: 8px;
+  }
+
+  .header {
+    flex-wrap: wrap;
+    gap: 6px;
+    justify-content: center;
+  }
+
+  .header button {
+    padding: 8px 10px;
+    font-size: 12px;
+    min-height: 38px;
+  }
+
+  .save-group {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .inner-menu {
+    width: 100%;
+    height: calc(100vh - 120px);
+    height: calc(100dvh - 120px);
+    border-radius: 16px;
+    flex-direction: column;
+  }
+
+  .split {
+    width: 100%;
+    height: 6px;
+    cursor: row-resize;
+  }
+
+  .part {
+    min-height: 200px;
+  }
+
+  .part textarea {
+    padding: 12px;
+    font-size: 14px;
+  }
+
+  .pdf-container {
+    padding: 16px 12px;
+    font-size: 13px;
+  }
+
+  .saved-panel {
+    width: 90vw;
+    max-width: 360px;
+  }
+
+  /* Fullscreen mode */
+  .fullscreen-toolbar {
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: 6px 8px;
+  }
+
+  .fullscreen-toolbar button {
+    padding: 6px 8px;
+    font-size: 11px;
+    min-height: 32px;
+  }
+
+  .read-time-label {
+    font-size: 11px;
+  }
+
+  .fullscreen-sidebar {
+    width: 80vw !important;
+    max-width: 300px;
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 50;
+    box-shadow: -4px 0 20px rgba(0, 0, 0, 0.5);
+  }
+
+  .fullscreen-content {
+    padding: 16px 12px;
+    font-size: 15px;
+  }
+
+  .note-tooltip {
+    max-width: 90vw;
+    left: 5vw !important;
+    right: 5vw;
+  }
+
+  .search-bar {
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  .search-input {
+    width: 100%;
+    font-size: 16px;
+  }
+
+  /* Tree modal */
+  .tree-modal {
+    width: 98vw;
+    height: 92vh;
+    border-radius: 12px;
+  }
+
+  /* Vocab modal in fullscreen */
+  .modal-card {
+    max-width: 92vw;
+    padding: 20px 16px;
+  }
+
+  .form-input,
+  .form-textarea {
+    font-size: 16px;
+  }
+}
 </style>

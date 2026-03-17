@@ -107,7 +107,7 @@ async function render() {
         if (renderTask) { renderTask.cancel(); renderTask = null; }
 
         const canvas = canvasEl.value;
-        const dpr = window.devicePixelRatio || 1;
+        const dpr = Math.min(window.devicePixelRatio || 1, 2);
         canvas.width  = Math.round(viewport.width  * dpr);
         canvas.height = Math.round(viewport.height * dpr);
         canvas.style.width  = viewport.width  + 'px';
