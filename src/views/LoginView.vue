@@ -163,4 +163,24 @@ async function handleLogin() {
   margin-top: 2px;
   min-height: 22px;
 }
+
+/* ====== MOBILE RESPONSIVE ====== */
+@media (max-width: 768px) {
+  .login-form {
+    min-width: auto;
+    width: 90vw;
+    max-width: 380px;
+    padding: 28px 20px 24px 20px;
+  }
+
+  .login-input {
+    font-size: 16px; /* prevents iOS zoom */
+    padding: 12px 38px 12px 14px;
+  }
+
+  .login-btn {
+    padding: 12px 0;
+    font-size: 1.05rem;
+  }
+}
 </style>

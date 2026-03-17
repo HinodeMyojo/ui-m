@@ -448,4 +448,44 @@ onMounted(() => {
 .modal-fade-leave-to {
   opacity: 0;
 }
+
+/* ====== MOBILE RESPONSIVE ====== */
+@media (max-width: 768px) {
+  .time-tracker-mini {
+    min-width: auto;
+    max-width: 100%;
+    width: 100%;
+    height: auto;
+    padding: 8px 14px;
+  }
+
+  .tracker-header {
+    flex-wrap: nowrap;
+  }
+
+  .hours-big {
+    font-size: 0.95rem;
+  }
+
+  .quick-buttons {
+    gap: 6px;
+  }
+
+  .quick-btn {
+    padding: 6px 4px;
+    font-size: 0.85rem;
+  }
+
+  .modal-content-small {
+    min-width: auto;
+    width: 92vw;
+    max-width: 92vw;
+    padding: 24px 18px;
+  }
+
+  .form-select,
+  .form-input-small {
+    font-size: 16px; /* prevents iOS zoom */
+  }
+}
 </style>

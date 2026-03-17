@@ -1274,9 +1274,71 @@ const upcomingPayments = computed(() => {
   .bottom-row { grid-template-columns: 1fr; }
   .stat-value { font-size: 16px; }
   .stat-icon { font-size: 22px; width: 40px; height: 40px; }
+  .chart-body { height: 220px; }
+  .chart-body-line { height: 220px; }
+  .daily-chart { height: 170px; }
+  .daily-bar-track { height: 110px; }
+  .dow-grid { height: 140px; }
+  .dow-bar-track { height: 80px; }
+  .modal-card-sm { max-width: 92vw; padding: 20px; }
+  .btn-export-download { min-height: 44px; font-size: 16px; }
 }
 
 @media (max-width: 480px) {
-  .stat-cards { grid-template-columns: 1fr; }
+  .dashboard { gap: 14px; }
+  .stat-cards { grid-template-columns: 1fr; gap: 10px; }
+  .stat-card { padding: 14px 16px; gap: 12px; }
+  .stat-value { font-size: 18px; }
+  .stat-icon { font-size: 24px; width: 42px; height: 42px; }
+  .stat-sub { font-size: 11px; }
+  .stat-tooltip { left: 0; transform: none; min-width: unset; width: 100%; }
+
+  .chart-card { padding: 14px; }
+  .chart-header { flex-wrap: wrap; gap: 8px; }
+  .chart-header h3 { font-size: 14px; }
+  .chart-body { height: 200px; }
+  .chart-body-line { height: 200px; }
+  .category-legend { max-height: 160px; }
+  .legend-item { font-size: 12px; }
+
+  .panel-card { padding: 14px; }
+  .panel-title { font-size: 14px; margin-bottom: 12px; }
+
+  .analytics-grid { grid-template-columns: 1fr; }
+  .a-item-wide { grid-column: span 1; }
+  .a-value { font-size: 16px; }
+
+  .daily-chart { height: 160px; gap: 1px; }
+  .daily-bar-col { min-width: 22px; }
+  .daily-bar-track { height: 100px; }
+  .daily-bar-amount { font-size: 8px; }
+  .daily-bar-day { font-size: 10px; }
+  .daily-bar-dow { font-size: 8px; }
+
+  .dow-grid { height: 130px; gap: 4px; }
+  .dow-bar-track { height: 70px; }
+  .dow-name { font-size: 10px; }
+  .dow-total { font-size: 10px; }
+
+  .top-day-date { font-size: 12px; min-width: 70px; }
+  .top-day-amount { font-size: 13px; min-width: 60px; }
+
+  .compare-item { font-size: 12px; gap: 4px; }
+  .compare-label { min-width: 60px; }
+
+  .export-bar { justify-content: stretch; }
+  .btn-export { width: 100%; justify-content: center; min-height: 44px; font-size: 16px; }
+  .modal-card-sm { max-width: 92vw; padding: 18px; }
+  .modal-card-sm input { font-size: 16px; }
+  .btn-export-download { min-height: 44px; font-size: 16px; }
+
+  .recommend-block { flex-direction: column; gap: 4px; text-align: center; }
+  .planned-row { gap: 6px; padding: 8px 0; }
+  .planned-date { min-width: 50px; font-size: 11px; }
+  .planned-name { font-size: 12px; }
+  .planned-amount { font-size: 13px; }
+
+  .bank-stat-name { min-width: 70px; font-size: 12px; }
+  .bank-stat-amount { min-width: 60px; font-size: 13px; }
 }
 </style>

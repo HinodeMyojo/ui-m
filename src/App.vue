@@ -174,5 +174,49 @@ body {
   .stats-grid {
     width: 100%;
   }
+
+  /* Global modal mobile fixes */
+  .modal-overlay {
+    padding: 10px;
+  }
+
+  .modal-card {
+    max-width: 92vw;
+    padding: 24px 16px;
+  }
+
+  .modal-close {
+    top: 12px;
+    right: 12px;
+    font-size: 24px;
+  }
+
+  .modal-title {
+    font-size: 17px;
+  }
+
+  .modal-form {
+    gap: 12px;
+  }
+
+  .form-input,
+  .form-textarea {
+    font-size: 16px; /* prevents iOS zoom */
+    padding: 12px 14px;
+  }
+
+  .quick-time-buttons {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+
+  .modal-actions {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  #app {
+    align-items: flex-start;
+  }
 }
 </style>

@@ -652,5 +652,38 @@ function daysUntil(dateStr?: string) {
   .inst-actions { flex-direction: column; }
   .inst-actions button { width: 100%; text-align: center; }
   .inst-delete { opacity: 1; }
+  .modal-card { max-width: 92vw; padding: 22px; }
+  .modal-wide { max-width: 92vw; }
+}
+
+@media (max-width: 480px) {
+  .filter-pills button { padding: 8px 10px; font-size: 12px; }
+  .btn-add { width: 100%; text-align: center; min-height: 44px; font-size: 14px; }
+
+  .inst-card { padding: 16px; }
+  .inst-top { gap: 10px; margin-bottom: 12px; }
+  .inst-icon { font-size: 24px; }
+  .inst-name { font-size: 15px; }
+  .inst-badge { font-size: 10px; padding: 3px 8px; }
+  .inst-delete { opacity: 1; min-width: 36px; min-height: 36px; display: flex; align-items: center; justify-content: center; }
+
+  .inst-actions button { min-height: 44px; font-size: 14px; }
+  .btn-pay { min-height: 44px; font-size: 14px; }
+  .btn-schedule { min-height: 44px; font-size: 14px; }
+
+  .detail-value { font-size: 13px; }
+  .days-badge { font-size: 10px; margin-left: 0; margin-top: 4px; display: inline-block; }
+
+  .modal-card { max-width: 92vw; padding: 18px; }
+  .modal-wide { max-width: 92vw; }
+  .modal-title { font-size: 16px; margin-bottom: 16px; }
+  .modal-form input,
+  .modal-form select { font-size: 16px; padding: 12px 14px; }
+  .btn-submit { min-height: 44px; font-size: 16px; }
+
+  .schedule-table-wrap { margin: 0 -18px; padding: 0 18px; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .schedule-table { font-size: 12px; min-width: 360px; }
+  .schedule-table th { padding: 8px 8px; font-size: 11px; }
+  .schedule-table td { padding: 8px 8px; }
 }
 </style>

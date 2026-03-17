@@ -1288,6 +1288,58 @@ function getFileIcon(type) {
 .subtask :active {
   cursor: grabbing;
 }
+
+/* ====== MOBILE RESPONSIVE ====== */
+@media (max-width: 768px) {
+  .modal-cntnt {
+    width: 100%;
+    border-radius: 20px 20px 0 0;
+    border-bottom-left-radius: 0;
+    max-height: 92vh;
+    overflow-y: auto;
+  }
+
+  .content {
+    padding: 4% 4% 3% 4%;
+    grid-template-rows: auto auto 1fr;
+    gap: 10px;
+  }
+
+  .content-header {
+    grid-template-columns: 1fr auto;
+  }
+
+  .title h3 {
+    font-size: 1.1rem;
+  }
+
+  .subtask-buttons {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .subtask-btn {
+    padding: 8px 12px;
+    font-size: 0.85rem;
+  }
+
+  .subtasks {
+    max-height: 50vh;
+  }
+
+  .subtask {
+    grid-template-columns: 1fr auto;
+  }
+
+  .image-preview-modal {
+    padding: 10px;
+  }
+
+  .image-preview-content img {
+    max-width: 95vw;
+    max-height: 85vh;
+  }
+}
 .subtask.selected {
   background-color: rgba(61, 55, 90, 0.5);
 }

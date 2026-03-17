@@ -375,5 +375,26 @@ function fmt(n: number | undefined) {
   .cat-grid { grid-template-columns: 1fr; }
   .cat-delete { opacity: 1; }
   .form-row { flex-direction: column; }
+  .modal-card { max-width: 92vw; padding: 22px; }
+}
+
+@media (max-width: 480px) {
+  .filter-pills button { padding: 8px 12px; font-size: 12px; }
+  .cat-actions { flex-direction: column; width: 100%; }
+  .btn-export { width: 100%; justify-content: center; min-height: 44px; font-size: 14px; }
+  .btn-add { width: 100%; text-align: center; min-height: 44px; font-size: 14px; }
+
+  .cat-card { padding: 14px; gap: 10px; }
+  .cat-icon { width: 40px; height: 40px; font-size: 22px; }
+  .cat-name { font-size: 13px; }
+  .cat-delete { opacity: 1; min-width: 36px; min-height: 36px; display: flex; align-items: center; justify-content: center; }
+
+  .modal-card { max-width: 92vw; padding: 18px; }
+  .modal-title { font-size: 16px; margin-bottom: 16px; }
+  .modal-form input,
+  .modal-form select { font-size: 16px; padding: 12px 14px; }
+  .btn-submit { min-height: 44px; font-size: 16px; }
+  .emoji-btn { width: 38px; height: 38px; font-size: 20px; }
+  .color-btn { width: 32px; height: 32px; }
 }
 </style>

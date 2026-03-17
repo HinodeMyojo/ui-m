@@ -576,5 +576,47 @@ const availableCategories = computed(() =>
 @media (max-width: 768px) {
   .plan-content { grid-template-columns: 1fr; }
   .plan-summary { position: static; }
+  .modal-card { max-width: 92vw; padding: 22px; }
+  .item-delete { opacity: 1; }
+}
+
+@media (max-width: 480px) {
+  .plan-header { flex-direction: column; align-items: stretch; }
+  .plan-month-select select { width: 100%; font-size: 16px; padding: 12px 16px; }
+  .btn-delete-plan { width: 100%; text-align: center; min-height: 44px; font-size: 14px; }
+
+  .no-plan { padding: 40px 16px; }
+  .no-plan-icon { font-size: 48px; }
+  .no-plan h3 { font-size: 18px; }
+  .no-plan-actions { flex-direction: column; width: 100%; }
+  .btn-primary { width: 100%; min-height: 44px; font-size: 16px; }
+  .btn-secondary { width: 100%; min-height: 44px; font-size: 16px; }
+
+  .plan-section { padding: 14px; }
+  .section-header { flex-wrap: wrap; gap: 8px; }
+  .section-header h4 { font-size: 14px; }
+  .section-total { font-size: 14px; }
+  .btn-add-item { min-width: 36px; min-height: 36px; }
+
+  .plan-item { padding: 10px 12px; gap: 8px; }
+  .item-name { font-size: 13px; }
+  .item-amount { font-size: 14px; }
+  .item-delete { opacity: 1; min-width: 32px; min-height: 32px; }
+
+  .plan-summary { padding: 18px; }
+  .summary-title { font-size: 15px; }
+  .summary-row { font-size: 13px; }
+  .summary-row-total { font-size: 14px; }
+
+  .gt-name { font-size: 13px; }
+  .gt-months { font-size: 14px; }
+
+  .modal-card { max-width: 92vw; padding: 18px; }
+  .modal-title { font-size: 16px; margin-bottom: 16px; }
+  .modal-form input,
+  .modal-form select { font-size: 16px; padding: 12px 14px; }
+  .type-switch { flex-wrap: wrap; }
+  .type-switch button { padding: 10px 6px; font-size: 12px; min-height: 44px; }
+  .btn-submit { min-height: 44px; font-size: 16px; }
 }
 </style>

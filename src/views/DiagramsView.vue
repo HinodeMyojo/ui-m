@@ -354,4 +354,82 @@ function formatDate(str) {
 
 .fade-enter-active, .fade-leave-active { transition: opacity .2s; }
 .fade-enter-from, .fade-leave-to { opacity: 0; }
+
+/* ====== MOBILE RESPONSIVE ====== */
+@media (max-width: 768px) {
+  .page {
+    padding: 16px 12px;
+  }
+
+  .header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+
+  .header-left {
+    gap: 12px;
+  }
+
+  .title {
+    font-size: 22px;
+  }
+
+  .back-btn {
+    padding: 8px 12px;
+    font-size: 13px;
+  }
+
+  .create-btn {
+    width: 100%;
+    justify-content: center;
+    padding: 12px 20px;
+  }
+
+  .grid {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+
+  .card-preview {
+    height: 100px;
+  }
+
+  .card-body {
+    padding: 12px 16px 16px;
+  }
+
+  .del-btn {
+    opacity: 1;
+  }
+
+  /* Modal */
+  .modal {
+    padding: 24px 18px;
+    max-width: 92vw;
+    border-radius: 14px;
+  }
+
+  .modal h2 {
+    font-size: 18px;
+  }
+
+  .field input,
+  .field textarea {
+    font-size: 16px; /* prevents iOS zoom */
+  }
+
+  .modal-actions {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .modal-actions .btn-ghost,
+  .modal-actions .btn-primary {
+    width: 100%;
+    text-align: center;
+    justify-content: center;
+  }
+}
 </style>

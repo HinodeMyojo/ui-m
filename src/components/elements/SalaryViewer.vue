@@ -409,4 +409,59 @@ onMounted(async () => {
   z-index: 999;
   cursor: pointer;
 }
+
+/* ====== MOBILE RESPONSIVE ====== */
+@media (max-width: 768px) {
+  .salary-main {
+    flex-direction: column;
+    height: auto;
+  }
+
+  .main-area {
+    flex: none;
+    height: 120px;
+  }
+
+  .task-area {
+    flex: none;
+    flex-direction: row;
+    padding: 6px 10px;
+    gap: 8px;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .tasks-container {
+    flex-direction: row;
+    gap: 6px;
+    align-items: center;
+  }
+
+  .main-task-label {
+    font-size: 11px;
+    margin-bottom: 0;
+  }
+
+  .main-tasks {
+    flex-direction: row;
+    gap: 4px;
+    padding-right: 0;
+    max-width: none;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .main-task {
+    font-size: 11px;
+    padding: 3px 5px;
+  }
+
+  .more {
+    position: static;
+  }
+
+  .chart-container {
+    max-width: 100%;
+  }
+}
 </style>

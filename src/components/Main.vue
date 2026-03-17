@@ -1905,4 +1905,257 @@ function closeTimeStats() {
   box-shadow: 0 4px 16px rgba(0,0,0,0.4);
   line-height: 1.8;
 }
+
+/* ====== MOBILE RESPONSIVE ====== */
+@media (max-width: 768px) {
+  .header {
+    flex-wrap: wrap;
+    min-height: auto;
+    padding: 8px 10px;
+    gap: 8px;
+  }
+
+  .header-left {
+    order: 3;
+    flex: 1 1 100%;
+    height: auto;
+  }
+
+  .salary-viewer {
+    height: 80px;
+  }
+
+  .header-center {
+    order: 1;
+    flex: 1;
+    gap: 12px;
+  }
+
+  .month-block h3 {
+    font-size: 20px;
+  }
+
+  .month-block {
+    min-width: 90px;
+  }
+
+  .year-label {
+    font-size: 0.85rem;
+  }
+
+  .time-tracker-widget {
+    order: 4;
+    flex: 1 1 100%;
+    height: auto;
+    width: 100%;
+    justify-content: center;
+  }
+
+  .header-right {
+    order: 2;
+    flex: 0 0 auto;
+    flex-wrap: wrap;
+    gap: 6px;
+    justify-content: center;
+  }
+
+  .add-task-btn {
+    font-size: 0.88rem;
+    padding: 6px 12px;
+    margin-left: 4px;
+  }
+
+  .logout-btn {
+    font-size: 0.88rem;
+    padding: 6px 12px;
+    margin-left: 6px;
+  }
+
+  .version-badge {
+    display: none;
+  }
+
+  .build-info-popup {
+    display: none;
+  }
+
+  /* Calendar body */
+  .body {
+    min-height: auto;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .columns-container {
+    min-width: 800px;
+    overflow-x: auto;
+  }
+
+  .column {
+    min-width: 26px;
+  }
+
+  .column-number {
+    font-size: 10px;
+    padding: 4px;
+  }
+
+  .task-item {
+    padding: 3px 8px 8px 8px;
+    border-radius: 10px;
+  }
+
+  .task-title {
+    font-size: 0.85rem;
+  }
+
+  .task-dates {
+    font-size: 0.75rem;
+  }
+
+  .task-dates-small {
+    font-size: 0.7rem;
+  }
+
+  .progress-thing {
+    font-size: 0.8rem;
+  }
+
+  .progress-icon {
+    font-size: 0.85rem;
+  }
+
+  /* Side panel - Diagrams */
+  .taks-types-main-menu {
+    display: none;
+  }
+
+  /* Modals */
+  .modal-card {
+    min-width: auto;
+    width: 92vw;
+    max-width: 92vw;
+    padding: 24px 18px 20px 18px;
+    border-radius: 14px;
+  }
+
+  .modal-overlay {
+    padding: 10px;
+  }
+
+  .modal-title {
+    font-size: 1.2rem;
+  }
+
+  .add-task-form {
+    gap: 14px;
+  }
+
+  .add-task-form input[type="text"],
+  .add-task-form input[type="date"],
+  .add-task-form input[type="number"] {
+    font-size: 16px; /* prevents iOS zoom */
+    padding: 12px 14px;
+  }
+
+  .add-task-submit {
+    padding: 12px 16px;
+    font-size: 1rem;
+  }
+
+  /* Nyama modal */
+  .modal-nyama {
+    max-width: 92vw;
+    padding: 20px 16px;
+    gap: 12px;
+    border-radius: 22px;
+  }
+
+  .nyamaaa {
+    width: 100px;
+    height: 100px;
+    border-radius: 16px;
+  }
+
+  .nyamaaa img {
+    width: 48px;
+    height: 48px;
+  }
+
+  .nyamaaa .icon {
+    font-size: 36px;
+  }
+
+  .nyamaaa p {
+    font-size: 10px;
+  }
+
+  .nyama-badge {
+    font-size: 7px;
+    padding: 1px 4px;
+    top: 6px;
+    right: 6px;
+  }
+
+  /* Delete confirm */
+  .delete-confirm-card {
+    min-width: auto;
+    width: 88vw;
+    padding: 24px 18px 18px 18px;
+  }
+
+  .delete-confirm-btns {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .delete-confirm-btns button {
+    width: 100%;
+    padding: 12px;
+  }
+
+  /* Task overlay */
+  .modal-overlay-2 {
+    justify-content: center;
+    align-items: flex-end;
+  }
+}
+
+@media (max-width: 480px) {
+  .header-center {
+    gap: 8px;
+  }
+
+  .month-block h3 {
+    font-size: 17px;
+  }
+
+  .header-right {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .add-task-btn {
+    font-size: 0.8rem;
+    padding: 5px 10px;
+  }
+
+  .nyamaaa {
+    width: 85px;
+    height: 85px;
+  }
+
+  .nyamaaa .icon {
+    font-size: 30px;
+  }
+
+  .nyamaaa p {
+    font-size: 9px;
+  }
+
+  .nyamaaa img {
+    width: 40px;
+    height: 40px;
+  }
+}
 </style>

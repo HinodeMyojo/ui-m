@@ -1154,4 +1154,101 @@ onMounted(async () => {
     grid-template-columns: 1fr;
   }
 }
+
+/* ====== MOBILE RESPONSIVE ====== */
+@media (max-width: 768px) {
+  .skills-page {
+    padding: 16px 12px;
+  }
+
+  .skills-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+
+  .header-actions {
+    width: 100%;
+  }
+
+  .header-actions .btn-primary {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .page-title {
+    font-size: 24px;
+  }
+
+  .groups-sidebar {
+    padding: 14px;
+  }
+
+  .groups-list {
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .group-item {
+    padding: 8px 12px;
+    flex: 0 0 auto;
+  }
+
+  .skills-toolbar {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .search-box {
+    width: 100%;
+  }
+
+  .select-filter {
+    width: 100%;
+  }
+
+  .skills-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  /* Modals */
+  .modal-card {
+    max-width: 92vw;
+    padding: 24px 18px;
+  }
+
+  .modal-card.small {
+    max-width: 92vw;
+  }
+
+  .form-input,
+  .form-textarea,
+  .form-select {
+    font-size: 16px; /* prevents iOS zoom */
+  }
+
+  .modal-actions {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .modal-actions .btn-primary,
+  .modal-actions .btn-secondary,
+  .modal-actions .btn-danger {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .context-menu {
+    position: fixed;
+    left: 50% !important;
+    transform: translateX(-50%);
+    bottom: 20px;
+    top: auto !important;
+    min-width: 200px;
+  }
+}
 </style>

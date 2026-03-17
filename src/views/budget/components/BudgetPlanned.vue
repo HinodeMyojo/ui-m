@@ -269,5 +269,27 @@ function daysUntil(date: string) {
 @media (max-width: 768px) {
   .planned-toolbar { flex-direction: column; align-items: stretch; }
   .row-delete { opacity: 1; }
+  .modal-card { max-width: 92vw; padding: 22px; }
+}
+
+@media (max-width: 480px) {
+  .planned-summary { flex-direction: column; gap: 4px; }
+  .summary-value { font-size: 20px; }
+  .btn-add { width: 100%; text-align: center; min-height: 44px; font-size: 14px; }
+
+  .planned-row { padding: 12px; gap: 10px; flex-wrap: wrap; }
+  .planned-name { font-size: 13px; }
+  .planned-desc { font-size: 11px; }
+  .planned-amount { font-size: 15px; }
+  .planned-date { font-size: 11px; }
+  .check-btn { min-width: 36px; min-height: 36px; display: flex; align-items: center; justify-content: center; }
+  .check-empty { width: 24px; height: 24px; }
+  .row-delete { opacity: 1; min-width: 36px; min-height: 36px; display: flex; align-items: center; justify-content: center; }
+
+  .modal-card { max-width: 92vw; padding: 18px; }
+  .modal-title { font-size: 16px; margin-bottom: 16px; }
+  .modal-form input,
+  .modal-form select { font-size: 16px; padding: 12px 14px; }
+  .btn-submit { min-height: 44px; font-size: 16px; }
 }
 </style>

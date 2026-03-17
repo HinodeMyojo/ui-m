@@ -589,5 +589,42 @@ function monthlyNeeded(goal: { targetAmount: number; currentAmount: number; dead
   .goals-grid { grid-template-columns: 1fr; }
   .goal-delete { opacity: 1; }
   .form-row { grid-template-columns: 1fr; }
+  .modal-card { max-width: 92vw; padding: 22px; }
+  .modal-wide { max-width: 92vw; }
+}
+
+@media (max-width: 480px) {
+  .goals-toolbar { flex-direction: column; gap: 10px; align-items: stretch; }
+  .section-title { font-size: 16px; }
+  .btn-add { width: 100%; text-align: center; min-height: 44px; font-size: 14px; }
+
+  .goal-body { padding: 16px; }
+  .goal-header { gap: 10px; margin-bottom: 12px; }
+  .goal-icon { font-size: 22px; width: 42px; height: 42px; }
+  .goal-name { font-size: 15px; }
+  .goal-current { font-size: 20px; }
+  .goal-target { font-size: 14px; }
+  .goal-delete { opacity: 1; min-width: 36px; min-height: 36px; display: flex; align-items: center; justify-content: center; }
+  .goal-image { height: 120px; }
+  .goal-recommend { font-size: 12px; padding: 6px 10px; }
+  .btn-calc { min-height: 44px; font-size: 14px; }
+
+  .modal-card { max-width: 92vw; padding: 18px; }
+  .modal-wide { max-width: 92vw; }
+  .modal-title { font-size: 16px; margin-bottom: 16px; }
+  .modal-form input,
+  .modal-form select { font-size: 16px; padding: 12px 14px; }
+  .btn-submit { min-height: 44px; font-size: 16px; }
+  .icon-btn { width: 42px; height: 42px; font-size: 22px; }
+
+  .link-add-row { flex-direction: column; gap: 6px; }
+  .link-add-row input { font-size: 16px; }
+  .link-add-row button { width: 100%; min-height: 44px; }
+
+  .calc-target { font-size: 14px; padding: 10px 14px; }
+  .calc-target strong { font-size: 16px; }
+  .calc-slider-val { font-size: 14px; min-width: 70px; }
+  .calc-input { font-size: 16px; padding: 10px 12px; }
+  .calc-result-months { font-size: 18px; }
 }
 </style>

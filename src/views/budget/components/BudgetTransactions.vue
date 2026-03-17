@@ -963,5 +963,44 @@ function getAccountName(accId?: string) {
   .tx-actions { justify-content: stretch; }
   .tx-actions button { flex: 1; justify-content: center; }
   .tx-delete { opacity: 1; }
+  .modal-card { max-width: 92vw; padding: 22px; }
+  .modal-wide { max-width: 92vw; }
+}
+
+@media (max-width: 480px) {
+  .filter-pills button { padding: 8px 12px; font-size: 12px; }
+  .group-pills button { padding: 6px 10px; font-size: 11px; }
+  .tx-actions { flex-direction: column; }
+  .tx-actions button { width: 100%; min-height: 44px; }
+  .btn-add { width: 100%; text-align: center; min-height: 44px; font-size: 14px; }
+  .btn-import { width: 100%; justify-content: center; min-height: 44px; font-size: 14px; }
+
+  .tx-row { padding: 12px; gap: 10px; }
+  .tx-cat-icon { font-size: 20px; width: 36px; height: 36px; border-radius: 8px; }
+  .tx-cat-name { font-size: 13px; }
+  .tx-desc { font-size: 11px; }
+  .tx-amount { font-size: 14px; }
+  .tx-date { font-size: 10px; }
+  .tx-delete { opacity: 1; padding: 8px; }
+
+  .group-header { padding: 10px 12px; gap: 8px; }
+  .group-label { font-size: 13px; }
+  .group-total { font-size: 13px; }
+
+  .modal-card { max-width: 92vw; padding: 18px; }
+  .modal-wide { max-width: 92vw; }
+  .modal-title { font-size: 16px; margin-bottom: 16px; }
+  .modal-form input,
+  .modal-form select,
+  .modal-form textarea { font-size: 16px; padding: 12px 14px; }
+  .type-switch button { padding: 10px 6px; font-size: 13px; }
+  .btn-submit { min-height: 44px; font-size: 16px; }
+
+  .import-textarea { font-size: 14px; }
+  .btn-parse { min-height: 44px; font-size: 14px; }
+  .btn-download-context { min-height: 44px; font-size: 13px; justify-content: center; }
+  .modal-hint { font-size: 11px; }
+  .modal-hint code { font-size: 10px; overflow-x: auto; }
+  .preview-row { font-size: 12px; padding: 6px 8px; flex-wrap: wrap; }
 }
 </style>

@@ -507,5 +507,33 @@ async function removeBank(id: string, name: string) {
   .acc-grid { grid-template-columns: 1fr; }
   .acc-delete { opacity: 1; }
   .type-grid { grid-template-columns: repeat(3, 1fr); }
+  .modal-card { max-width: 92vw; padding: 22px; }
+}
+
+@media (max-width: 480px) {
+  .acc-summary { flex-direction: column; gap: 12px; }
+  .summary-value { font-size: 18px; }
+  .btn-add { width: 100%; text-align: center; min-height: 44px; font-size: 14px; }
+
+  .acc-card { padding: 16px; }
+  .acc-name { font-size: 15px; }
+  .acc-balance { font-size: 22px; }
+  .acc-delete { opacity: 1; min-width: 36px; min-height: 36px; display: flex; align-items: center; justify-content: center; }
+
+  .modal-card { max-width: 92vw; padding: 18px; }
+  .modal-title { font-size: 16px; margin-bottom: 16px; }
+  .modal-form input,
+  .modal-form select { font-size: 16px; padding: 12px 14px; }
+  .btn-submit { min-height: 44px; font-size: 16px; }
+  .type-grid { grid-template-columns: repeat(3, 1fr); gap: 4px; }
+  .type-btn { padding: 8px 4px; font-size: 10px; }
+  .type-btn span:first-child { font-size: 20px; }
+
+  .banks-section { padding: 14px; }
+  .bank-add-input { font-size: 16px; width: 100%; }
+  .bank-add-form { flex: 1; }
+  .bank-add-btn { min-width: 44px; min-height: 44px; font-size: 20px; }
+  .bank-chip { min-height: 36px; }
+  .bank-remove { min-width: 32px; min-height: 32px; font-size: 18px; }
 }
 </style>
