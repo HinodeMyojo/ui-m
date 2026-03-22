@@ -20,6 +20,9 @@ export interface SkillCategory {
   color: string;
   sortOrder: number;
   hasImage: boolean;
+  mapX: number;
+  mapY: number;
+  mapRadius: number;
   totalXp: number;
   earnedXp: number;
   progress: number;
@@ -36,6 +39,8 @@ export interface SkillNode {
   color: string;
   sortOrder: number;
   hasImage: boolean;
+  mapX: number;
+  mapY: number;
   completionBonusXp: number;
   isCompleted: boolean;
   totalXp: number;
@@ -43,6 +48,12 @@ export interface SkillNode {
   progress: number;
   levelCount: number;
   levels?: SkillLevel[];
+}
+
+export interface CharacterLevelImage {
+  id: string;
+  minLevel: number;
+  hasImage: boolean;
 }
 
 export interface SkillLevel {
@@ -139,6 +150,9 @@ export interface CreateCategoryRequest {
   icon?: string;
   color?: string;
   sortOrder?: number;
+  mapX?: number;
+  mapY?: number;
+  mapRadius?: number;
 }
 
 export interface CreateSkillNodeRequest {
@@ -149,6 +163,8 @@ export interface CreateSkillNodeRequest {
   color?: string;
   sortOrder?: number;
   completionBonusXp?: number;
+  mapX?: number;
+  mapY?: number;
 }
 
 export interface CreateSkillLevelRequest {

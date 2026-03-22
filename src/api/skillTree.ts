@@ -1,5 +1,6 @@
 import type {
   CharacterProfile,
+  CharacterLevelImage,
   SkillCategory,
   SkillNode,
   SkillLevel,
@@ -190,6 +191,41 @@ export const completeSubSkill = (id: string) =>
 
 export const uncompleteSubSkill = (id: string) =>
   request<void>(`/sub-skills/${id}/uncomplete`, { method: "POST" });
+
+// === Character Level Images ===
+export async function fetchCharacterImageBlob(): Promise<string | null> {
+  const token = localStorage.getItem("token");
+  try {
+    const res = await fetch(`${API_BASE}/character/image`, {
+      headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    });
+    if (!res.ok) return null;
+    const blob = await res.blob();
+    return URL.createObjectURL(blob);
+  } catch {
+    return null;
+  }
+}
+
+export const getCharacterLevelImages = () =>
+  request<CharacterLevelImage[]>("/character/level-images");
+
+export const addCharacterLevelImage = async (minLevel: number, file: File) => {
+  const token = localStorage.getItem("token");
+  const form = new FormData();
+  form.append("image", file);
+  form.append("minLevel", String(minLevel));
+  const res = await fetch(`${API_BASE}/character/level-images`, {
+    method: "POST",
+    headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    body: form,
+  });
+  if (!res.ok) throw new Error("Upload failed");
+  return res.json() as Promise<{ id: string }>;
+};
+
+export const deleteCharacterLevelImage = (id: string) =>
+  request<void>(`/character/level-images/${id}`, { method: "DELETE" });
 
 // === Exams ===
 export const passExam = (levelId: string) =>
