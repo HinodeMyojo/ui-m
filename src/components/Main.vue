@@ -828,6 +828,10 @@ function closeTimeStats() {
           <div class="icon">💰</div>
           <p class="text">Бюджет</p>
         </button>
+        <button class="nyamaaa" @click="router.push('/skill-tree')">
+          <div class="icon">⚔️</div>
+          <p class="text">Skill Tree</p>
+        </button>
         <button class="nyamaaa nyamaaa-soon" disabled title="Скоро">
           <div class="icon">🧠</div>
           <p class="text">Mind Map</p>

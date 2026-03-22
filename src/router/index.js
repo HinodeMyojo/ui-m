@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from "vue-router";
 import HomeView from "../views/HomeView.vue";
 import LoginView from "../views/LoginView.vue";
 import SkillsView from "../views/SkillsView.vue";
+import SkillTreeView from "../views/SkillTreeView.vue";
 import MdToMdfView from "@/views/MdToMdfView.vue";
 import PdfReaderView from "@/views/PdfReaderView.vue";
 import VocabularyView from "@/views/VocabularyView.vue";
@@ -28,6 +29,11 @@ const router = createRouter({
       path: "/skills",
       name: "Skills",
       component: SkillsView,
+    },
+    {
+      path: "/skill-tree",
+      name: "SkillTree",
+      component: SkillTreeView,
     },
     {
       path: "/pdfReader",
