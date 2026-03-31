@@ -129,6 +129,47 @@ async function removeBank(id: string, name: string) {
   await store.deleteBank(id);
 }
 
+// Deposit funds to account
+const showDepositModal = ref(false);
+const depositForm = ref({
+  amount: 0,
+  fromAccountId: "",
+  date: new Date().toISOString().slice(0, 10),
+  description: "",
+});
+
+const sourceAccounts = computed(() =>
+  store.accounts.filter((a) => a.isActive && a.id !== detailAccountId.value && (a.type === "card" || a.type === "cash"))
+);
+
+async function submitDeposit() {
+  if (!detailAccountId.value || depositForm.value.amount <= 0 || !depositForm.value.fromAccountId) return;
+  try {
+    await store.createTransaction({
+      type: "transfer",
+      amount: depositForm.value.amount,
+      description: depositForm.value.description || "Пополнение счёта",
+      date: depositForm.value.date,
+      fromAccountId: depositForm.value.fromAccountId,
+      toAccountId: detailAccountId.value,
+    });
+    showDepositModal.value = false;
+    depositForm.value = { amount: 0, fromAccountId: "", date: new Date().toISOString().slice(0, 10), description: "" };
+    // Refresh accounts to get updated balances
+    await store.fetchAccounts();
+  } catch {}
+}
+
+function openDepositModal() {
+  depositForm.value = {
+    amount: 0,
+    fromAccountId: sourceAccounts.value[0]?.id ?? "",
+    date: new Date().toISOString().slice(0, 10),
+    description: "",
+  };
+  showDepositModal.value = true;
+}
+
 // Account detail view for deposits/savings
 const showDetail = ref(false);
 const detailAccountId = ref<string | null>(null);
@@ -447,7 +488,43 @@ const detailYearlyIncome = computed(() => {
           </div>
 
           <div class="detail-actions">
+            <button class="btn-deposit-detail" @click="openDepositModal">+ Пополнить</button>
             <button class="btn-edit-detail" @click="showDetail = false; openEdit(detailAccount!.id)">Редактировать</button>
+          </div>
+
+          <!-- Deposit funds modal (nested) -->
+          <div v-if="showDepositModal" class="deposit-form-overlay" @click.self="showDepositModal = false">
+            <div class="deposit-form-card">
+              <h4 class="deposit-form-title">Пополнить {{ detailAccount?.name }}</h4>
+              <form @submit.prevent="submitDeposit" class="modal-form">
+                <label>
+                  <span>Откуда</span>
+                  <select v-model="depositForm.fromAccountId" required>
+                    <option value="" disabled>Выберите счёт...</option>
+                    <option v-for="acc in sourceAccounts" :key="acc.id" :value="acc.id">
+                      {{ acc.name }} ({{ fmt(acc.balance) }} ₽)
+                    </option>
+                  </select>
+                </label>
+                <label>
+                  <span>Сумма (₽)</span>
+                  <input v-model.number="depositForm.amount" type="number" min="1" step="1" required />
+                </label>
+                <label>
+                  <span>Дата</span>
+                  <input v-model="depositForm.date" type="date" required />
+                </label>
+                <label>
+                  <span>Описание</span>
+                  <input v-model="depositForm.description" type="text" placeholder="Пополнение" />
+                </label>
+                <div class="deposit-form-preview" v-if="depositForm.amount > 0 && detailAccount?.interestRate">
+                  <span>Доп. доход после пополнения:</span>
+                  <span class="green">+{{ fmt(Math.round(depositForm.amount * (detailAccount.interestRate ?? 0) / 100 / 12)) }} ₽/мес</span>
+                </div>
+                <button type="submit" class="btn-submit">Пополнить</button>
+              </form>
+            </div>
           </div>
         </div>
       </div>
@@ -707,7 +784,28 @@ const detailYearlyIncome = computed(() => {
   color: #7eb0ff; padding: 10px 20px; border-radius: 10px;
   font-size: 14px; font-weight: 500; cursor: pointer; transition: all 0.2s;
 }
+.btn-deposit-detail {
+  background: linear-gradient(135deg, #059669, #34d399); border: none; color: #fff;
+  padding: 10px 20px; border-radius: 10px; font-size: 14px; font-weight: 600;
+  cursor: pointer; transition: all 0.2s; flex: 1;
+}
+.btn-deposit-detail:hover { transform: translateY(-1px); box-shadow: 0 4px 16px rgba(52, 211, 153, 0.3); }
 .btn-edit-detail:hover { background: rgba(23, 103, 253, 0.25); color: #fff; }
+
+.deposit-form-overlay {
+  position: absolute; inset: 0; background: rgba(0,0,0,0.5); border-radius: 16px;
+  display: flex; align-items: center; justify-content: center; padding: 20px;
+}
+.deposit-form-card {
+  background: linear-gradient(135deg, rgba(14,15,26,0.99), rgba(20,22,36,0.99));
+  border: 1px solid rgba(52,211,153,0.3); border-radius: 12px; padding: 20px; width: 100%;
+}
+.deposit-form-title { font-size: 16px; font-weight: 700; color: #fff; margin: 0 0 14px; }
+.deposit-form-preview {
+  display: flex; justify-content: space-between; padding: 10px 14px;
+  background: rgba(52,211,153,0.06); border: 1px solid rgba(52,211,153,0.15);
+  border-radius: 8px; font-size: 13px; color: #c8daf0;
+}
 
 @media (max-width: 768px) {
   .acc-toolbar { flex-direction: column; align-items: stretch; }

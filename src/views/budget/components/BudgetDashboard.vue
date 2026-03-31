@@ -14,20 +14,19 @@ const trendPeriod = ref<"1m" | "3m" | "6m" | "1y">("6m");
 const customTrendData = ref<{ month: string; totalIncome: number; totalExpense: number }[] | null>(null);
 
 async function loadTrendData() {
+  if (trendPeriod.value === "6m") {
+    customTrendData.value = null; // use dashboard's default 6-month data
+    return;
+  }
   const now = new Date(store.currentMonth + "-15");
   let fromDate: Date;
   switch (trendPeriod.value) {
     case "1m":
       fromDate = new Date(now.getFullYear(), now.getMonth(), 1);
-      customTrendData.value = null; // use dashboard data (current month only)
-      return;
+      break;
     case "3m":
       fromDate = new Date(now.getFullYear(), now.getMonth() - 2, 1);
       break;
-    case "6m":
-      fromDate = new Date(now.getFullYear(), now.getMonth() - 5, 1);
-      customTrendData.value = null; // use dashboard's default 6-month data
-      return;
     case "1y":
       fromDate = new Date(now.getFullYear(), now.getMonth() - 11, 1);
       break;

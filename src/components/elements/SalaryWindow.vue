@@ -9,12 +9,6 @@
           >
             Финансовая статистика
           </button>
-          <button
-            :class="['tab', { active: currentTab === 'plans' }]"
-            @click="currentTab = 'plans'"
-          >
-            Финансовые планы
-          </button>
         </div>
         <button class="close-button" @click="handleClose">✕</button>
       </div>
@@ -271,7 +265,6 @@
           </div>
         </template>
 
-        <FinancialPlansWindow v-if="currentTab === 'plans'" />
       </div>
     </div>
 
@@ -606,7 +599,6 @@
 <script setup>
 import { ref, computed, onMounted, watch } from "vue";
 import { Line } from "vue-chartjs";
-import FinancialPlansWindow from "./FinancialPlansWindow.vue";
 import {
   Chart as ChartJS,
   Title,
