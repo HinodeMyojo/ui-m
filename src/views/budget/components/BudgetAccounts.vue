@@ -671,7 +671,6 @@ const detailYearlyIncome = computed(() => {
 .bank-add-btn:hover:not(:disabled) { background: rgba(23, 103, 253, 0.3); color: #fff; }
 .bank-add-btn:disabled { opacity: 0.4; cursor: default; }
 
-@media (max-width: 768px) {
 /* Detail modal */
 .modal-detail { max-width: 560px; }
 
