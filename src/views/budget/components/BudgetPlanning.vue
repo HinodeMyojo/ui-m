@@ -1,9 +1,13 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from "vue";
 import { useBudgetStore } from "@/stores/budget";
-import type { PlanItemType } from "@/types/budget";
+import * as api from "@/api/budget";
+import type { PlanItemType, MonthlyStats } from "@/types/budget";
 
 const store = useBudgetStore();
+
+// Actual monthly stats for comparison with plan
+const actualStats = ref<MonthlyStats | null>(null);
 
 const showAddItemModal = ref(false);
 const editingItemId = ref<string | null>(null);
@@ -16,6 +20,7 @@ const itemForm = ref({
   plannedDate: 0,
   depositRate: undefined as number | undefined,
   depositMonths: undefined as number | undefined,
+  accountId: "" as string,
 });
 
 const ITEM_TYPES: { value: PlanItemType; label: string; icon: string }[] = [
@@ -43,13 +48,31 @@ const expenseItems = computed(() => plan.value?.items.filter((i) => i.type === "
 const savingItems = computed(() => plan.value?.items.filter((i) => i.type === "saving") ?? []);
 const depositItems = computed(() => plan.value?.items.filter((i) => i.type === "deposit") ?? []);
 
+async function loadActualStats(month: string) {
+  if (month === "template") {
+    actualStats.value = null;
+    return;
+  }
+  try {
+    actualStats.value = await api.getMonthlyStats(month);
+  } catch {
+    actualStats.value = null;
+  }
+}
+
 onMounted(async () => {
   await store.fetchPlans();
-  await store.fetchPlanByMonth(planMonth.value);
+  await Promise.all([
+    store.fetchPlanByMonth(planMonth.value),
+    loadActualStats(planMonth.value),
+  ]);
 });
 
 watch(planMonth, async (month) => {
-  await store.fetchPlanByMonth(month);
+  await Promise.all([
+    store.fetchPlanByMonth(month),
+    loadActualStats(month),
+  ]);
 });
 
 async function createPlanForMonth() {
@@ -88,6 +111,7 @@ function openAddItem(type: PlanItemType) {
     plannedDate: 0,
     depositRate: undefined,
     depositMonths: undefined,
+    accountId: "",
   };
   showAddItemModal.value = true;
 }
@@ -160,6 +184,56 @@ const monthOptions = computed(() => {
 const availableCategories = computed(() =>
   itemForm.value.type === "income" ? store.incomeCategories : store.expenseCategories
 );
+
+// Actual spending per category (from real transactions)
+const actualByCategory = computed(() => {
+  const map = new Map<string, number>();
+  for (const cat of actualStats.value?.byCategory ?? []) {
+    map.set(cat.categoryId, cat.amount);
+  }
+  return map;
+});
+
+function getActualSpent(categoryId?: string): number {
+  if (!categoryId) return 0;
+  return actualByCategory.value.get(categoryId) ?? 0;
+}
+
+// Existing passive income from real accounts (deposit/savings with interestRate)
+const existingPassiveIncome = computed(() => {
+  return store.accounts
+    .filter((a) => a.isActive && a.interestRate && (a.type === "deposit" || a.type === "savings"))
+    .reduce((sum, a) => sum + (a.balance * (a.interestRate ?? 0)) / 100 / 12, 0);
+});
+
+const existingPassiveAccounts = computed(() => {
+  return store.accounts
+    .filter((a) => a.isActive && a.interestRate && (a.type === "deposit" || a.type === "savings"))
+    .map((a) => ({
+      id: a.id,
+      name: a.name,
+      type: a.type,
+      balance: a.balance,
+      rate: a.interestRate ?? 0,
+      monthlyIncome: Math.round((a.balance * (a.interestRate ?? 0)) / 100 / 12),
+    }));
+});
+
+// Available accounts for savings target
+const savingsAccounts = computed(() =>
+  store.accounts.filter((a) => a.isActive && (a.type === "deposit" || a.type === "savings"))
+);
+
+// Collapsible sections
+const collapsedSections = ref(new Set<string>());
+
+function toggleSection(key: string) {
+  if (collapsedSections.value.has(key)) {
+    collapsedSections.value.delete(key);
+  } else {
+    collapsedSections.value.add(key);
+  }
+}
 </script>
 
 <template>
@@ -192,77 +266,132 @@ const availableCategories = computed(() =>
       <div class="plan-main">
         <!-- Income section -->
         <div class="plan-section">
-          <div class="section-header">
+          <div class="section-header section-header-collapsible" @click="toggleSection('income')">
+            <span class="section-chevron" :class="{ collapsed: collapsedSections.has('income') }">▼</span>
             <span class="section-icon">📈</span>
             <h4>Доходы</h4>
-            <span class="section-total green">+{{ fmt(plan?.totalIncome) }} ₽</span>
-            <button class="btn-add-item" @click="openAddItem('income')">+</button>
+            <span class="section-count">{{ incomeItems.length }}</span>
+            <span class="section-total green">+{{ fmt((plan?.totalIncome ?? 0) + Math.round(existingPassiveIncome)) }} ₽</span>
+            <button class="btn-add-item" @click.stop="openAddItem('income')">+</button>
           </div>
-          <div v-if="!incomeItems.length" class="section-empty">Добавьте источники дохода</div>
-          <div v-for="item in incomeItems" :key="item.id" class="plan-item" @click="openEditItem(item.id)">
-            <div class="item-info">
-              <span class="item-name">{{ item.name }}</span>
-              <span class="item-date" v-if="item.plannedDate > 0">{{ item.plannedDate }}-е число</span>
+          <template v-if="!collapsedSections.has('income')">
+            <div v-if="!incomeItems.length && !existingPassiveAccounts.length" class="section-empty">Добавьте источники дохода</div>
+            <div v-for="item in incomeItems" :key="item.id" class="plan-item" @click="openEditItem(item.id)">
+              <div class="item-info">
+                <span class="item-name">{{ item.name }}</span>
+                <span class="item-date" v-if="item.plannedDate > 0">{{ item.plannedDate }}-е число</span>
+              </div>
+              <span class="item-amount green">+{{ fmt(item.amount) }} ₽</span>
+              <button class="item-delete" @click.stop="handleDeleteItem(item.id)">×</button>
             </div>
-            <span class="item-amount green">+{{ fmt(item.amount) }} ₽</span>
-            <button class="item-delete" @click.stop="handleDeleteItem(item.id)">×</button>
-          </div>
+            <!-- Auto: existing passive income -->
+            <div v-if="existingPassiveIncome > 0" class="plan-item plan-item-existing">
+              <div class="item-info">
+                <span class="item-cat-icon">🏦</span>
+                <span class="item-name">Пассивный доход (вклады)</span>
+                <span class="item-date">{{ existingPassiveAccounts.length }} {{ existingPassiveAccounts.length === 1 ? 'счёт' : 'счетов' }}</span>
+              </div>
+              <span class="item-amount purple">+{{ fmt(Math.round(existingPassiveIncome)) }} ₽</span>
+            </div>
+          </template>
         </div>
 
         <!-- Expense section -->
         <div class="plan-section">
-          <div class="section-header">
+          <div class="section-header section-header-collapsible" @click="toggleSection('expense')">
+            <span class="section-chevron" :class="{ collapsed: collapsedSections.has('expense') }">▼</span>
             <span class="section-icon">📉</span>
             <h4>Расходы по категориям</h4>
+            <span class="section-count">{{ expenseItems.length }}</span>
             <span class="section-total red">-{{ fmt(plan?.totalExpense) }} ₽</span>
-            <button class="btn-add-item" @click="openAddItem('expense')">+</button>
+            <button class="btn-add-item" @click.stop="openAddItem('expense')">+</button>
           </div>
-          <div v-if="!expenseItems.length" class="section-empty">Укажите планируемые расходы</div>
-          <div v-for="item in expenseItems" :key="item.id" class="plan-item" @click="openEditItem(item.id)">
-            <div class="item-info">
-              <span class="item-cat-icon" v-if="getCatInfo(item.categoryId)">{{ getCatInfo(item.categoryId)?.icon }}</span>
-              <span class="item-name">{{ item.name }}</span>
+          <template v-if="!collapsedSections.has('expense')">
+            <div v-if="!expenseItems.length" class="section-empty">Укажите планируемые расходы</div>
+            <div v-for="item in expenseItems" :key="item.id" class="plan-item plan-item-expense" @click="openEditItem(item.id)">
+              <div class="item-info">
+                <span class="item-cat-icon" v-if="getCatInfo(item.categoryId)">{{ getCatInfo(item.categoryId)?.icon }}</span>
+                <span class="item-name">{{ item.name }}</span>
+              </div>
+              <div class="item-spending" v-if="actualStats && item.categoryId">
+                <div class="spending-bar-track">
+                  <div
+                    class="spending-bar-fill"
+                    :style="{ width: Math.min(100, getActualSpent(item.categoryId) / item.amount * 100) + '%' }"
+                    :class="{ 'spending-over': getActualSpent(item.categoryId) > item.amount }"
+                  ></div>
+                </div>
+                <span class="spending-text" :class="{ 'spending-over-text': getActualSpent(item.categoryId) > item.amount }">
+                  {{ fmt(getActualSpent(item.categoryId)) }} / {{ fmt(item.amount) }} ₽
+                </span>
+              </div>
+              <span v-else class="item-amount red">-{{ fmt(item.amount) }} ₽</span>
+              <button class="item-delete" @click.stop="handleDeleteItem(item.id)">×</button>
             </div>
-            <span class="item-amount red">-{{ fmt(item.amount) }} ₽</span>
-            <button class="item-delete" @click.stop="handleDeleteItem(item.id)">×</button>
-          </div>
+          </template>
         </div>
 
         <!-- Savings section -->
         <div class="plan-section">
-          <div class="section-header">
+          <div class="section-header section-header-collapsible" @click="toggleSection('saving')">
+            <span class="section-chevron" :class="{ collapsed: collapsedSections.has('saving') }">▼</span>
             <span class="section-icon">🐷</span>
             <h4>Накопления</h4>
+            <span class="section-count">{{ savingItems.length }}</span>
             <span class="section-total blue">{{ fmt(plan?.plannedSaving) }} ₽</span>
-            <button class="btn-add-item" @click="openAddItem('saving')">+</button>
+            <button class="btn-add-item" @click.stop="openAddItem('saving')">+</button>
           </div>
-          <div v-if="!savingItems.length" class="section-empty">Запланируйте накопления</div>
-          <div v-for="item in savingItems" :key="item.id" class="plan-item" @click="openEditItem(item.id)">
-            <div class="item-info">
-              <span class="item-name">{{ item.name }}</span>
+          <template v-if="!collapsedSections.has('saving')">
+            <div v-if="!savingItems.length" class="section-empty">Запланируйте накопления (сколько, куда и когда)</div>
+            <div v-for="item in savingItems" :key="item.id" class="plan-item" @click="openEditItem(item.id)">
+              <div class="item-info">
+                <span class="item-name">{{ item.name }}</span>
+                <span class="item-date" v-if="item.plannedDate > 0">{{ item.plannedDate }}-е число</span>
+              </div>
+              <span class="item-amount blue">{{ fmt(item.amount) }} ₽</span>
+              <button class="item-delete" @click.stop="handleDeleteItem(item.id)">×</button>
             </div>
-            <span class="item-amount blue">{{ fmt(item.amount) }} ₽</span>
-            <button class="item-delete" @click.stop="handleDeleteItem(item.id)">×</button>
-          </div>
+          </template>
         </div>
 
-        <!-- Deposits section -->
+        <!-- Deposits & passive income section -->
         <div class="plan-section">
-          <div class="section-header">
+          <div class="section-header section-header-collapsible" @click="toggleSection('deposit')">
+            <span class="section-chevron" :class="{ collapsed: collapsedSections.has('deposit') }">▼</span>
             <span class="section-icon">🏦</span>
-            <h4>Вклады</h4>
-            <span class="section-total purple" v-if="(plan?.depositIncome ?? 0) > 0">+{{ fmt(plan?.depositIncome) }} ₽/мес</span>
-            <button class="btn-add-item" @click="openAddItem('deposit')">+</button>
+            <h4>Пассивный доход</h4>
+            <span class="section-count">{{ existingPassiveAccounts.length + depositItems.length }}</span>
+            <span class="section-total purple">+{{ fmt(Math.round(existingPassiveIncome + (plan?.depositIncome ?? 0))) }} ₽/мес</span>
+            <button class="btn-add-item" @click.stop="openAddItem('deposit')">+</button>
           </div>
-          <div v-if="!depositItems.length" class="section-empty">Добавьте вклады для расчёта пассивного дохода</div>
-          <div v-for="item in depositItems" :key="item.id" class="plan-item" @click="openEditItem(item.id)">
-            <div class="item-info">
-              <span class="item-name">{{ item.name }}</span>
-              <span class="item-date" v-if="item.depositRate">{{ item.depositRate }}% годовых</span>
+          <template v-if="!collapsedSections.has('deposit')">
+            <!-- Existing deposit/savings accounts -->
+            <div v-if="existingPassiveAccounts.length" class="subsection-label">Текущие вклады и счета</div>
+            <div v-for="acc in existingPassiveAccounts" :key="'acc-' + acc.id" class="plan-item plan-item-existing">
+              <div class="item-info">
+                <span class="item-cat-icon">{{ acc.type === 'deposit' ? '🏦' : '💰' }}</span>
+                <span class="item-name">{{ acc.name }}</span>
+                <span class="item-date">{{ acc.rate }}% · {{ fmt(acc.balance) }} ₽</span>
+              </div>
+              <span class="item-amount purple">+{{ fmt(acc.monthlyIncome) }} ₽/мес</span>
             </div>
-            <span class="item-amount">{{ fmt(item.amount) }} ₽</span>
-            <button class="item-delete" @click.stop="handleDeleteItem(item.id)">×</button>
-          </div>
+
+            <!-- Planned new deposits -->
+            <div v-if="depositItems.length" class="subsection-label">Планируемые вложения</div>
+            <div v-for="item in depositItems" :key="item.id" class="plan-item" @click="openEditItem(item.id)">
+              <div class="item-info">
+                <span class="item-name">{{ item.name }}</span>
+                <span class="item-date" v-if="item.depositRate">{{ item.depositRate }}% · {{ fmt(item.amount) }} ₽</span>
+                <span class="item-date" v-if="item.plannedDate > 0"> · {{ item.plannedDate }}-е число</span>
+              </div>
+              <span class="item-amount purple">+{{ fmt(Math.round(item.amount * (item.depositRate ?? 0) / 100 / 12)) }} ₽/мес</span>
+              <button class="item-delete" @click.stop="handleDeleteItem(item.id)">×</button>
+            </div>
+
+            <div v-if="!existingPassiveAccounts.length && !depositItems.length" class="section-empty">
+              Нет вкладов. Добавьте планируемый вклад или создайте счёт с процентной ставкой.
+            </div>
+          </template>
         </div>
       </div>
 
@@ -271,8 +400,16 @@ const availableCategories = computed(() =>
         <h4 class="summary-title">Итоги плана</h4>
         <div class="summary-rows">
           <div class="summary-row">
-            <span>Доходы</span>
+            <span>Активный доход</span>
             <span class="green">+{{ fmt(plan?.totalIncome) }} ₽</span>
+          </div>
+          <div class="summary-row" v-if="existingPassiveIncome > 0">
+            <span>Текущий пассивный доход</span>
+            <span class="purple">+{{ fmt(Math.round(existingPassiveIncome)) }} ₽</span>
+          </div>
+          <div class="summary-row" v-if="(plan?.depositIncome ?? 0) > 0">
+            <span>Доход от новых вложений</span>
+            <span class="purple">+{{ fmt(plan?.depositIncome) }} ₽</span>
           </div>
           <div class="summary-row">
             <span>Расходы</span>
@@ -285,16 +422,12 @@ const availableCategories = computed(() =>
           </div>
           <div class="summary-row">
             <span>Свободные средства</span>
-            <span>{{ fmt(plan?.freeSaving) }} ₽</span>
-          </div>
-          <div class="summary-row" v-if="(plan?.depositIncome ?? 0) > 0">
-            <span>Доход от вкладов</span>
-            <span class="purple">+{{ fmt(plan?.depositIncome) }} ₽</span>
+            <span>{{ fmt(Math.max(0, (plan?.totalIncome ?? 0) + Math.round(existingPassiveIncome) + (plan?.depositIncome ?? 0) - (plan?.totalExpense ?? 0) - (plan?.plannedSaving ?? 0))) }} ₽</span>
           </div>
           <div class="summary-divider"></div>
           <div class="summary-row summary-row-total">
             <span>Чистые накопления/мес</span>
-            <span class="green">{{ fmt(plan?.netMonthlySaving) }} ₽</span>
+            <span class="green">{{ fmt((plan?.netMonthlySaving ?? 0) + Math.round(existingPassiveIncome)) }} ₽</span>
           </div>
         </div>
 
@@ -362,9 +495,19 @@ const availableCategories = computed(() =>
               <input v-model.number="itemForm.amount" type="number" min="0" step="100" required />
             </label>
 
-            <label v-if="itemForm.type === 'income'">
-              <span>День поступления (0 = не указан)</span>
+            <label v-if="itemForm.type === 'income' || itemForm.type === 'saving' || itemForm.type === 'deposit'">
+              <span>Планируемая дата (число месяца, 0 = не указано)</span>
               <input v-model.number="itemForm.plannedDate" type="number" min="0" max="31" />
+            </label>
+
+            <label v-if="itemForm.type === 'saving'">
+              <span>Куда (счёт)</span>
+              <select v-model="itemForm.accountId">
+                <option value="">Не указан</option>
+                <option v-for="acc in savingsAccounts" :key="acc.id" :value="acc.id">
+                  {{ acc.name }} ({{ fmt(acc.balance) }} ₽{{ acc.interestRate ? ', ' + acc.interestRate + '%' : '' }})
+                </option>
+              </select>
             </label>
 
             <template v-if="itemForm.type === 'deposit'">
@@ -377,6 +520,18 @@ const availableCategories = computed(() =>
                 <input v-model.number="itemForm.depositMonths" type="number" min="1" max="120" placeholder="12" />
               </label>
             </template>
+
+            <!-- Preview: if depositing on a certain date, show projected monthly income -->
+            <div v-if="itemForm.type === 'deposit' && itemForm.amount > 0 && itemForm.depositRate" class="form-preview">
+              <span class="form-preview-label">Ожидаемый доход:</span>
+              <span class="form-preview-value purple">+{{ fmt(Math.round(itemForm.amount * (itemForm.depositRate ?? 0) / 100 / 12)) }} ₽/мес</span>
+            </div>
+            <div v-if="itemForm.type === 'saving' && itemForm.amount > 0 && itemForm.accountId" class="form-preview">
+              <span class="form-preview-label">Доход после пополнения:</span>
+              <span class="form-preview-value purple">
+                ~+{{ fmt(Math.round(itemForm.amount * (savingsAccounts.find(a => a.id === itemForm.accountId)?.interestRate ?? 0) / 100 / 12)) }} ₽/мес доп.
+              </span>
+            </div>
 
             <button type="submit" class="btn-submit">{{ editingItemId ? 'Сохранить' : 'Добавить' }}</button>
           </form>
@@ -446,6 +601,19 @@ const availableCategories = computed(() =>
 .section-header {
   display: flex; align-items: center; gap: 10px; margin-bottom: 14px;
 }
+.section-header-collapsible {
+  cursor: pointer; user-select: none; border-radius: 8px; padding: 4px 0;
+  transition: background 0.2s;
+}
+.section-header-collapsible:hover { background: rgba(23, 103, 253, 0.04); }
+.section-chevron {
+  font-size: 10px; color: #6b7fa3; transition: transform 0.2s; flex-shrink: 0;
+}
+.section-chevron.collapsed { transform: rotate(-90deg); }
+.section-count {
+  font-size: 11px; color: #6b7fa3; background: rgba(107, 127, 163, 0.15);
+  padding: 2px 8px; border-radius: 10px;
+}
 .section-icon { font-size: 20px; }
 .section-header h4 { font-size: 15px; font-weight: 600; color: #c8daf0; margin: 0; flex: 1; }
 .section-total { font-size: 16px; font-weight: 700; }
@@ -489,6 +657,41 @@ const availableCategories = computed(() =>
 }
 .plan-item:hover .item-delete { opacity: 1; }
 .item-delete:hover { color: #f87171; }
+
+/* Existing account items (non-editable) */
+.plan-item-existing {
+  cursor: default; opacity: 0.8;
+  border-left: 3px solid rgba(192, 132, 252, 0.3); padding-left: 11px;
+}
+
+/* Subsection labels */
+.subsection-label {
+  font-size: 11px; color: #6b7fa3; text-transform: uppercase; letter-spacing: 0.5px;
+  padding: 8px 14px 4px; font-weight: 600;
+}
+
+/* Spending bar (actual vs planned) */
+.item-spending { display: flex; flex-direction: column; gap: 3px; align-items: flex-end; min-width: 140px; }
+.spending-bar-track {
+  width: 100%; height: 4px; background: rgba(248, 113, 113, 0.15);
+  border-radius: 2px; overflow: hidden;
+}
+.spending-bar-fill {
+  height: 100%; background: #f87171; border-radius: 2px;
+  transition: width 0.3s;
+}
+.spending-bar-fill.spending-over { background: #ef4444; }
+.spending-text { font-size: 12px; color: #c8daf0; font-weight: 500; white-space: nowrap; }
+.spending-over-text { color: #f87171; font-weight: 700; }
+
+/* Form preview */
+.form-preview {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 10px 14px; background: rgba(192, 132, 252, 0.06);
+  border: 1px solid rgba(192, 132, 252, 0.15); border-radius: 10px;
+}
+.form-preview-label { font-size: 13px; color: #6b7fa3; }
+.form-preview-value { font-size: 15px; font-weight: 700; }
 
 /* Summary sidebar */
 .plan-summary {
@@ -598,10 +801,14 @@ const availableCategories = computed(() =>
   .section-total { font-size: 14px; }
   .btn-add-item { min-width: 36px; min-height: 36px; }
 
-  .plan-item { padding: 10px 12px; gap: 8px; }
+  .plan-item { padding: 10px 12px; gap: 8px; flex-wrap: wrap; }
+  .plan-item-expense .item-spending { width: 100%; min-width: unset; }
   .item-name { font-size: 13px; }
   .item-amount { font-size: 14px; }
   .item-delete { opacity: 1; min-width: 32px; min-height: 32px; }
+  .subsection-label { font-size: 10px; }
+  .form-preview { flex-direction: column; gap: 4px; align-items: flex-start; }
+  .form-preview-value { font-size: 14px; }
 
   .plan-summary { padding: 18px; }
   .summary-title { font-size: 15px; }

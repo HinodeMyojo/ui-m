@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 import { useBudgetStore } from "@/stores/budget";
 import * as api from "@/api/budget";
 import { Chart as ChartJS, ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement, PointElement, LineElement, Filler } from "chart.js";
@@ -10,6 +10,46 @@ ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarEle
 const store = useBudgetStore();
 const chartType = ref<"doughnut" | "bar">("doughnut");
 const categorySortOrder = ref<"desc" | "asc">("desc");
+const trendPeriod = ref<"1m" | "3m" | "6m" | "1y">("6m");
+const customTrendData = ref<{ month: string; totalIncome: number; totalExpense: number }[] | null>(null);
+
+async function loadTrendData() {
+  const now = new Date(store.currentMonth + "-15");
+  let fromDate: Date;
+  switch (trendPeriod.value) {
+    case "1m":
+      fromDate = new Date(now.getFullYear(), now.getMonth(), 1);
+      customTrendData.value = null; // use dashboard data (current month only)
+      return;
+    case "3m":
+      fromDate = new Date(now.getFullYear(), now.getMonth() - 2, 1);
+      break;
+    case "6m":
+      fromDate = new Date(now.getFullYear(), now.getMonth() - 5, 1);
+      customTrendData.value = null; // use dashboard's default 6-month data
+      return;
+    case "1y":
+      fromDate = new Date(now.getFullYear(), now.getMonth() - 11, 1);
+      break;
+    default:
+      customTrendData.value = null;
+      return;
+  }
+  const fromStr = `${fromDate.getFullYear()}-${String(fromDate.getMonth() + 1).padStart(2, "0")}`;
+  const toStr = store.currentMonth;
+  try {
+    const stats = await api.getStatsRange(fromStr, toStr);
+    customTrendData.value = stats.map((s) => ({
+      month: s.month,
+      totalIncome: s.totalIncome,
+      totalExpense: s.totalExpense,
+    }));
+  } catch {
+    customTrendData.value = null;
+  }
+}
+
+watch(trendPeriod, () => loadTrendData());
 
 const dash = computed(() => store.dashboard);
 
@@ -109,7 +149,7 @@ const barOptions = {
 
 // Trend line chart
 const trendData = computed(() => {
-  const trend = dash.value?.monthlyTrend ?? [];
+  const trend = customTrendData.value ?? dash.value?.monthlyTrend ?? [];
   return {
     labels: trend.map((m) =>
       new Date(m.month + "-15").toLocaleString("ru", { month: "short" })
@@ -166,6 +206,22 @@ const trendOptions = {
     y: { ticks: { color: "#6b7fa3", callback: (v: number) => v >= 1000 ? `${v / 1000}k` : v }, grid: { color: "rgba(23, 103, 253, 0.06)" } },
   },
 };
+
+// Projected remaining expense for tooltip
+const projectedRemainingExpense = computed(() => {
+  const month = store.currentMonth;
+  const year = parseInt(month.slice(0, 4));
+  const mon = parseInt(month.slice(5, 7)) - 1;
+  const daysInMonth = new Date(year, mon + 1, 0).getDate();
+  const now = new Date();
+  const isCurrentMonth = now.getFullYear() === year && now.getMonth() === mon;
+  if (!isCurrentMonth) return 0;
+  const daysPassed = now.getDate();
+  const daysRemaining = daysInMonth - daysPassed;
+  const totalExpense = dash.value?.currentMonth?.totalExpense ?? 0;
+  const dailyAvg = daysPassed > 0 ? totalExpense / daysPassed : 0;
+  return Math.round(dailyAvg * daysRemaining);
+});
 
 function fmt(n: number | undefined) {
   return (n ?? 0).toLocaleString("ru");
@@ -359,8 +415,8 @@ const upcomingPayments = computed(() => {
         <div class="stat-icon">💵</div>
         <div class="stat-info">
           <span class="stat-label">Чистыми</span>
-          <span class="stat-value">{{ fmt(dash?.realMoney) }} ₽</span>
-          <span class="stat-sub">Карты + вклады + наличные</span>
+          <span class="stat-value" :class="(dash?.netWorth ?? 0) >= 0 ? '' : 'red'">{{ fmt(dash?.netWorth) }} ₽</span>
+          <span class="stat-sub">Активы − долги</span>
         </div>
       </div>
       <div class="stat-card stat-debt" v-if="(dash?.totalDebt ?? 0) > 0">
@@ -394,14 +450,28 @@ const upcomingPayments = computed(() => {
           <span class="stat-value red">-{{ fmt(dash?.currentMonth?.totalExpense) }} ₽</span>
         </div>
       </div>
-      <div class="stat-card stat-forecast">
+      <div class="stat-card stat-forecast has-tooltip">
         <div class="stat-icon">🔮</div>
         <div class="stat-info">
           <span class="stat-label">Прогноз к концу месяца</span>
           <span class="stat-value" :class="(dash?.forecastEndOfMonth ?? 0) >= 0 ? 'green' : 'red'">
             {{ (dash?.forecastEndOfMonth ?? 0) >= 0 ? '+' : '' }}{{ fmt(dash?.forecastEndOfMonth) }} ₽
           </span>
-          <span class="stat-sub">Доход − расход (темп)</span>
+          <span class="stat-sub">Останется, если тратить в том же темпе</span>
+        </div>
+        <div class="stat-tooltip">
+          <div class="tooltip-row">
+            <span>Доход</span>
+            <span class="green">+{{ fmt(dash?.currentMonth?.totalIncome) }} ₽</span>
+          </div>
+          <div class="tooltip-row">
+            <span>Уже потрачено</span>
+            <span class="red">-{{ fmt(dash?.currentMonth?.totalExpense) }} ₽</span>
+          </div>
+          <div class="tooltip-row">
+            <span>Прогноз расходов до конца</span>
+            <span class="red">-{{ fmt(projectedRemainingExpense) }} ₽</span>
+          </div>
         </div>
       </div>
     </div>
@@ -486,6 +556,12 @@ const upcomingPayments = computed(() => {
       <div class="chart-card">
         <div class="chart-header">
           <h3>Динамика по месяцам</h3>
+          <div class="trend-pills">
+            <button :class="{ active: trendPeriod === '1m' }" @click="trendPeriod = '1m'">1М</button>
+            <button :class="{ active: trendPeriod === '3m' }" @click="trendPeriod = '3m'">3М</button>
+            <button :class="{ active: trendPeriod === '6m' }" @click="trendPeriod = '6m'">6М</button>
+            <button :class="{ active: trendPeriod === '1y' }" @click="trendPeriod = '1y'">1Г</button>
+          </div>
         </div>
         <div class="chart-body chart-body-line">
           <Line :data="trendData" :options="trendOptions" />
@@ -830,6 +906,21 @@ const upcomingPayments = computed(() => {
   align-items: center;
   justify-content: space-between;
   margin-bottom: 16px;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.trend-pills {
+  display: flex; gap: 2px;
+  background: rgba(23, 103, 253, 0.06); border-radius: 8px; padding: 2px;
+}
+.trend-pills button {
+  background: none; border: none; color: #6b7fa3;
+  padding: 5px 10px; border-radius: 6px; font-size: 12px; font-weight: 600;
+  cursor: pointer; transition: all 0.2s;
+}
+.trend-pills button.active {
+  background: rgba(23, 103, 253, 0.2); color: #7eb0ff;
 }
 .chart-header h3 {
   font-size: 15px;

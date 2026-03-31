@@ -2,6 +2,10 @@
 import { ref, computed } from "vue";
 import { useBudgetStore } from "@/stores/budget";
 import type { CreateAccountRequest, AccountType } from "@/types/budget";
+import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Filler, Tooltip } from "chart.js";
+import { Line } from "vue-chartjs";
+
+ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Filler, Tooltip);
 
 const store = useBudgetStore();
 
@@ -124,6 +128,120 @@ async function removeBank(id: string, name: string) {
   if (!confirm(`Удалить банк «${name}»?`)) return;
   await store.deleteBank(id);
 }
+
+// Account detail view for deposits/savings
+const showDetail = ref(false);
+const detailAccountId = ref<string | null>(null);
+
+const detailAccount = computed(() => {
+  if (!detailAccountId.value) return null;
+  return store.accounts.find((a) => a.id === detailAccountId.value) ?? null;
+});
+
+function openAccountDetail(id: string) {
+  const acc = store.accounts.find((a) => a.id === id);
+  if (!acc) return;
+  if (acc.type === "deposit" || acc.type === "savings") {
+    detailAccountId.value = id;
+    showDetail.value = true;
+  } else {
+    openEdit(id);
+  }
+}
+
+// Simulate growth chart for deposit/savings (monthly projection)
+const detailChartData = computed(() => {
+  const acc = detailAccount.value;
+  if (!acc || !acc.interestRate) {
+    return { labels: [] as string[], datasets: [] };
+  }
+  const months = 12;
+  const monthlyRate = acc.interestRate / 100 / 12;
+  const labels: string[] = [];
+  const balances: number[] = [];
+  const incomes: number[] = [];
+  let balance = acc.balance;
+  const now = new Date();
+
+  for (let i = 0; i < months; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
+    labels.push(d.toLocaleString("ru", { month: "short", year: "2-digit" }));
+    const income = Math.round(balance * monthlyRate);
+    balance += income;
+    balances.push(balance);
+    incomes.push(income);
+  }
+
+  return {
+    labels,
+    datasets: [
+      {
+        label: "Баланс",
+        data: balances,
+        borderColor: "#34d399",
+        backgroundColor: "rgba(52, 211, 153, 0.1)",
+        fill: true,
+        tension: 0.4,
+        pointRadius: 4,
+        pointHoverRadius: 6,
+      },
+    ],
+    _incomes: incomes,
+  };
+});
+
+const detailChartOptions = {
+  responsive: true,
+  maintainAspectRatio: false,
+  plugins: {
+    legend: { display: false },
+    tooltip: {
+      backgroundColor: "rgba(14, 15, 26, 0.95)",
+      borderColor: "rgba(23, 103, 253, 0.3)",
+      borderWidth: 1,
+      titleColor: "#fff",
+      bodyColor: "#c8daf0",
+      padding: 12,
+      cornerRadius: 8,
+      callbacks: {
+        label: (ctx: any) => `${Number(ctx.raw).toLocaleString("ru")} ₽`,
+      },
+    },
+  },
+  scales: {
+    x: { ticks: { color: "#6b7fa3" }, grid: { display: false } },
+    y: {
+      ticks: {
+        color: "#6b7fa3",
+        callback: (v: number) => (v >= 1000 ? `${Math.round(v / 1000)}k` : v),
+      },
+      grid: { color: "rgba(23, 103, 253, 0.06)" },
+    },
+  },
+};
+
+const detailMonthlyIncome = computed(() => {
+  const acc = detailAccount.value;
+  if (!acc || !acc.interestRate) return 0;
+  return Math.round((acc.balance * acc.interestRate) / 100 / 12);
+});
+
+const detailYearlyIncome = computed(() => {
+  const acc = detailAccount.value;
+  if (!acc || !acc.interestRate) return 0;
+  // Compound interest for 12 months
+  let balance = acc.balance;
+  const monthlyRate = acc.interestRate / 100 / 12;
+  let totalIncome = 0;
+  for (let i = 0; i < 12; i++) {
+    const income = balance * monthlyRate;
+    totalIncome += income;
+    balance += income;
+  }
+  return Math.round(totalIncome);
+});
+
+
 </script>
 
 <template>
@@ -157,7 +275,7 @@ async function removeBank(id: string, name: string) {
         :key="acc.id"
         class="acc-card"
         :class="{ inactive: !acc.isActive }"
-        @click="openEdit(acc.id)"
+        @click="openAccountDetail(acc.id)"
       >
         <div class="acc-top">
           <span class="acc-type-icon">{{ getTypeInfo(acc.type).icon }}</span>
@@ -279,6 +397,58 @@ async function removeBank(id: string, name: string) {
 
             <button type="submit" class="btn-submit">{{ editingId ? 'Сохранить' : 'Создать' }}</button>
           </form>
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- Account detail modal (deposit/savings) -->
+    <Teleport to="body">
+      <div v-if="showDetail && detailAccount" class="modal-overlay" @click.self="showDetail = false">
+        <div class="modal-card modal-detail">
+          <button class="modal-close" @click="showDetail = false">×</button>
+          <div class="detail-header">
+            <span class="detail-icon">{{ getTypeInfo(detailAccount.type).icon }}</span>
+            <div class="detail-header-info">
+              <h3 class="detail-title">{{ detailAccount.name }}</h3>
+              <span class="detail-type">{{ getTypeInfo(detailAccount.type).label }}
+                <span v-if="detailAccount.bank" class="detail-bank">· {{ detailAccount.bank }}</span>
+              </span>
+            </div>
+          </div>
+
+          <div class="detail-stats">
+            <div class="detail-stat">
+              <span class="detail-stat-label">Баланс</span>
+              <span class="detail-stat-value">{{ fmt(detailAccount.balance) }} ₽</span>
+            </div>
+            <div class="detail-stat" v-if="detailAccount.interestRate">
+              <span class="detail-stat-label">Ставка</span>
+              <span class="detail-stat-value">{{ detailAccount.interestRate }}%</span>
+            </div>
+            <div class="detail-stat" v-if="detailMonthlyIncome > 0">
+              <span class="detail-stat-label">Доход/мес</span>
+              <span class="detail-stat-value green">+{{ fmt(detailMonthlyIncome) }} ₽</span>
+            </div>
+            <div class="detail-stat" v-if="detailYearlyIncome > 0">
+              <span class="detail-stat-label">Доход/год</span>
+              <span class="detail-stat-value green">+{{ fmt(detailYearlyIncome) }} ₽</span>
+            </div>
+            <div class="detail-stat" v-if="detailAccount.maturityDate">
+              <span class="detail-stat-label">Срок до</span>
+              <span class="detail-stat-value">{{ new Date(detailAccount.maturityDate).toLocaleDateString('ru') }}</span>
+            </div>
+          </div>
+
+          <div class="detail-chart" v-if="detailAccount.interestRate">
+            <h4>Прогноз роста (12 месяцев)</h4>
+            <div class="detail-chart-body">
+              <Line :data="detailChartData" :options="detailChartOptions" />
+            </div>
+          </div>
+
+          <div class="detail-actions">
+            <button class="btn-edit-detail" @click="showDetail = false; openEdit(detailAccount!.id)">Редактировать</button>
+          </div>
         </div>
       </div>
     </Teleport>
@@ -502,12 +672,52 @@ async function removeBank(id: string, name: string) {
 .bank-add-btn:disabled { opacity: 0.4; cursor: default; }
 
 @media (max-width: 768px) {
+/* Detail modal */
+.modal-detail { max-width: 560px; }
+
+.detail-header {
+  display: flex; align-items: center; gap: 14px; margin-bottom: 20px;
+}
+.detail-icon { font-size: 36px; }
+.detail-header-info { flex: 1; }
+.detail-title { font-size: 20px; font-weight: 700; color: #fff; margin: 0; }
+.detail-type { font-size: 13px; color: #6b7fa3; }
+.detail-bank { color: #7eb0ff; }
+
+.detail-stats {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 12px; margin-bottom: 20px;
+}
+.detail-stat {
+  background: rgba(23, 103, 253, 0.06);
+  border: 1px solid rgba(23, 103, 253, 0.12);
+  border-radius: 10px; padding: 14px;
+  display: flex; flex-direction: column; gap: 4px;
+}
+.detail-stat-label { font-size: 12px; color: #6b7fa3; }
+.detail-stat-value { font-size: 18px; font-weight: 700; color: #e1e8f0; }
+.detail-stat-value.green { color: #34d399; }
+
+.detail-chart { margin-bottom: 20px; }
+.detail-chart h4 { font-size: 14px; font-weight: 600; color: #c8daf0; margin: 0 0 12px; }
+.detail-chart-body { height: 220px; }
+
+.detail-actions { display: flex; gap: 10px; }
+.btn-edit-detail {
+  background: rgba(23, 103, 253, 0.12); border: 1px solid rgba(23, 103, 253, 0.3);
+  color: #7eb0ff; padding: 10px 20px; border-radius: 10px;
+  font-size: 14px; font-weight: 500; cursor: pointer; transition: all 0.2s;
+}
+.btn-edit-detail:hover { background: rgba(23, 103, 253, 0.25); color: #fff; }
+
+@media (max-width: 768px) {
   .acc-toolbar { flex-direction: column; align-items: stretch; }
   .acc-summary { justify-content: space-between; }
   .acc-grid { grid-template-columns: 1fr; }
   .acc-delete { opacity: 1; }
   .type-grid { grid-template-columns: repeat(3, 1fr); }
   .modal-card { max-width: 92vw; padding: 22px; }
+  .modal-detail { max-width: 92vw; }
 }
 
 @media (max-width: 480px) {
@@ -528,6 +738,11 @@ async function removeBank(id: string, name: string) {
   .type-grid { grid-template-columns: repeat(3, 1fr); gap: 4px; }
   .type-btn { padding: 8px 4px; font-size: 10px; }
   .type-btn span:first-child { font-size: 20px; }
+
+  .detail-title { font-size: 18px; }
+  .detail-stat-value { font-size: 16px; }
+  .detail-chart-body { height: 180px; }
+  .btn-edit-detail { width: 100%; min-height: 44px; font-size: 16px; text-align: center; }
 
   .banks-section { padding: 14px; }
   .bank-add-input { font-size: 16px; width: 100%; }

@@ -66,8 +66,8 @@ export const useBudgetStore = defineStore("budget", () => {
 
   const totalDebt = computed(() =>
     accounts.value
-      .filter((a) => ["credit", "credit_line", "installment"].includes(a.type) && a.balance < 0)
-      .reduce((sum, a) => sum + Math.abs(a.balance), 0)
+      .filter((a) => ["credit", "credit_line", "installment"].includes(a.type) && a.balance > 0)
+      .reduce((sum, a) => sum + a.balance, 0)
   );
 
   const netWorth = computed(() => totalBalance.value - totalDebt.value);
