@@ -2,6 +2,7 @@
 import { ref, computed } from "vue";
 import { useBudgetStore } from "@/stores/budget";
 import type { CreateAccountRequest, AccountType } from "@/types/budget";
+import * as api from "@/api/budget";
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Filler, Tooltip } from "chart.js";
 import { Line } from "vue-chartjs";
 
@@ -129,33 +130,24 @@ async function removeBank(id: string, name: string) {
   await store.deleteBank(id);
 }
 
-// Deposit funds to account
+// Deposit funds to account (independent from transactions)
 const showDepositModal = ref(false);
 const depositForm = ref({
   amount: 0,
-  fromAccountId: "",
   date: new Date().toISOString().slice(0, 10),
   description: "",
 });
 
-const sourceAccounts = computed(() =>
-  store.accounts.filter((a) => a.isActive && a.id !== detailAccountId.value && (a.type === "card" || a.type === "cash"))
-);
-
 async function submitDeposit() {
-  if (!detailAccountId.value || depositForm.value.amount <= 0 || !depositForm.value.fromAccountId) return;
+  if (!detailAccountId.value || depositForm.value.amount <= 0) return;
   try {
-    await store.createTransaction({
-      type: "transfer",
+    await api.depositToAccount(detailAccountId.value, {
       amount: depositForm.value.amount,
-      description: depositForm.value.description || "Пополнение счёта",
       date: depositForm.value.date,
-      fromAccountId: depositForm.value.fromAccountId,
-      toAccountId: detailAccountId.value,
+      description: depositForm.value.description || "Пополнение",
     });
     showDepositModal.value = false;
-    depositForm.value = { amount: 0, fromAccountId: "", date: new Date().toISOString().slice(0, 10), description: "" };
-    // Refresh accounts to get updated balances
+    depositForm.value = { amount: 0, date: new Date().toISOString().slice(0, 10), description: "" };
     await store.fetchAccounts();
   } catch {}
 }
@@ -163,7 +155,6 @@ async function submitDeposit() {
 function openDepositModal() {
   depositForm.value = {
     amount: 0,
-    fromAccountId: sourceAccounts.value[0]?.id ?? "",
     date: new Date().toISOString().slice(0, 10),
     description: "",
   };
@@ -497,15 +488,6 @@ const detailYearlyIncome = computed(() => {
             <div class="deposit-form-card">
               <h4 class="deposit-form-title">Пополнить {{ detailAccount?.name }}</h4>
               <form @submit.prevent="submitDeposit" class="modal-form">
-                <label>
-                  <span>Откуда</span>
-                  <select v-model="depositForm.fromAccountId" required>
-                    <option value="" disabled>Выберите счёт...</option>
-                    <option v-for="acc in sourceAccounts" :key="acc.id" :value="acc.id">
-                      {{ acc.name }} ({{ fmt(acc.balance) }} ₽)
-                    </option>
-                  </select>
-                </label>
                 <label>
                   <span>Сумма (₽)</span>
                   <input v-model.number="depositForm.amount" type="number" min="1" step="1" required />

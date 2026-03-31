@@ -166,6 +166,13 @@ export async function deleteAccount(id: string): Promise<void> {
   });
 }
 
+export async function depositToAccount(id: string, data: { amount: number; date: string; description?: string }): Promise<void> {
+  return budgetRequest<void>(`/accounts/${id}/deposit`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
 export async function exportAccounts(): Promise<{ name: string; type: string; bank: string }[]> {
   return budgetRequest<{ name: string; type: string; bank: string }[]>("/accounts/export");
 }

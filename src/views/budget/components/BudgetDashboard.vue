@@ -468,7 +468,7 @@ const upcomingPayments = computed(() => {
             <span class="red">-{{ fmt(dash?.currentMonth?.totalExpense) }} ₽</span>
           </div>
           <div class="tooltip-row">
-            <span>Прогноз расходов до конца</span>
+            <span>Ещё потратите до конца мес.</span>
             <span class="red">-{{ fmt(projectedRemainingExpense) }} ₽</span>
           </div>
         </div>
@@ -563,7 +563,7 @@ const upcomingPayments = computed(() => {
           </div>
         </div>
         <div class="chart-body chart-body-line">
-          <Line :data="trendData" :options="trendOptions" />
+          <Line :key="trendPeriod + '-' + (customTrendData?.length ?? 'default')" :data="trendData" :options="trendOptions" />
         </div>
       </div>
     </div>

@@ -32,123 +32,11 @@
           </div>
           <div v-if="globalTasks.length === 0" class="no-tasks">Нет глобальных задач</div>
         </div>
-        <button v-if="globalTasks.length > 3" class="show-all-btn" @click="showGlobalTasksPanel = true">
-          Все задачи ({{ globalTasks.length }})
-        </button>
       </div>
       <div class="more">
         <button class="more-button" @click="openWindow">➕</button>
       </div>
     </div>
-
-    <!-- Global tasks panel -->
-    <Teleport to="body">
-      <div v-if="showGlobalTasksPanel" class="gt-overlay" @click.self="showGlobalTasksPanel = false">
-        <div class="gt-panel">
-          <button class="gt-close" @click="showGlobalTasksPanel = false">×</button>
-          <h2 class="gt-title">Глобальные задачи</h2>
-
-          <div class="gt-tabs">
-            <button :class="{ active: gtTab === 'active' }" @click="gtTab = 'active'">
-              Активные ({{ activeGlobalTasks.length }})
-            </button>
-            <button :class="{ active: gtTab === 'completed' }" @click="gtTab = 'completed'">
-              Выполненные ({{ completedGlobalTasks.length }})
-            </button>
-          </div>
-
-          <!-- Active tasks -->
-          <div v-if="gtTab === 'active'" class="gt-list">
-            <div v-if="!activeGlobalTasks.length" class="gt-empty">Нет активных задач</div>
-            <div v-for="task in activeGlobalTasks" :key="task.id" class="gt-card" @click="openGlobalTaskDetail(task)">
-              <div class="gt-card-header">
-                <span class="gt-card-icon">{{ getTaskIcon(task) }}</span>
-                <span class="gt-card-title">{{ task.title }}</span>
-                <button class="gt-check-btn" @click.stop="toggleGlobalTask(task)" title="Выполнить">✓</button>
-              </div>
-              <div class="gt-card-body" v-if="task.description">{{ task.description }}</div>
-              <div class="gt-card-progress" v-if="task.totalSubtasks > 0">
-                <div class="gt-progress-track">
-                  <div class="gt-progress-fill" :style="{ width: (task.completedSubtasks / task.totalSubtasks * 100) + '%' }"></div>
-                </div>
-                <span class="gt-progress-text">{{ task.completedSubtasks }} из {{ task.totalSubtasks }} подзадач</span>
-              </div>
-              <div class="gt-card-subtasks" v-if="task.subtasks?.length">
-                <div v-for="sub in task.subtasks" :key="sub.id" class="gt-subtask" :class="{ done: sub.done }">
-                  <span class="gt-sub-check" @click.stop="toggleSubtask(sub)">{{ sub.done ? '☑' : '☐' }}</span>
-                  <span class="gt-sub-title">{{ sub.title }}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Completed tasks (history) -->
-          <div v-if="gtTab === 'completed'" class="gt-list">
-            <div v-if="!completedGlobalTasks.length" class="gt-empty">Нет выполненных задач</div>
-            <div v-for="task in completedGlobalTasks" :key="task.id" class="gt-card gt-card-done">
-              <div class="gt-card-header">
-                <span class="gt-card-icon">✅</span>
-                <span class="gt-card-title">{{ task.title }}</span>
-                <button class="gt-uncheck-btn" @click.stop="toggleGlobalTask(task)" title="Вернуть">↩</button>
-              </div>
-              <div class="gt-card-completed-date" v-if="task.completedAt">
-                Выполнено: {{ new Date(task.completedAt).toLocaleDateString('ru', { day: 'numeric', month: 'long', year: 'numeric' }) }}
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </Teleport>
-
-    <!-- Global task detail modal -->
-    <Teleport to="body">
-      <div v-if="selectedGlobalTask" class="gt-overlay" @click.self="selectedGlobalTask = null">
-        <div class="gt-panel gt-detail-panel">
-          <button class="gt-close" @click="selectedGlobalTask = null">×</button>
-          <div class="gt-detail-header">
-            <span class="gt-detail-icon">{{ selectedGlobalTask.done ? '✅' : getTaskIcon(selectedGlobalTask) }}</span>
-            <div>
-              <h2 class="gt-title">{{ selectedGlobalTask.title }}</h2>
-              <div class="gt-detail-meta" v-if="selectedGlobalTask.start || selectedGlobalTask.end">
-                <span v-if="selectedGlobalTask.start">С {{ new Date(selectedGlobalTask.start).toLocaleDateString('ru') }}</span>
-                <span v-if="selectedGlobalTask.end"> до {{ new Date(selectedGlobalTask.end).toLocaleDateString('ru') }}</span>
-              </div>
-            </div>
-          </div>
-
-          <div class="gt-detail-desc" v-if="selectedGlobalTask.description">{{ selectedGlobalTask.description }}</div>
-
-          <div class="gt-detail-progress" v-if="selectedGlobalTask.totalSubtasks > 0">
-            <div class="gt-progress-track" style="height: 8px;">
-              <div class="gt-progress-fill" :style="{ width: (selectedGlobalTask.completedSubtasks / selectedGlobalTask.totalSubtasks * 100) + '%' }"></div>
-            </div>
-            <span class="gt-progress-text">{{ selectedGlobalTask.completedSubtasks }} из {{ selectedGlobalTask.totalSubtasks }} подзадач выполнено</span>
-          </div>
-
-          <div class="gt-detail-subtasks" v-if="selectedGlobalTask.subtasks?.length">
-            <h4>Подзадачи</h4>
-            <div v-for="sub in selectedGlobalTask.subtasks" :key="sub.id" class="gt-subtask-detail" :class="{ done: sub.done }">
-              <span class="gt-sub-check" @click="toggleSubtask(sub)">{{ sub.done ? '☑' : '☐' }}</span>
-              <div class="gt-sub-info">
-                <span class="gt-sub-title">{{ sub.title }}</span>
-                <span class="gt-sub-date" v-if="sub.completedAt">
-                  Выполнено {{ new Date(sub.completedAt).toLocaleDateString('ru') }}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          <div class="gt-detail-actions">
-            <button v-if="!selectedGlobalTask.done" class="gt-complete-btn" @click="toggleGlobalTask(selectedGlobalTask); selectedGlobalTask = null">
-              ✓ Выполнить задачу
-            </button>
-            <button v-else class="gt-uncomplete-btn" @click="toggleGlobalTask(selectedGlobalTask); selectedGlobalTask = null">
-              ↩ Вернуть в активные
-            </button>
-          </div>
-        </div>
-      </div>
-    </Teleport>
 
     <!-- Затемнение фона -->
     <div v-if="isWindowOpen" class="overlay" @click="closeWindow"></div>
@@ -174,7 +62,7 @@ import {
   CategoryScale,
 } from "chart.js";
 
-import { fetchJobs, fetchSalaries, fetchGlobalTasks, checkTask } from "../api";
+import { fetchJobs, fetchSalaries, fetchGlobalTasks } from "../api";
 
 ChartJS.register(
   Title,
@@ -191,43 +79,9 @@ const jobs = ref([]);
 const salaries = ref([]);
 const globalTasks = ref([]); // Теперь загружается из API
 
-// Global tasks logic
-const showGlobalTasksPanel = ref(false);
-const selectedGlobalTask = ref(null);
-const gtTab = ref("active");
-
+// Global tasks — mini display only (management in SalaryWindow)
 const activeGlobalTasks = computed(() => globalTasks.value.filter(t => !t.done));
-const completedGlobalTasks = computed(() =>
-  globalTasks.value.filter(t => t.done).sort((a, b) => {
-    const da = a.completedAt ? new Date(a.completedAt).getTime() : 0;
-    const db = b.completedAt ? new Date(b.completedAt).getTime() : 0;
-    return db - da; // newest first
-  })
-);
-
 const displayedTasks = computed(() => activeGlobalTasks.value.slice(0, 3));
-
-function openGlobalTaskDetail(task) {
-  selectedGlobalTask.value = task;
-}
-
-async function toggleGlobalTask(task) {
-  try {
-    await checkTask(task.id, !task.done);
-    globalTasks.value = await fetchGlobalTasks();
-  } catch {}
-}
-
-async function toggleSubtask(sub) {
-  try {
-    await checkTask(sub.id, !sub.done);
-    globalTasks.value = await fetchGlobalTasks();
-    // Refresh selected task if open
-    if (selectedGlobalTask.value) {
-      selectedGlobalTask.value = globalTasks.value.find(t => t.id === selectedGlobalTask.value.id) ?? null;
-    }
-  } catch {}
-}
 
 // Функции открытия/закрытия окна
 function openWindow() {
@@ -646,111 +500,4 @@ onMounted(async () => {
 .main-task:hover { opacity: 0.8; }
 .main-task-done { opacity: 0.5; text-decoration: line-through; }
 
-.show-all-btn {
-  background: none; border: 1px solid rgba(255,255,255,0.15); color: rgba(255,255,255,0.6);
-  padding: 4px 10px; border-radius: 6px; font-size: 10px; cursor: pointer;
-  margin-top: 4px; width: 100%; transition: all 0.2s;
-}
-.show-all-btn:hover { border-color: rgba(255,255,255,0.3); color: #fff; }
-
-/* Global tasks overlay */
-.gt-overlay {
-  position: fixed; inset: 0; background: rgba(0,0,0,0.75); backdrop-filter: blur(8px);
-  display: flex; align-items: center; justify-content: center; z-index: 3000; padding: 16px;
-}
-.gt-panel {
-  background: linear-gradient(135deg, rgba(14,15,26,0.99), rgba(20,22,36,0.99));
-  border: 1px solid rgba(23,103,253,0.3); border-radius: 16px;
-  padding: 28px; width: 100%; max-width: 600px; max-height: 85vh; overflow-y: auto; position: relative;
-}
-.gt-detail-panel { max-width: 520px; }
-.gt-close {
-  position: absolute; top: 16px; right: 16px; background: none; border: none;
-  color: #6b7fa3; font-size: 22px; cursor: pointer; width: 32px; height: 32px;
-  display: flex; align-items: center; justify-content: center; border-radius: 8px;
-}
-.gt-close:hover { background: rgba(255,255,255,0.06); color: #fff; }
-.gt-title { font-size: 20px; font-weight: 700; color: #fff; margin: 0 0 16px; }
-
-.gt-tabs {
-  display: flex; gap: 4px; background: rgba(23,103,253,0.06); border-radius: 10px;
-  padding: 3px; margin-bottom: 16px;
-}
-.gt-tabs button {
-  flex: 1; background: none; border: none; color: #6b7fa3; padding: 8px 12px;
-  border-radius: 8px; font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.2s;
-}
-.gt-tabs button.active { background: rgba(23,103,253,0.2); color: #fff; }
-
-.gt-list { display: flex; flex-direction: column; gap: 10px; }
-.gt-empty { color: #4a5c7a; font-size: 14px; text-align: center; padding: 40px; }
-
-.gt-card {
-  background: rgba(23,103,253,0.04); border: 1px solid rgba(23,103,253,0.1);
-  border-radius: 12px; padding: 16px; cursor: pointer; transition: all 0.2s;
-}
-.gt-card:hover { border-color: rgba(23,103,253,0.25); }
-.gt-card-done { opacity: 0.7; }
-
-.gt-card-header { display: flex; align-items: center; gap: 10px; }
-.gt-card-icon { font-size: 20px; }
-.gt-card-title { flex: 1; font-size: 15px; font-weight: 600; color: #e1e8f0; }
-.gt-card-body { font-size: 13px; color: #6b7fa3; margin-top: 8px; }
-.gt-card-completed-date { font-size: 12px; color: #34d399; margin-top: 6px; }
-
-.gt-check-btn, .gt-uncheck-btn {
-  background: rgba(52,211,153,0.1); border: 1px solid rgba(52,211,153,0.3);
-  color: #34d399; width: 32px; height: 32px; border-radius: 8px;
-  font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center;
-  transition: all 0.2s;
-}
-.gt-check-btn:hover { background: rgba(52,211,153,0.2); }
-.gt-uncheck-btn { background: rgba(96,165,250,0.1); border-color: rgba(96,165,250,0.3); color: #60a5fa; }
-.gt-uncheck-btn:hover { background: rgba(96,165,250,0.2); }
-
-.gt-card-progress { margin-top: 10px; }
-.gt-progress-track {
-  height: 4px; background: rgba(52,211,153,0.15); border-radius: 2px; overflow: hidden;
-}
-.gt-progress-fill { height: 100%; background: #34d399; border-radius: 2px; transition: width 0.3s; }
-.gt-progress-text { font-size: 12px; color: #6b7fa3; margin-top: 4px; display: block; }
-
-.gt-card-subtasks { margin-top: 10px; display: flex; flex-direction: column; gap: 4px; }
-.gt-subtask {
-  display: flex; align-items: center; gap: 8px; padding: 6px 8px;
-  border-radius: 6px; font-size: 13px; color: #c8daf0;
-}
-.gt-subtask.done { color: #6b7fa3; text-decoration: line-through; }
-.gt-sub-check { cursor: pointer; font-size: 16px; }
-
-/* Detail modal */
-.gt-detail-header { display: flex; align-items: center; gap: 14px; margin-bottom: 16px; }
-.gt-detail-icon { font-size: 32px; }
-.gt-detail-meta { font-size: 12px; color: #6b7fa3; margin-top: 2px; }
-.gt-detail-desc { font-size: 14px; color: #c8daf0; margin-bottom: 16px; line-height: 1.5; }
-.gt-detail-progress { margin-bottom: 16px; }
-
-.gt-detail-subtasks h4 { font-size: 14px; color: #c8daf0; margin: 0 0 10px; }
-.gt-subtask-detail {
-  display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px;
-  background: rgba(23,103,253,0.03); border-radius: 8px; margin-bottom: 4px;
-}
-.gt-subtask-detail.done { opacity: 0.6; }
-.gt-sub-info { flex: 1; }
-.gt-sub-title { font-size: 14px; color: #e1e8f0; }
-.gt-sub-date { font-size: 11px; color: #34d399; display: block; margin-top: 2px; }
-
-.gt-detail-actions { margin-top: 20px; }
-.gt-complete-btn {
-  background: linear-gradient(135deg, #059669, #34d399); border: none; color: #fff;
-  padding: 12px 24px; border-radius: 10px; font-size: 14px; font-weight: 600;
-  cursor: pointer; width: 100%; transition: all 0.2s;
-}
-.gt-complete-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 16px rgba(52,211,153,0.3); }
-.gt-uncomplete-btn {
-  background: rgba(96,165,250,0.12); border: 1px solid rgba(96,165,250,0.3);
-  color: #60a5fa; padding: 12px 24px; border-radius: 10px; font-size: 14px; font-weight: 500;
-  cursor: pointer; width: 100%; transition: all 0.2s;
-}
-.gt-uncomplete-btn:hover { background: rgba(96,165,250,0.25); }
 </style>

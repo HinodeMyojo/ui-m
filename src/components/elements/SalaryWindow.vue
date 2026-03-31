@@ -9,6 +9,12 @@
           >
             Финансовая статистика
           </button>
+          <button
+            :class="['tab', { active: currentTab === 'goals' }]"
+            @click="currentTab = 'goals'"
+          >
+            Глобальные задачи
+          </button>
         </div>
         <button class="close-button" @click="handleClose">✕</button>
       </div>
@@ -259,6 +265,77 @@
                 </div>
                 <div v-if="globalTasks.length === 0" class="no-tasks">
                   Нет глобальных задач
+                </div>
+              </div>
+            </div>
+          </div>
+        </template>
+
+        <!-- Goals tab -->
+        <template v-else-if="currentTab === 'goals'">
+          <div class="goals-tab">
+            <div class="goals-header">
+              <div class="goals-tabs">
+                <button :class="{ active: goalsFilter === 'active' }" @click="goalsFilter = 'active'">
+                  Активные ({{ activeGoalTasks.length }})
+                </button>
+                <button :class="{ active: goalsFilter === 'completed' }" @click="goalsFilter = 'completed'">
+                  Выполненные ({{ completedGoalTasks.length }})
+                </button>
+              </div>
+              <button class="add-task-btn-lg" @click="showAddTaskModal = true">+ Новая задача</button>
+            </div>
+
+            <!-- Active goals -->
+            <div v-if="goalsFilter === 'active'" class="goals-list">
+              <div v-if="!activeGoalTasks.length" class="no-tasks-lg">Нет активных глобальных задач</div>
+              <div v-for="task in activeGoalTasks" :key="task.id" class="goal-card">
+                <div class="goal-card-top">
+                  <span class="goal-icon-lg">{{ task.icon }}</span>
+                  <div class="goal-info-lg">
+                    <div class="goal-name-lg">{{ task.name }}</div>
+                    <div class="goal-deadline-lg" v-if="task.deadline">
+                      До {{ formatTaskDeadline(task.deadline) }}
+                    </div>
+                  </div>
+                  <div class="goal-actions-lg">
+                    <button class="goal-complete-btn" @click="completeGoalTask(task)" title="Выполнить">✓</button>
+                    <button class="goal-edit-btn" @click="editTask(task)">✏️</button>
+                  </div>
+                </div>
+                <div class="goal-desc-lg" v-if="task.description">{{ task.description }}</div>
+                <div class="goal-progress-lg" v-if="task.totalSubtasks > 0">
+                  <div class="goal-progress-track">
+                    <div class="goal-progress-fill" :style="{ width: (task.completedSubtasks / task.totalSubtasks * 100) + '%' }"></div>
+                  </div>
+                  <span class="goal-progress-text">{{ task.completedSubtasks }}/{{ task.totalSubtasks }} подзадач</span>
+                </div>
+                <!-- Subtasks -->
+                <div class="goal-subtasks" v-if="task.subtasks?.length">
+                  <div v-for="sub in task.subtasks" :key="sub.id" class="goal-subtask" :class="{ done: sub.done }">
+                    <span class="goal-sub-check" @click="toggleGoalSubtask(sub)">{{ sub.done ? '☑' : '☐' }}</span>
+                    <span class="goal-sub-title">{{ sub.title || sub.name }}</span>
+                    <span class="goal-sub-date" v-if="sub.completedAt">
+                      {{ new Date(sub.completedAt).toLocaleDateString('ru', { day: 'numeric', month: 'short' }) }}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Completed goals (history) -->
+            <div v-if="goalsFilter === 'completed'" class="goals-list">
+              <div v-if="!completedGoalTasks.length" class="no-tasks-lg">Нет выполненных задач</div>
+              <div v-for="task in completedGoalTasks" :key="task.id" class="goal-card goal-card-completed">
+                <div class="goal-card-top">
+                  <span class="goal-icon-lg">✅</span>
+                  <div class="goal-info-lg">
+                    <div class="goal-name-lg">{{ task.name }}</div>
+                    <div class="goal-completed-date" v-if="task.completedAt">
+                      Выполнено {{ new Date(task.completedAt).toLocaleDateString('ru', { day: 'numeric', month: 'long', year: 'numeric' }) }}
+                    </div>
+                  </div>
+                  <button class="goal-restore-btn" @click="restoreGoalTask(task)" title="Вернуть в активные">↩</button>
                 </div>
               </div>
             </div>
@@ -622,6 +699,7 @@ import {
   updateSalaryAPI,
   deleteSalaryAPI,
   fetchGlobalTasks,
+  checkTask,
 } from "../api";
 
 import { getTaskIcon, calculateTaskProgress } from "@/utils/taskUtils";
@@ -640,6 +718,11 @@ const emit = defineEmits(["close"]);
 
 // Текущая активная вкладка
 const currentTab = ref("finance");
+const goalsFilter = ref("active");
+
+const activeGoalTasks = computed(() => globalTasks.value.filter(t => !t.completed));
+const completedGoalTasks = computed(() => globalTasks.value.filter(t => t.completed));
+
 const selectedSamuraiPlan = ref({
   amount: 0,
   label: "Не выбран",
@@ -1479,6 +1562,40 @@ async function deleteTask() {
   }
 }
 
+async function reloadGlobalTasks() {
+  const tasks = await fetchGlobalTasks();
+  globalTasks.value = tasks.map((task) => ({
+    id: task.id,
+    name: task.title,
+    icon: getTaskIcon(task),
+    deadline: task.end,
+    description: task.description || "",
+    progress: calculateTaskProgress(task),
+    completed: task.done,
+    completedAt: task.completedAt,
+    totalSubtasks: task.totalSubtasks,
+    completedSubtasks: task.completedSubtasks,
+    subtasks: task.subtasks,
+    start: task.start,
+    end: task.end,
+  }));
+}
+
+async function completeGoalTask(task) {
+  await checkTask(task.id, true);
+  await reloadGlobalTasks();
+}
+
+async function restoreGoalTask(task) {
+  await checkTask(task.id, false);
+  await reloadGlobalTasks();
+}
+
+async function toggleGoalSubtask(sub) {
+  await checkTask(sub.id, !sub.done);
+  await reloadGlobalTasks();
+}
+
 onMounted(async () => {
   localStorage.setItem("financeWindowOpen", "true");
 
@@ -2057,6 +2174,81 @@ onMounted(async () => {
   min-width: 35px;
   text-align: right;
 }
+
+/* Goals tab */
+.goals-tab { display: flex; flex-direction: column; gap: 16px; width: 100%; }
+.goals-header {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+}
+.goals-tabs {
+  display: flex; gap: 4px; background: rgba(255,255,255,0.05); border-radius: 10px; padding: 3px;
+}
+.goals-tabs button {
+  background: none; border: none; color: #888; padding: 8px 16px;
+  border-radius: 8px; font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.2s;
+}
+.goals-tabs button.active { background: rgba(255,255,255,0.1); color: #fff; }
+.add-task-btn-lg {
+  background: linear-gradient(135deg, #667eea, #764ba2); border: none; color: #fff;
+  padding: 8px 18px; border-radius: 10px; font-size: 13px; font-weight: 600; cursor: pointer;
+  transition: all 0.2s;
+}
+.add-task-btn-lg:hover { transform: translateY(-1px); box-shadow: 0 4px 16px rgba(102,126,234,0.3); }
+
+.goals-list { display: flex; flex-direction: column; gap: 12px; }
+.no-tasks-lg { color: #555; font-size: 14px; text-align: center; padding: 60px 20px; }
+
+.goal-card {
+  background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 12px; padding: 18px; transition: all 0.2s;
+}
+.goal-card:hover { border-color: rgba(255,255,255,0.15); }
+.goal-card-completed { opacity: 0.6; }
+
+.goal-card-top { display: flex; align-items: center; gap: 12px; }
+.goal-icon-lg { font-size: 28px; }
+.goal-info-lg { flex: 1; }
+.goal-name-lg { font-size: 16px; font-weight: 600; color: #e0e0e0; }
+.goal-deadline-lg { font-size: 12px; color: #888; margin-top: 2px; }
+.goal-completed-date { font-size: 12px; color: #4caf50; margin-top: 2px; }
+.goal-desc-lg { font-size: 13px; color: #888; margin-top: 10px; line-height: 1.5; }
+
+.goal-actions-lg { display: flex; gap: 6px; }
+.goal-complete-btn {
+  background: rgba(76,175,80,0.1); border: 1px solid rgba(76,175,80,0.3);
+  color: #4caf50; width: 32px; height: 32px; border-radius: 8px;
+  font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+}
+.goal-complete-btn:hover { background: rgba(76,175,80,0.2); }
+.goal-edit-btn {
+  background: none; border: 1px solid rgba(255,255,255,0.1);
+  width: 32px; height: 32px; border-radius: 8px;
+  font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+}
+.goal-edit-btn:hover { border-color: rgba(255,255,255,0.2); }
+.goal-restore-btn {
+  background: rgba(100,149,237,0.1); border: 1px solid rgba(100,149,237,0.3);
+  color: #6495ed; width: 32px; height: 32px; border-radius: 8px;
+  font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+}
+.goal-restore-btn:hover { background: rgba(100,149,237,0.2); }
+
+.goal-progress-lg { margin-top: 12px; }
+.goal-progress-track {
+  height: 4px; background: rgba(76,175,80,0.15); border-radius: 2px; overflow: hidden;
+}
+.goal-progress-fill { height: 100%; background: #4caf50; border-radius: 2px; transition: width 0.3s; }
+.goal-progress-text { font-size: 12px; color: #888; margin-top: 4px; display: block; }
+
+.goal-subtasks { margin-top: 12px; display: flex; flex-direction: column; gap: 4px; }
+.goal-subtask {
+  display: flex; align-items: center; gap: 8px; padding: 8px 10px;
+  background: rgba(255,255,255,0.02); border-radius: 6px; font-size: 13px; color: #ccc;
+}
+.goal-subtask.done { color: #666; text-decoration: line-through; }
+.goal-sub-check { cursor: pointer; font-size: 16px; flex-shrink: 0; }
+.goal-sub-title { flex: 1; }
+.goal-sub-date { font-size: 11px; color: #4caf50; }
 
 /* Модальные окна */
 .modal-overlay {
