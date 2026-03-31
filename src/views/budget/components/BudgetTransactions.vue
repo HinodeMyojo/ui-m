@@ -217,6 +217,39 @@ async function downloadAiContext() {
   URL.revokeObjectURL(url);
 }
 
+function exportTransactions() {
+  const txs = filteredTransactions.value.map((tx) => {
+    if (tx.type === "transfer") {
+      return {
+        type: tx.type,
+        fromAccountName: getAccountName(tx.fromAccountId),
+        toAccountName: getAccountName(tx.toAccountId),
+        amount: tx.amount,
+        date: tx.date,
+        description: tx.description,
+        bank: tx.bank,
+      };
+    }
+    const cat = getCatInfo(tx.categoryId);
+    return {
+      categoryName: cat?.name ?? "",
+      type: tx.type,
+      amount: tx.amount,
+      date: tx.date,
+      description: tx.description,
+      bank: tx.bank,
+      accountName: getAccountName(tx.accountId),
+    };
+  });
+  const blob = new Blob([JSON.stringify(txs, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "budget-transactions.json";
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 function parseImportJson() {
   importError.value = "";
   importPreview.value = [];
@@ -319,9 +352,17 @@ function getAccountName(accId?: string) {
           <button :class="{ active: groupBy === 'category' }" @click="groupBy = 'category'">Категории</button>
           <button :class="{ active: groupBy === 'date' }" @click="groupBy = 'date'">По дням</button>
         </div>
+        <button class="btn-export" @click="exportTransactions">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          Экспорт
+        </button>
         <button class="btn-import" @click="showImportModal = true">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-          JSON
+          Импорт
+        </button>
+        <button class="btn-ai-context" @click="downloadAiContext">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+          Для ИИ
         </button>
         <button class="btn-add" @click="showAddModal = true">+ Добавить</button>
       </div>
@@ -345,7 +386,7 @@ function getAccountName(accId?: string) {
           </span>
           <span class="group-chevron" :class="{ collapsed: !expandedGroups.has(group.key) }">▼</span>
         </div>
-        <template v-if="expandedGroups.has(group.key)">
+        <template v-if="groupBy === 'none' || expandedGroups.has(group.key)">
           <div
             v-for="tx in group.transactions"
             :key="tx.id"
@@ -502,10 +543,6 @@ function getAccountName(accId?: string) {
             <code>[{"type": "transfer", "fromAccountName": "Дебетовая", "toAccountName": "Рассрочка", "amount": 5000, "date": "2026-03-01"}]</code>
             <br>Можно смешивать все типы в одном массиве.
           </p>
-          <button class="btn-download-context" @click="downloadAiContext">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            Скачать данные для ИИ
-          </button>
           <textarea
             v-model="importJson"
             class="import-textarea"
@@ -610,6 +647,21 @@ function getAccountName(accId?: string) {
 }
 .group-chevron.collapsed { transform: rotate(-90deg); }
 
+.btn-export {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(52, 211, 153, 0.1);
+  border: 1px solid rgba(52, 211, 153, 0.3);
+  color: #34d399;
+  padding: 8px 14px;
+  border-radius: 10px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.btn-export:hover { background: rgba(52, 211, 153, 0.2); color: #fff; }
+
 .btn-import {
   display: flex;
   align-items: center;
@@ -627,6 +679,21 @@ function getAccountName(accId?: string) {
   background: rgba(110, 74, 255, 0.25);
   color: #fff;
 }
+
+.btn-ai-context {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(96, 165, 250, 0.1);
+  border: 1px solid rgba(96, 165, 250, 0.3);
+  color: #60a5fa;
+  padding: 8px 14px;
+  border-radius: 10px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.btn-ai-context:hover { background: rgba(96, 165, 250, 0.2); color: #fff; }
 
 .btn-add {
   background: linear-gradient(135deg, #1767fd, #6e4aff);
@@ -894,25 +961,6 @@ function getAccountName(accId?: string) {
   white-space: pre-line;
 }
 
-.btn-download-context {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  background: rgba(52, 211, 153, 0.1);
-  border: 1px solid rgba(52, 211, 153, 0.3);
-  color: #34d399;
-  padding: 8px 14px;
-  border-radius: 10px;
-  font-size: 12px;
-  cursor: pointer;
-  margin-bottom: 10px;
-  transition: all 0.2s;
-}
-.btn-download-context:hover {
-  background: rgba(52, 211, 153, 0.2);
-  color: #6ee7b7;
-}
-
 .btn-parse {
   background: rgba(23, 103, 253, 0.12);
   border: 1px solid rgba(23, 103, 253, 0.3);
@@ -973,7 +1021,9 @@ function getAccountName(accId?: string) {
   .tx-actions { flex-direction: column; }
   .tx-actions button { width: 100%; min-height: 44px; }
   .btn-add { width: 100%; text-align: center; min-height: 44px; font-size: 14px; }
+  .btn-export { width: 100%; justify-content: center; min-height: 44px; font-size: 14px; }
   .btn-import { width: 100%; justify-content: center; min-height: 44px; font-size: 14px; }
+  .btn-ai-context { width: 100%; justify-content: center; min-height: 44px; font-size: 14px; }
 
   .tx-row { padding: 12px; gap: 10px; }
   .tx-cat-icon { font-size: 20px; width: 36px; height: 36px; border-radius: 8px; }
@@ -998,7 +1048,6 @@ function getAccountName(accId?: string) {
 
   .import-textarea { font-size: 14px; }
   .btn-parse { min-height: 44px; font-size: 14px; }
-  .btn-download-context { min-height: 44px; font-size: 13px; justify-content: center; }
   .modal-hint { font-size: 11px; }
   .modal-hint code { font-size: 10px; overflow-x: auto; }
   .preview-row { font-size: 12px; padding: 6px 8px; flex-wrap: wrap; }
