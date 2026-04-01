@@ -379,3 +379,16 @@ export async function deleteJourneyMusic(id) {
     method: "DELETE",
   });
 }
+
+export async function fetchJourneyMusicLibrary() {
+  const response = await authorizedFetch(`${API_BASE_URL}/api/v1/journey/music/library`);
+  return await response.json();
+}
+
+export async function linkJourneyMusic(sourceId, month, year) {
+  const response = await authorizedFetch(`${API_BASE_URL}/api/v1/journey/music/link`, {
+    method: "POST",
+    body: JSON.stringify({ sourceId, month, year }),
+  });
+  return await response.json();
+}

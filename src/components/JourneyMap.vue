@@ -12,6 +12,8 @@ import {
   uploadJourneyMusic,
   getJourneyMusicStreamUrl,
   deleteJourneyMusic,
+  fetchJourneyMusicLibrary,
+  linkJourneyMusic,
 } from "./api.js";
 
 const router = useRouter();
@@ -66,6 +68,15 @@ const isPlaying = ref(false);
 const currentTrackIndex = ref(0);
 const isMuted = ref(false);
 const showMusicPlayer = ref(true);
+const volume = ref(0.2); // 0..1, default 20%
+const targetVolume = ref(0.2);
+let fadeInterval = null;
+const FADE_DURATION = 1500; // ms for fade in/out
+const FADE_STEP = 50; // ms per step
+
+// Music library (all tracks from all months)
+const musicLibrary = ref([]);
+const showLibraryPicker = ref(false);
 
 // Seeded random for consistent chaos per month
 function seededRandom(seed) {
@@ -202,9 +213,10 @@ async function loadMonth() {
       settingsForm.value.backgroundImage = monthData.value.settings.backgroundImage || "";
       settingsForm.value.backgroundOpacity = monthData.value.settings.backgroundOpacity || 0.3;
     }
-    // Reset music player to first track of new month
+    // Auto-start music for new month with fade-in
     currentTrackIndex.value = 0;
     stopMusic();
+    nextTick(() => autoStartMusic());
   } catch (e) {
     console.error("Failed to load journey month:", e);
   } finally {
@@ -385,6 +397,20 @@ async function removeMusic(id) {
   await loadMonth();
 }
 
+async function loadMusicLibrary() {
+  try {
+    musicLibrary.value = await fetchJourneyMusicLibrary();
+  } catch (e) {
+    console.error("Failed to load music library:", e);
+  }
+}
+
+async function linkTrackToMonth(sourceId) {
+  await linkJourneyMusic(sourceId, currentMonth.value, currentYear.value);
+  showLibraryPicker.value = false;
+  await loadMonth();
+}
+
 function getTrackSrc(track) {
   if (!track) return "";
   const token = localStorage.getItem("token");
@@ -392,57 +418,126 @@ function getTrackSrc(track) {
   return `${url}?token=${encodeURIComponent(token)}`;
 }
 
+// --- Fade helpers ---
+function clearFade() {
+  if (fadeInterval) { clearInterval(fadeInterval); fadeInterval = null; }
+}
+
+function fadeVolumeTo(target, duration, onDone) {
+  clearFade();
+  if (!audioRef.value) { if (onDone) onDone(); return; }
+  const start = audioRef.value.volume;
+  const diff = target - start;
+  const steps = Math.max(1, Math.round(duration / FADE_STEP));
+  let step = 0;
+  fadeInterval = setInterval(() => {
+    step++;
+    const progress = step / steps;
+    const v = start + diff * progress;
+    audioRef.value.volume = Math.max(0, Math.min(1, v));
+    if (step >= steps) {
+      clearFade();
+      audioRef.value.volume = Math.max(0, Math.min(1, target));
+      if (onDone) onDone();
+    }
+  }, FADE_STEP);
+}
+
+function playWithFadeIn() {
+  if (!audioRef.value || !currentTrack.value) return;
+  audioRef.value.volume = 0;
+  audioRef.value.src = getTrackSrc(currentTrack.value);
+  audioRef.value.play().then(() => {
+    fadeVolumeTo(isMuted.value ? 0 : volume.value, FADE_DURATION);
+  }).catch(() => {});
+  isPlaying.value = true;
+}
+
+function autoStartMusic() {
+  if (!musicTracks.value.length || !audioRef.value) return;
+  currentTrackIndex.value = 0;
+  playWithFadeIn();
+}
+
 function togglePlay() {
   if (!audioRef.value || !currentTrack.value) return;
   if (isPlaying.value) {
-    audioRef.value.pause();
-    isPlaying.value = false;
+    // Fade out then pause
+    fadeVolumeTo(0, FADE_DURATION, () => {
+      audioRef.value.pause();
+      isPlaying.value = false;
+    });
   } else {
-    audioRef.value.src = getTrackSrc(currentTrack.value);
-    audioRef.value.play().catch(() => {});
-    isPlaying.value = true;
+    playWithFadeIn();
   }
 }
 
 function stopMusic() {
+  clearFade();
   if (audioRef.value) {
     audioRef.value.pause();
     audioRef.value.currentTime = 0;
+    audioRef.value.volume = 0;
   }
   isPlaying.value = false;
 }
 
-function nextTrack() {
-  if (!musicTracks.value.length) return;
-  currentTrackIndex.value = (currentTrackIndex.value + 1) % musicTracks.value.length;
+function crossfadeToTrack(newIndex) {
+  if (!audioRef.value || !musicTracks.value.length) return;
+  currentTrackIndex.value = newIndex;
   if (isPlaying.value) {
-    nextTick(() => {
+    // Fade out current, then fade in next
+    fadeVolumeTo(0, FADE_DURATION / 2, () => {
       audioRef.value.src = getTrackSrc(currentTrack.value);
-      audioRef.value.play().catch(() => {});
+      audioRef.value.volume = 0;
+      audioRef.value.play().then(() => {
+        fadeVolumeTo(isMuted.value ? 0 : volume.value, FADE_DURATION / 2);
+      }).catch(() => {});
     });
   }
+}
+
+function nextTrack() {
+  if (!musicTracks.value.length) return;
+  const idx = (currentTrackIndex.value + 1) % musicTracks.value.length;
+  crossfadeToTrack(idx);
 }
 
 function prevTrack() {
   if (!musicTracks.value.length) return;
-  currentTrackIndex.value = (currentTrackIndex.value - 1 + musicTracks.value.length) % musicTracks.value.length;
-  if (isPlaying.value) {
-    nextTick(() => {
-      audioRef.value.src = getTrackSrc(currentTrack.value);
-      audioRef.value.play().catch(() => {});
-    });
-  }
+  const idx = (currentTrackIndex.value - 1 + musicTracks.value.length) % musicTracks.value.length;
+  crossfadeToTrack(idx);
 }
 
 function toggleMute() {
-  if (audioRef.value) {
-    isMuted.value = !isMuted.value;
-    audioRef.value.muted = isMuted.value;
+  if (!audioRef.value) return;
+  isMuted.value = !isMuted.value;
+  audioRef.value.muted = isMuted.value;
+}
+
+function onVolumeChange(e) {
+  const v = parseFloat(e.target.value);
+  volume.value = v;
+  targetVolume.value = v;
+  if (audioRef.value && !isMuted.value) {
+    audioRef.value.volume = v;
   }
 }
 
 function onTrackEnded() {
-  nextTrack();
+  // Crossfade to next
+  if (musicTracks.value.length > 1) {
+    nextTrack();
+  } else {
+    // Single track — fade out, pause, fade in restart
+    fadeVolumeTo(0, FADE_DURATION / 2, () => {
+      audioRef.value.currentTime = 0;
+      audioRef.value.volume = 0;
+      audioRef.value.play().then(() => {
+        fadeVolumeTo(isMuted.value ? 0 : volume.value, FADE_DURATION);
+      }).catch(() => {});
+    });
+  }
 }
 
 // --- Helpers ---
@@ -468,6 +563,7 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  clearFade();
   stopMusic();
   window.removeEventListener("mousemove", onStickerDrag);
   window.removeEventListener("mouseup", endStickerDrag);
@@ -516,7 +612,7 @@ watch([currentMonth, currentYear], () => {
 
         <div class="journey-header-actions">
           <button class="journey-icon-btn" @click="showStickerModal = true" title="Добавить гифку">🖼️</button>
-          <button class="journey-icon-btn" @click="showMusicModal = true" title="Музыка">🎵</button>
+          <button class="journey-icon-btn" @click="showMusicModal = true; loadMusicLibrary()" title="Музыка">🎵</button>
           <button class="journey-icon-btn" @click="showSettingsModal = true" title="Настройки фона">⚙️</button>
         </div>
       </div>
@@ -628,6 +724,17 @@ watch([currentMonth, currentYear], () => {
       <button class="music-btn" @click="toggleMute" :title="isMuted ? 'Включить звук' : 'Выключить звук'">
         {{ isMuted ? '🔇' : '🔊' }}
       </button>
+      <input
+        type="range"
+        class="music-volume-slider"
+        min="0"
+        max="1"
+        step="0.01"
+        :value="volume"
+        @input="onVolumeChange"
+        title="Громкость"
+      />
+      <span class="music-volume-label">{{ Math.round(volume * 100) }}%</span>
       <button class="music-btn music-btn--close" @click="showMusicPlayer = false" title="Скрыть">✕</button>
     </div>
     <button
@@ -852,6 +959,30 @@ watch([currentMonth, currentYear], () => {
               <div v-for="t in musicTracks" :key="t.id" class="journey-music-list-item">
                 <span class="music-list-title">🎵 {{ t.title }}</span>
                 <button class="journey-remove-task" @click="removeMusic(t.id)">×</button>
+              </div>
+            </div>
+
+            <!-- Library picker -->
+            <div class="journey-form-group">
+              <button
+                class="journey-library-toggle"
+                @click="showLibraryPicker = !showLibraryPicker"
+              >
+                {{ showLibraryPicker ? '▾ Скрыть библиотеку' : '▸ Выбрать из загруженных ранее' }}
+              </button>
+              <div v-if="showLibraryPicker && musicLibrary.length" class="journey-library-list">
+                <div
+                  v-for="lib in musicLibrary"
+                  :key="lib.id"
+                  class="journey-library-item"
+                  @click="linkTrackToMonth(lib.id)"
+                >
+                  <span>🎵 {{ lib.title }}</span>
+                  <span class="journey-library-add">+ добавить</span>
+                </div>
+              </div>
+              <div v-if="showLibraryPicker && !musicLibrary.length" class="journey-library-empty">
+                Нет загруженных треков
               </div>
             </div>
 
@@ -1192,6 +1323,22 @@ watch([currentMonth, currentYear], () => {
   white-space: nowrap;
 }
 
+.music-volume-slider {
+  width: 80px;
+  height: 4px;
+  accent-color: #1767fd;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.music-volume-label {
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 11px;
+  width: 32px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
 .music-show-btn {
   position: fixed;
   bottom: 16px;
@@ -1353,6 +1500,61 @@ watch([currentMonth, currentYear], () => {
 .journey-range {
   width: 100%;
   accent-color: #1767fd;
+}
+
+.journey-library-toggle {
+  background: none;
+  border: none;
+  color: rgba(23, 103, 253, 0.8);
+  font-size: 13px;
+  cursor: pointer;
+  padding: 0;
+  transition: color 0.15s;
+}
+
+.journey-library-toggle:hover {
+  color: #1767fd;
+}
+
+.journey-library-list {
+  max-height: 180px;
+  overflow-y: auto;
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.journey-library-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 10px;
+  background: rgba(23, 103, 253, 0.06);
+  border: 1px solid rgba(23, 103, 253, 0.12);
+  border-radius: 6px;
+  color: #b7c9d1;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.journey-library-item:hover {
+  background: rgba(23, 103, 253, 0.15);
+  color: #fff;
+}
+
+.journey-library-add {
+  color: #4ade80;
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+.journey-library-empty {
+  color: rgba(255, 255, 255, 0.3);
+  font-size: 12px;
+  font-style: italic;
+  margin-top: 6px;
 }
 
 .journey-file-input {
