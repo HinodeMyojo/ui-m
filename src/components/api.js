@@ -321,3 +321,40 @@ export async function updateJourneySettings(data) {
     body: JSON.stringify(data),
   });
 }
+
+// journey stickers
+export async function createJourneySticker(data) {
+  const response = await authorizedFetch(`${API_BASE_URL}/api/v1/journey/stickers`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+  return await response.json();
+}
+
+export async function updateJourneySticker(id, data) {
+  await authorizedFetch(`${API_BASE_URL}/api/v1/journey/stickers/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deleteJourneySticker(id) {
+  await authorizedFetch(`${API_BASE_URL}/api/v1/journey/stickers/${id}`, {
+    method: "DELETE",
+  });
+}
+
+// journey music
+export async function createJourneyMusic(data) {
+  const response = await authorizedFetch(`${API_BASE_URL}/api/v1/journey/music`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+  return await response.json();
+}
+
+export async function deleteJourneyMusic(id) {
+  await authorizedFetch(`${API_BASE_URL}/api/v1/journey/music/${id}`, {
+    method: "DELETE",
+  });
+}
