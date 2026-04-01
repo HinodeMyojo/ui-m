@@ -9,7 +9,8 @@ import {
   createJourneySticker,
   updateJourneySticker,
   deleteJourneySticker,
-  createJourneyMusic,
+  uploadJourneyMusic,
+  getJourneyMusicStreamUrl,
   deleteJourneyMusic,
 } from "./api.js";
 
@@ -47,7 +48,9 @@ const settingsForm = ref({
 const stickerForm = ref({ url: "" });
 
 // Music form
-const musicForm = ref({ title: "", url: "" });
+const musicForm = ref({ title: "" });
+const musicFiles = ref([]);
+const musicFileInput = ref(null);
 
 // Available subtasks from main tasks
 const availableTasks = ref([]);
@@ -84,7 +87,7 @@ const daysMap = computed(() => {
   return map;
 });
 
-const stickers = computed(() => monthData.value?.stickers || []);
+const stickers = ref([]);
 const musicTracks = computed(() => monthData.value?.music || []);
 const settings = computed(() => monthData.value?.settings || null);
 
@@ -124,15 +127,16 @@ const currentTrack = computed(() => {
 
 // Snake path with ~80% width, more chaotic but seeded (stable per month)
 const ITEMS_PER_ROW = 6;
+const SVG_PADDING_X = 100;
+const SVG_PADDING_TOP = 80;
+const SVG_PADDING_BOTTOM = 60;
 const nodePositions = computed(() => {
   const positions = [];
   const total = daysInMonth.value;
   const rng = seededRandom(currentMonth.value * 1000 + currentYear.value);
 
-  // 80% of viewport width -> use vw-like percentages mapped to SVG coords
-  // SVG viewBox will be 1000 wide, representing ~80vw
-  const usableWidth = 900;
-  const padding = 50;
+  // SVG viewBox 1000 wide, padded enough so rings + character never clip
+  const usableWidth = 800;
   const spacingX = usableWidth / (ITEMS_PER_ROW - 1);
   const spacingY = 120;
 
@@ -148,8 +152,8 @@ const nodePositions = computed(() => {
     const waveOffset = Math.sin((i / total) * Math.PI * 3.5) * 18;
 
     positions.push({
-      x: padding + actualCol * spacingX + chaosX,
-      y: padding + row * spacingY + waveOffset + chaosY,
+      x: SVG_PADDING_X + actualCol * spacingX + chaosX,
+      y: SVG_PADDING_TOP + row * spacingY + waveOffset + chaosY,
       day: i + 1,
     });
   }
@@ -159,7 +163,7 @@ const nodePositions = computed(() => {
 const svgWidth = computed(() => 1000);
 const svgHeight = computed(() => {
   const rows = Math.ceil(daysInMonth.value / ITEMS_PER_ROW);
-  return rows * 120 + 140;
+  return SVG_PADDING_TOP + rows * 120 + SVG_PADDING_BOTTOM;
 });
 
 // SVG path between nodes
@@ -193,6 +197,7 @@ async function loadMonth() {
   loading.value = true;
   try {
     monthData.value = await fetchJourneyMonth(currentMonth.value, currentYear.value);
+    stickers.value = monthData.value?.stickers ? monthData.value.stickers.map((s) => ({ ...s })) : [];
     if (monthData.value?.settings) {
       settingsForm.value.backgroundImage = monthData.value.settings.backgroundImage || "";
       settingsForm.value.backgroundOpacity = monthData.value.settings.backgroundOpacity || 0.3;
@@ -354,18 +359,23 @@ async function endStickerDrag() {
 }
 
 // --- Music ---
+function onMusicFilesSelected(e) {
+  musicFiles.value = Array.from(e.target.files || []);
+}
+
 async function addMusic() {
-  const url = musicForm.value.url.trim();
-  const title = musicForm.value.title.trim() || "Без названия";
-  if (!url) return;
-  await createJourneyMusic({
-    month: currentMonth.value,
-    year: currentYear.value,
-    title,
-    url,
-    position: musicTracks.value.length,
-  });
-  musicForm.value = { title: "", url: "" };
+  const files = musicFiles.value;
+  if (!files.length) return;
+  const title = musicForm.value.title.trim();
+
+  for (const file of files) {
+    const trackTitle = files.length === 1 && title ? title : file.name.replace(/\.mp3$/i, "");
+    await uploadJourneyMusic(currentMonth.value, currentYear.value, trackTitle, file);
+  }
+
+  musicForm.value = { title: "" };
+  musicFiles.value = [];
+  if (musicFileInput.value) musicFileInput.value.value = "";
   showMusicModal.value = false;
   await loadMonth();
 }
@@ -375,13 +385,20 @@ async function removeMusic(id) {
   await loadMonth();
 }
 
+function getTrackSrc(track) {
+  if (!track) return "";
+  const token = localStorage.getItem("token");
+  const url = getJourneyMusicStreamUrl(track.id);
+  return `${url}?token=${encodeURIComponent(token)}`;
+}
+
 function togglePlay() {
   if (!audioRef.value || !currentTrack.value) return;
   if (isPlaying.value) {
     audioRef.value.pause();
     isPlaying.value = false;
   } else {
-    audioRef.value.src = currentTrack.value.url;
+    audioRef.value.src = getTrackSrc(currentTrack.value);
     audioRef.value.play().catch(() => {});
     isPlaying.value = true;
   }
@@ -400,7 +417,7 @@ function nextTrack() {
   currentTrackIndex.value = (currentTrackIndex.value + 1) % musicTracks.value.length;
   if (isPlaying.value) {
     nextTick(() => {
-      audioRef.value.src = currentTrack.value.url;
+      audioRef.value.src = getTrackSrc(currentTrack.value);
       audioRef.value.play().catch(() => {});
     });
   }
@@ -411,7 +428,7 @@ function prevTrack() {
   currentTrackIndex.value = (currentTrackIndex.value - 1 + musicTracks.value.length) % musicTracks.value.length;
   if (isPlaying.value) {
     nextTick(() => {
-      audioRef.value.src = currentTrack.value.url;
+      audioRef.value.src = getTrackSrc(currentTrack.value);
       audioRef.value.play().catch(() => {});
     });
   }
@@ -510,6 +527,7 @@ watch([currentMonth, currentYear], () => {
           class="journey-svg"
           :viewBox="`0 0 ${svgWidth} ${svgHeight}`"
           preserveAspectRatio="xMidYMin meet"
+          overflow="visible"
         >
           <!-- Path connecting nodes -->
           <path
@@ -804,23 +822,27 @@ watch([currentMonth, currentYear], () => {
             <h2 class="modal-title">Музыка месяца</h2>
 
             <div class="journey-form-group">
-              <label class="journey-label">Название</label>
+              <label class="journey-label">Файлы mp3</label>
+              <input
+                ref="musicFileInput"
+                type="file"
+                accept="audio/mpeg,audio/mp3,.mp3"
+                multiple
+                class="form-input journey-file-input"
+                @change="onMusicFilesSelected"
+              />
+              <div v-if="musicFiles.length" class="journey-files-selected">
+                Выбрано: {{ musicFiles.length }} файл(ов)
+              </div>
+            </div>
+
+            <div class="journey-form-group" v-if="musicFiles.length === 1">
+              <label class="journey-label">Название (необязательно)</label>
               <input
                 v-model="musicForm.title"
                 type="text"
                 class="form-input"
-                placeholder="My track"
-              />
-            </div>
-
-            <div class="journey-form-group">
-              <label class="journey-label">URL mp3</label>
-              <input
-                v-model="musicForm.url"
-                type="text"
-                class="form-input"
-                placeholder="https://...mp3"
-                @keyup.enter="addMusic"
+                placeholder="Название трека"
               />
             </div>
 
@@ -833,7 +855,9 @@ watch([currentMonth, currentYear], () => {
               </div>
             </div>
 
-            <button class="journey-save-btn" @click="addMusic">Добавить трек</button>
+            <button class="journey-save-btn" @click="addMusic" :disabled="!musicFiles.length">
+              Загрузить {{ musicFiles.length > 1 ? musicFiles.length + ' треков' : 'трек' }}
+            </button>
           </div>
         </div>
       </div>
@@ -966,13 +990,14 @@ watch([currentMonth, currentYear], () => {
   display: flex;
   justify-content: center;
   align-items: flex-start;
-  padding: 20px 10%;
+  padding: 20px 5%;
 }
 
 .journey-svg {
   width: 80%;
   max-width: 1200px;
   height: auto;
+  overflow: visible;
   filter: drop-shadow(0 0 20px rgba(23, 103, 253, 0.08));
 }
 
@@ -1328,6 +1353,28 @@ watch([currentMonth, currentYear], () => {
 .journey-range {
   width: 100%;
   accent-color: #1767fd;
+}
+
+.journey-file-input {
+  padding: 8px;
+  cursor: pointer;
+}
+
+.journey-file-input::file-selector-button {
+  background: linear-gradient(135deg, #1767fd, #6e4aff);
+  border: none;
+  color: #fff;
+  padding: 6px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  margin-right: 10px;
+  font-size: 13px;
+}
+
+.journey-files-selected {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 12px;
+  margin-top: 4px;
 }
 
 .journey-bg-preview {

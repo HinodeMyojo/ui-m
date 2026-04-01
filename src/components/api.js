@@ -345,12 +345,33 @@ export async function deleteJourneySticker(id) {
 }
 
 // journey music
-export async function createJourneyMusic(data) {
-  const response = await authorizedFetch(`${API_BASE_URL}/api/v1/journey/music`, {
+export async function uploadJourneyMusic(month, year, title, file) {
+  const token = localStorage.getItem("token");
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("month", String(month));
+  formData.append("year", String(year));
+  formData.append("title", title || file.name);
+
+  const response = await fetch(`${API_BASE_URL}/api/v1/journey/music`, {
     method: "POST",
-    body: JSON.stringify(data),
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: formData,
   });
+
+  if (response.status === 401) {
+    localStorage.removeItem("token");
+    window.location.href = "/login";
+    throw new Error("Unauthorized");
+  }
+
   return await response.json();
+}
+
+export function getJourneyMusicStreamUrl(id) {
+  return `${API_BASE_URL}/api/v1/journey/music/${id}/stream`;
 }
 
 export async function deleteJourneyMusic(id) {
