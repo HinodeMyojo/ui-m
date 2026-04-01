@@ -177,15 +177,13 @@ const svgHeight = computed(() => {
   return SVG_PADDING_TOP + rows * 120 + SVG_PADDING_BOTTOM;
 });
 
-// SVG path between nodes
-const pathD = computed(() => {
-  const pts = nodePositions.value;
-  if (pts.length < 2) return "";
-  let d = `M ${pts[0].x} ${pts[0].y}`;
-  for (let i = 1; i < pts.length; i++) {
+// Build SVG path for a range of node indices
+function buildPath(pts, fromIdx, toIdx) {
+  if (toIdx <= fromIdx || !pts.length) return "";
+  let d = `M ${pts[fromIdx].x} ${pts[fromIdx].y}`;
+  for (let i = fromIdx + 1; i <= toIdx && i < pts.length; i++) {
     const prev = pts[i - 1];
     const curr = pts[i];
-    // Smooth cubic bezier
     const cpx1 = prev.x + (curr.x - prev.x) * 0.4;
     const cpy1 = prev.y + (curr.y - prev.y) * 0.1;
     const cpx2 = prev.x + (curr.x - prev.x) * 0.6;
@@ -193,6 +191,18 @@ const pathD = computed(() => {
     d += ` C ${cpx1} ${cpy1}, ${cpx2} ${cpy2}, ${curr.x} ${curr.y}`;
   }
   return d;
+}
+
+// Full path (all nodes)
+const pathD = computed(() => {
+  return buildPath(nodePositions.value, 0, nodePositions.value.length - 1);
+});
+
+// Walked path (up to today's node, inclusive)
+const walkedPathD = computed(() => {
+  if (todayDay.value <= 0) return "";
+  // todayDay is 1-based, indices are 0-based. Path goes from node 0 to node (todayDay-1)
+  return buildPath(nodePositions.value, 0, todayDay.value - 1);
 });
 
 const filteredTasks = computed(() => {
@@ -448,9 +458,12 @@ function playWithFadeIn() {
   audioRef.value.volume = 0;
   audioRef.value.src = getTrackSrc(currentTrack.value);
   audioRef.value.play().then(() => {
+    isPlaying.value = true;
     fadeVolumeTo(isMuted.value ? 0 : volume.value, FADE_DURATION);
-  }).catch(() => {});
-  isPlaying.value = true;
+  }).catch(() => {
+    // Autoplay blocked by browser — user must click play manually
+    isPlaying.value = false;
+  });
 }
 
 function autoStartMusic() {
@@ -580,23 +593,6 @@ watch([currentMonth, currentYear], () => {
     <!-- Background layer -->
     <div class="journey-bg" :style="backgroundStyle"></div>
 
-    <!-- Stickers layer (behind nodes, above bg) -->
-    <div
-      v-for="sticker in stickers"
-      :key="sticker.id"
-      class="journey-sticker"
-      :style="{
-        left: sticker.x + '%',
-        top: sticker.y + '%',
-        width: sticker.width + 'px',
-        height: sticker.height + 'px',
-      }"
-      @mousedown="startStickerDrag(sticker, $event)"
-    >
-      <img :src="sticker.url" alt="" draggable="false" />
-      <button class="sticker-delete" @click.stop="removeSticker(sticker.id)" title="Удалить">×</button>
-    </div>
-
     <!-- Content -->
     <div class="journey-content">
       <!-- Header -->
@@ -638,11 +634,10 @@ watch([currentMonth, currentYear], () => {
           <!-- Walked path (up to today) -->
           <path
             v-if="todayDay > 0"
-            :d="pathD"
+            :d="walkedPathD"
             fill="none"
-            stroke="rgba(74, 222, 128, 0.35)"
-            stroke-width="2.5"
-            :stroke-dasharray="`${(todayDay / daysInMonth) * 100}% 9999`"
+            stroke="rgba(74, 222, 128, 0.45)"
+            stroke-width="3"
             stroke-linecap="round"
           />
 
@@ -712,9 +707,28 @@ watch([currentMonth, currentYear], () => {
       </div>
     </div>
 
+    <!-- Stickers layer — above content, draggable -->
+    <div
+      v-for="sticker in stickers"
+      :key="sticker.id"
+      class="journey-sticker"
+      :style="{
+        left: sticker.x + '%',
+        top: sticker.y + '%',
+        width: sticker.width + 'px',
+        height: sticker.height + 'px',
+      }"
+      @mousedown.prevent="startStickerDrag(sticker, $event)"
+    >
+      <img :src="sticker.url" alt="" draggable="false" />
+      <button class="sticker-delete" @click.stop="removeSticker(sticker.id)" title="Удалить">×</button>
+    </div>
+
+    <!-- Audio element — always in DOM -->
+    <audio ref="audioRef" @ended="onTrackEnded" style="display:none" />
+
     <!-- Music player bar (bottom) -->
     <div class="journey-music-bar" v-if="musicTracks.length && showMusicPlayer">
-      <audio ref="audioRef" @ended="onTrackEnded" />
       <button class="music-btn" @click="prevTrack" title="Предыдущий">⏮</button>
       <button class="music-btn music-btn--play" @click="togglePlay">
         {{ isPlaying ? '⏸' : '▶' }}
@@ -1194,7 +1208,7 @@ watch([currentMonth, currentYear], () => {
 /* ===== Stickers ===== */
 .journey-sticker {
   position: absolute;
-  z-index: 1;
+  z-index: 5;
   cursor: grab;
   user-select: none;
   transition: box-shadow 0.2s;
