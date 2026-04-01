@@ -62,6 +62,10 @@ const taskSearchQuery = ref("");
 const draggingSticker = ref(null);
 const dragOffset = ref({ x: 0, y: 0 });
 
+// Sticker resize state
+const resizingSticker = ref(null);
+const resizeStart = ref({ mouseX: 0, mouseY: 0, w: 0, h: 0 });
+
 // Music player
 const audioRef = ref(null);
 const isPlaying = ref(false);
@@ -380,6 +384,31 @@ async function endStickerDrag() {
   draggingSticker.value = null;
 }
 
+// --- Sticker resize ---
+function startStickerResize(sticker, e) {
+  e.stopPropagation();
+  e.preventDefault();
+  resizingSticker.value = sticker;
+  resizeStart.value = { mouseX: e.clientX, mouseY: e.clientY, w: sticker.width, h: sticker.height };
+}
+
+function onStickerResize(e) {
+  if (!resizingSticker.value) return;
+  const dx = e.clientX - resizeStart.value.mouseX;
+  const dy = e.clientY - resizeStart.value.mouseY;
+  // Uniform scale based on whichever axis moved more
+  const delta = Math.abs(dx) > Math.abs(dy) ? dx : dy;
+  resizingSticker.value.width = Math.max(30, resizeStart.value.w + delta);
+  resizingSticker.value.height = Math.max(30, resizeStart.value.h + delta);
+}
+
+async function endStickerResize() {
+  if (!resizingSticker.value) return;
+  const s = resizingSticker.value;
+  await updateJourneySticker(s.id, { x: s.x, y: s.y, width: s.width, height: s.height });
+  resizingSticker.value = null;
+}
+
 // --- Music ---
 function onMusicFilesSelected(e) {
   musicFiles.value = Array.from(e.target.files || []);
@@ -568,18 +597,28 @@ function getDayNodeClass(day) {
 }
 
 // --- Lifecycle ---
+function onGlobalMouseMove(e) {
+  onStickerDrag(e);
+  onStickerResize(e);
+}
+
+function onGlobalMouseUp(e) {
+  endStickerDrag();
+  endStickerResize();
+}
+
 onMounted(() => {
   loadMonth();
   loadAvailableTasks();
-  window.addEventListener("mousemove", onStickerDrag);
-  window.addEventListener("mouseup", endStickerDrag);
+  window.addEventListener("mousemove", onGlobalMouseMove);
+  window.addEventListener("mouseup", onGlobalMouseUp);
 });
 
 onBeforeUnmount(() => {
   clearFade();
   stopMusic();
-  window.removeEventListener("mousemove", onStickerDrag);
-  window.removeEventListener("mouseup", endStickerDrag);
+  window.removeEventListener("mousemove", onGlobalMouseMove);
+  window.removeEventListener("mouseup", onGlobalMouseUp);
 });
 
 watch([currentMonth, currentYear], () => {
@@ -722,6 +761,7 @@ watch([currentMonth, currentYear], () => {
     >
       <img :src="sticker.url" alt="" draggable="false" />
       <button class="sticker-delete" @click.stop="removeSticker(sticker.id)" title="Удалить">×</button>
+      <div class="sticker-resize" @mousedown.stop.prevent="startStickerResize(sticker, $event)" title="Изменить размер"></div>
     </div>
 
     <!-- Audio element — always in DOM -->
@@ -1245,8 +1285,32 @@ watch([currentMonth, currentYear], () => {
   line-height: 1;
 }
 
-.journey-sticker:hover .sticker-delete {
+.journey-sticker:hover .sticker-delete,
+.journey-sticker:hover .sticker-resize {
   display: flex;
+}
+
+.sticker-resize {
+  position: absolute;
+  bottom: -4px;
+  right: -4px;
+  width: 16px;
+  height: 16px;
+  background: rgba(23, 103, 253, 0.8);
+  border: 2px solid rgba(255, 255, 255, 0.6);
+  border-radius: 3px;
+  cursor: nwse-resize;
+  display: none;
+  align-items: center;
+  justify-content: center;
+}
+
+.sticker-resize::after {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-right: 2px solid #fff;
+  border-bottom: 2px solid #fff;
 }
 
 .journey-sticker-preview {
