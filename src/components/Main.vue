@@ -832,10 +832,9 @@ function closeTimeStats() {
           <div class="icon">⚔️</div>
           <p class="text">Skill Tree</p>
         </button>
-        <button class="nyamaaa nyamaaa-soon" disabled title="Скоро">
-          <div class="icon">🧠</div>
-          <p class="text">Mind Map</p>
-          <span class="nyama-badge">Скоро</span>
+        <button class="nyamaaa" @click="router.push('/journey')">
+          <div class="icon">🗺️</div>
+          <p class="text">Карта пути</p>
         </button>
         <button class="nyamaaa nyamaaa-soon nyamaaa-unknown" disabled>
           <div class="icon">❓</div>

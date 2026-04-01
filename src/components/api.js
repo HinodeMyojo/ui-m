@@ -293,3 +293,31 @@ export async function updateTaskAPI(id, patch) {
     body: JSON.stringify(updateTask),
   });
 }
+
+// journey map api
+export async function fetchJourneyMonth(month, year) {
+  const response = await authorizedFetch(
+    `${API_BASE_URL}/api/v1/journey?month=${month}&year=${year}`,
+  );
+  return await response.json();
+}
+
+export async function upsertJourneyDay(data) {
+  await authorizedFetch(`${API_BASE_URL}/api/v1/journey/day`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deleteJourneyDay(id) {
+  await authorizedFetch(`${API_BASE_URL}/api/v1/journey/day/${id}`, {
+    method: "DELETE",
+  });
+}
+
+export async function updateJourneySettings(data) {
+  await authorizedFetch(`${API_BASE_URL}/api/v1/journey/settings`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+}

@@ -60,6 +60,11 @@ const router = createRouter({
       name: "Budget",
       component: () => import("../views/budget/BudgetView.vue"),
     },
+    {
+      path: "/journey",
+      name: "JourneyMap",
+      component: () => import("../views/JourneyMapView.vue"),
+    },
   ],
 });
 
