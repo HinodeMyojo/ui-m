@@ -125,6 +125,9 @@
             <button class="subtask-btn add-btn" @click="openAddSubtaskModal">
               Добавить
             </button>
+            <button class="subtask-btn json-btn" @click="showJsonImport = !showJsonImport">
+              {{ showJsonImport ? '✕ JSON' : '{ } JSON' }}
+            </button>
             <div v-if="chatValue?.id !== null" style="display: contents">
               <button
                 class="subtask-btn edit-btn"
@@ -141,6 +144,28 @@
                 Удалить
               </button>
             </div>
+          </div>
+
+          <!-- JSON Import Section -->
+          <div v-if="showJsonImport" class="json-import-panel">
+            <div class="json-import-header">
+              <span class="json-import-hint">Скопируй промпт, опиши задачу нейронке, вставь результат</span>
+              <button class="json-import-copy" @click="copyImportPrompt">📋 Промпт</button>
+            </div>
+            <textarea
+              v-model="jsonImportText"
+              class="json-import-textarea"
+              rows="5"
+              placeholder='[{ "title": "Подзадача 1" }, { "title": "Подзадача 2", "end": "2026-04-15T18:00:00" }]'
+            ></textarea>
+            <div v-if="jsonImportError" class="json-import-error">{{ jsonImportError }}</div>
+            <button
+              class="json-import-submit"
+              @click="importSubtasksFromJson"
+              :disabled="jsonImporting"
+            >
+              {{ jsonImporting ? 'Импортирую...' : 'Импортировать' }}
+            </button>
           </div>
         </div>
 
@@ -584,6 +609,71 @@ const handleUpdatedSubtask = (updatedSubtask) => {
 
 const handleDeletedSubtask = (subtask) => {
   reloadTask();
+};
+
+// --- JSON Import ---
+const showJsonImport = ref(false);
+const jsonImportText = ref("");
+const jsonImportError = ref("");
+const jsonImporting = ref(false);
+
+const jsonImportPrompt = `Сгенерируй JSON-массив подзадач для проекта/задачи, которую я опишу.
+
+Формат — массив объектов:
+[
+  { "title": "Название подзадачи" },
+  { "title": "Подзадача с дедлайном", "end": "2026-04-15T18:00:00" }
+]
+
+Правила:
+- Каждый объект ОБЯЗАН иметь поле "title" (строка)
+- Поле "end" (ISO дата-время дедлайна) — необязательно
+- Разбивай задачу на конкретные, выполнимые шаги
+- Порядок = логическая последовательность выполнения
+- Без вложенности — плоский массив
+- Только JSON, без markdown, без пояснений
+
+Моя задача:`;
+
+const copyImportPrompt = () => {
+  navigator.clipboard.writeText(jsonImportPrompt).catch(() => {});
+};
+
+const importSubtasksFromJson = async () => {
+  jsonImportError.value = "";
+  let parsed;
+  try {
+    parsed = JSON.parse(jsonImportText.value.trim());
+  } catch (e) {
+    jsonImportError.value = "Невалидный JSON: " + e.message;
+    return;
+  }
+
+  if (!Array.isArray(parsed)) {
+    jsonImportError.value = "JSON должен быть массивом [ ... ]";
+    return;
+  }
+
+  jsonImporting.value = true;
+  try {
+    for (const item of parsed) {
+      const title = item.title || item.name || item.text;
+      if (!title) continue;
+      const endDate = item.end ? new Date(item.end).toISOString() : null;
+      await addTaskAPI({
+        title: String(title),
+        end: endDate,
+        parentId: props.task.id,
+      });
+    }
+    jsonImportText.value = "";
+    showJsonImport.value = false;
+    reloadTask();
+  } catch (e) {
+    jsonImportError.value = "Ошибка при создании: " + e.message;
+  } finally {
+    jsonImporting.value = false;
+  }
 };
 
 // Функции для форматирования дедлайна
@@ -1262,6 +1352,96 @@ function getFileIcon(type) {
 
 .subtask-btn:active {
   transform: scale(0.95);
+}
+
+.json-btn {
+  background: rgba(23, 103, 253, 0.15) !important;
+  border: 1px solid rgba(23, 103, 253, 0.3) !important;
+  color: #1767fd !important;
+  font-family: monospace;
+}
+
+.json-import-panel {
+  padding: 10px;
+  background: rgba(23, 103, 253, 0.04);
+  border: 1px solid rgba(23, 103, 253, 0.15);
+  border-radius: 10px;
+  margin-top: 6px;
+}
+
+.json-import-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  gap: 8px;
+}
+
+.json-import-hint {
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 11px;
+  flex: 1;
+}
+
+.json-import-copy {
+  background: rgba(23, 103, 253, 0.1);
+  border: 1px solid rgba(23, 103, 253, 0.3);
+  color: #1767fd;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.json-import-copy:hover {
+  background: rgba(23, 103, 253, 0.2);
+}
+
+.json-import-textarea {
+  width: 100%;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(23, 103, 253, 0.2);
+  border-radius: 8px;
+  padding: 8px;
+  color: #fff;
+  font-size: 11px;
+  font-family: monospace;
+  resize: vertical;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.json-import-textarea:focus {
+  border-color: rgba(23, 103, 253, 0.5);
+}
+
+.json-import-error {
+  color: #f87171;
+  font-size: 11px;
+  margin-top: 4px;
+}
+
+.json-import-submit {
+  margin-top: 6px;
+  width: 100%;
+  padding: 7px;
+  background: linear-gradient(135deg, #1767fd, #6e4aff);
+  border: none;
+  border-radius: 8px;
+  color: #fff;
+  font-weight: 600;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.json-import-submit:hover {
+  filter: brightness(1.15);
+}
+
+.json-import-submit:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .subtasks {
