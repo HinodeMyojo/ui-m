@@ -202,17 +202,22 @@ const visibleTasks = computed(() => {
     })
     .filter(Boolean);
 
-  // Sort: group by skill using custom display order, unassigned at the bottom
+  // Sort: group by skill using custom display order, within group by position
   const orderMap = {};
   skillDisplayOrder.value.forEach((id, i) => { orderMap[id] = i; });
 
   mapped.sort((a, b) => {
     const aSkill = a.learningSkillId || null;
     const bSkill = b.learningSkillId || null;
-    if (aSkill === bSkill) return 0;
-    if (!aSkill) return 1;
-    if (!bSkill) return -1;
-    return (orderMap[aSkill] ?? 999) - (orderMap[bSkill] ?? 999);
+    if (aSkill !== bSkill) {
+      if (!aSkill) return 1;
+      if (!bSkill) return -1;
+      return (orderMap[aSkill] ?? 999) - (orderMap[bSkill] ?? 999);
+    }
+    // Within same skill group: sort by position
+    const aPos = a.position ?? 9999;
+    const bPos = b.position ?? 9999;
+    return aPos - bPos;
   });
 
   return mapped;
@@ -309,9 +314,8 @@ const handleDragEnd = (event) => {
   dropIndex.value = null;
 };
 
-// Получить индекс задачи в исходном массиве по title (или добавить уникальный id в будущем)
 function getTaskIndex(task) {
-  return tasks.value.findIndex((t) => t.title === task.title);
+  return tasks.value.findIndex((t) => t.id === task.id);
 }
 
 const handleDragOver = (event) => {
@@ -329,21 +333,28 @@ const handleDragOver = (event) => {
 const handleDrop = async (event) => {
   event.preventDefault();
   if (draggedTask.value !== null && dropIndex.value !== null) {
-    const draggedIndex = getTaskIndex(draggedTask.value);
-    let insertIndex = dropIndex.value;
-    let targetTask = visibleTasks.value[insertIndex];
-    let targetIndex = targetTask
-      ? getTaskIndex(targetTask)
-      : tasks.value.length;
-    if (targetIndex > draggedIndex) targetIndex--;
-    if (draggedIndex !== -1) {
-      const newTasks = [...tasks.value];
-      const [movedTask] = newTasks.splice(draggedIndex, 1);
-      newTasks.splice(targetIndex, 0, movedTask);
-      tasks.value = newTasks;
+    // Work with the displayed task rows (what user sees)
+    const taskRows = displayData.value.rows.filter(r => r.type === 'task');
+    const draggedRowIdx = taskRows.findIndex(r => r.task.id === draggedTask.value.id);
+    let targetRowIdx = dropIndex.value;
+    if (targetRowIdx > taskRows.length) targetRowIdx = taskRows.length;
 
-      // Save positions to backend
-      const reorderItems = newTasks.map((t, i) => ({ id: t.id, position: i }));
+    if (draggedRowIdx !== -1 && draggedRowIdx !== targetRowIdx) {
+      // Build new order from display rows
+      const ordered = taskRows.map(r => r.task);
+      const [moved] = ordered.splice(draggedRowIdx, 1);
+      if (targetRowIdx > draggedRowIdx) targetRowIdx--;
+      ordered.splice(targetRowIdx, 0, moved);
+
+      // Assign new positions
+      const reorderItems = ordered.map((t, i) => ({ id: t.id, position: i }));
+
+      // Update local tasks with new positions
+      for (const item of reorderItems) {
+        const t = tasks.value.find(t => t.id === item.id);
+        if (t) t.position = item.position;
+      }
+
       try {
         await reorderTasksAPI(reorderItems);
       } catch (e) {

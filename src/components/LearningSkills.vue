@@ -34,6 +34,9 @@ const showCreateExam = ref(false);
 const showEditGrade = ref(false);
 const editingGrade = ref(null);
 const showImportGrades = ref(false);
+const showEditExam = ref(false);
+const editingExam = ref(null);
+const editExamForm = ref({ title: "", description: "", link: "", imageUrl: "" });
 
 // Forms
 const skillForm = ref({ title: "", description: "", color: "#60a5fa", icon: "📚", grades: "" });
@@ -131,6 +134,18 @@ async function removeGrade(id) { await deleteLearningGrade(id); await reload(); 
 // --- Exams ---
 async function saveExam() { if (!examForm.value.title.trim() || !examForm.value.afterGradeId || !selectedSkill.value) return; await createLearningExam({ learningSkillId: selectedSkill.value.id, ...examForm.value }); showCreateExam.value = false; examForm.value = { afterGradeId: "", title: "", description: "", link: "", imageUrl: "" }; await reload(); }
 async function toggleExamPassed(exam) { await updateLearningExam(exam.id, { ...exam, passed: !exam.passed }); await reload(); }
+function startEditExam(exam) {
+  editingExam.value = exam;
+  editExamForm.value = { title: exam.title, description: exam.description || "", link: exam.link || "", imageUrl: exam.imageUrl || "" };
+  showEditExam.value = true;
+}
+async function saveEditExam() {
+  if (!editingExam.value) return;
+  await updateLearningExam(editingExam.value.id, { ...editingExam.value, ...editExamForm.value });
+  showEditExam.value = false;
+  editingExam.value = null;
+  await reload();
+}
 async function removeExam(id) { await deleteLearningExam(id); await reload(); }
 
 // --- SP ---
@@ -346,6 +361,8 @@ watch([planMonth, planYear], async () => {
                 <div class="sk-exam-name">{{ exam.title }}</div>
               </div>
               <input type="checkbox" class="sk-exam-cb" :checked="exam.passed" @change.stop="toggleExamPassed(exam)" @click.stop />
+              <button class="sk-exam-edit" @click.stop="startEditExam(exam)" title="Редактировать">✎</button>
+              <button class="sk-exam-rm" @click.stop="removeExam(exam.id)" title="Удалить тест">✕</button>
             </div>
 
             <div v-if="gi < selectedSkill.grades.length - 1" class="sk-connector" :style="{ background: selectedSkill.color + '20' }"></div>
@@ -465,6 +482,17 @@ watch([planMonth, planYear], async () => {
       <textarea v-model="importJson" class="form-input" rows="8" style="font-family:monospace;font-size:12px" placeholder='[{"title":"A1","description":"..."}]'></textarea>
       <div v-if="importError" style="color:#f87171;font-size:12px;margin-top:4px">{{ importError }}</div>
       <button class="sk-submit" @click="doImportGrades">Импортировать</button>
+    </div></div></transition>
+
+    <!-- Edit Exam -->
+    <transition name="modal-fade"><div v-if="showEditExam" class="modal-overlay" @click.self="showEditExam = false"><div class="modal-card sk-modal">
+      <button class="modal-close" @click="showEditExam = false">×</button>
+      <h2 class="modal-title">Редактировать тест</h2>
+      <div class="sk-fg"><label>Название</label><input v-model="editExamForm.title" class="form-input" /></div>
+      <div class="sk-fg"><label>Описание</label><textarea v-model="editExamForm.description" class="form-input" rows="2"></textarea></div>
+      <div class="sk-fg"><label>Ссылка</label><input v-model="editExamForm.link" class="form-input" placeholder="https://..." /></div>
+      <div class="sk-fg"><label>URL картинки</label><input v-model="editExamForm.imageUrl" class="form-input" placeholder="https://..." /></div>
+      <button class="sk-submit" @click="saveEditExam">Сохранить</button>
     </div></div></transition>
   </div>
 </template>
@@ -608,6 +636,12 @@ watch([planMonth, planYear], async () => {
 .sk-exam-name { font-size: 16px; font-weight: 700; margin-top: 2px; color: #fef3c7; }
 .sk-exam.passed .sk-exam-name { text-decoration: line-through; color: rgba(200,215,255,0.4); }
 .sk-exam-cb { width: 22px; height: 22px; accent-color: #fbbf24; cursor: pointer; flex-shrink: 0; }
+.sk-exam-edit { background: none; border: none; color: rgba(200,215,255,0.3); font-size: 16px; cursor: pointer; flex-shrink: 0; opacity: 0; transition: opacity 0.15s; }
+.sk-exam:hover .sk-exam-edit { opacity: 1; }
+.sk-exam-edit:hover { color: #6ea8ff; }
+.sk-exam-rm { background: none; border: none; color: rgba(248,113,113,0.3); font-size: 16px; cursor: pointer; flex-shrink: 0; opacity: 0; transition: opacity 0.15s; }
+.sk-exam:hover .sk-exam-rm { opacity: 1; }
+.sk-exam-rm:hover { color: #ff6b6b; }
 
 .sk-connector { width: 4px; height: 16px; margin: 0 0 0 20px; border-radius: 2px; }
 
