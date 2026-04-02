@@ -1185,19 +1185,17 @@ function closeTimeStats() {
 
 <style scoped>
 .main {
-  flex: 1;
   width: 100%;
   height: 100vh;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  position: relative;
   overflow: hidden;
 }
 
 .body {
   width: 100%;
   flex: 1;
+  min-height: 0;
   position: relative;
   overflow-y: auto;
   scrollbar-width: thin;
@@ -1251,10 +1249,10 @@ function closeTimeStats() {
 
 .columns-container {
   width: 100%;
-  /* height: 100%; */
   display: flex;
   position: relative;
   background: transparent;
+  padding-left: 44px;
 }
 
 .column {
@@ -1406,8 +1404,8 @@ function closeTimeStats() {
 
 .skill-bracket {
   position: absolute;
-  left: -36px;
-  width: 30px;
+  left: 4px;
+  width: 34px;
   pointer-events: auto;
   z-index: 3;
   display: flex;
@@ -1468,9 +1466,8 @@ function closeTimeStats() {
 
 .skill-bracket-label {
   position: absolute;
-  left: -8px;
-  top: 50%;
-  transform: translateX(-100%) translateY(-50%);
+  left: 10px;
+  top: -14px;
   font-size: 10px;
   font-weight: 600;
   white-space: nowrap;
@@ -1692,12 +1689,12 @@ function closeTimeStats() {
 
 .header {
   width: 100%;
-  flex: 1;
   display: flex;
   align-items: center;
   justify-content: space-between;
   border-bottom: 2px solid #1e2025;
   min-height: 62px;
+  flex-shrink: 0;
 }
 
 .header-left {
