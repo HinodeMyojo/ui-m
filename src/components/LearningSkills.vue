@@ -47,6 +47,7 @@ const importJson = ref("");
 const importError = ref("");
 
 const collapsedMonths = ref({});
+const expandedDescs = ref({});
 const monthNames = ["Январь","Февраль","Март","Апрель","Май","Июнь","Июль","Август","Сентябрь","Октябрь","Ноябрь","Декабрь"];
 
 // --- Computed ---
@@ -161,6 +162,16 @@ function copyPrompt() { const ta = document.createElement("textarea"); ta.value 
 const importPrompt = `Сгенерируй JSON-массив уровней для навыка. Формат: [{"title":"Уровень","description":"Описание","examTitle":"Тест","examLink":"https://..."}]. examTitle/examLink необязательны. Только JSON. Навык:`;
 
 // --- Helpers ---
+function formatDesc(text) {
+  if (!text) return '';
+  // Convert newlines to <br>, bold **text**, and bullet points
+  return text
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/^[-–•]\s?(.+)$/gm, '<span class="sk-desc-bullet">$1</span>')
+    .replace(/\n/g, '<br>');
+}
+
 function gradeProgress(g) { return g.totalTasks ? Math.round((g.completedTasks / g.totalTasks) * 100) : 0; }
 function getExamsForGrade(gid) { return (selectedSkill.value?.exams || []).filter(e => e.afterGradeId === gid); }
 
@@ -307,7 +318,12 @@ watch([planMonth, planYear], async () => {
               </div>
               <div class="sk-grade-body">
                 <div class="sk-grade-title">{{ grade.title }}</div>
-                <div v-if="grade.description" class="sk-grade-desc">{{ grade.description }}</div>
+                <div v-if="grade.description" class="sk-grade-desc" :class="{ expanded: expandedDescs[grade.id] }">
+                  <div class="sk-grade-desc-text" v-html="formatDesc(grade.description)"></div>
+                  <button v-if="grade.description.length > 150" class="sk-grade-desc-toggle" @click.stop="expandedDescs[grade.id] = !expandedDescs[grade.id]">
+                    {{ expandedDescs[grade.id] ? 'Свернуть ▴' : 'Показать всё ▾' }}
+                  </button>
+                </div>
                 <div class="sk-grade-meta">
                   <span class="sk-grade-tasks-count">{{ grade.completedTasks }}/{{ grade.totalTasks }} задач</span>
                   <span v-if="grade.deadline" class="sk-grade-deadline">до {{ formatDateShort(grade.deadline) }}</span>
@@ -392,7 +408,7 @@ watch([planMonth, planYear], async () => {
               <div class="sk-panel-badge" :style="{ background: gradeColor(detailPanel.data.position, selectedSkill?.grades?.length || 1) }">{{ detailPanel.data.position + 1 }}</div>
               <h3>{{ detailPanel.data.title }}</h3>
               <div v-if="detailPanel.data.imageUrl" class="sk-panel-img"><img :src="detailPanel.data.imageUrl" /></div>
-              <p class="sk-panel-desc">{{ detailPanel.data.description || 'Нет описания' }}</p>
+              <div class="sk-panel-desc" v-html="formatDesc(detailPanel.data.description) || '<em>Нет описания</em>'"></div>
               <div class="sk-panel-stats">
                 <div class="sk-panel-stat"><span class="sk-panel-stat-val">{{ detailPanel.data.completedTasks }}/{{ detailPanel.data.totalTasks }}</span><span class="sk-panel-stat-label">Задач</span></div>
                 <div class="sk-panel-stat"><span class="sk-panel-stat-val">{{ gradeProgress(detailPanel.data) }}%</span><span class="sk-panel-stat-label">Прогресс</span></div>
@@ -406,7 +422,7 @@ watch([planMonth, planYear], async () => {
               <div class="sk-panel-exam-icon">{{ detailPanel.data.passed ? '🏆' : '📝' }}</div>
               <h3>{{ detailPanel.data.title }}</h3>
               <div v-if="detailPanel.data.imageUrl" class="sk-panel-img"><img :src="detailPanel.data.imageUrl" /></div>
-              <p class="sk-panel-desc">{{ detailPanel.data.description || 'Нет описания' }}</p>
+              <div class="sk-panel-desc" v-html="formatDesc(detailPanel.data.description) || '<em>Нет описания</em>'"></div>
               <a v-if="detailPanel.data.link" :href="detailPanel.data.link" target="_blank" class="sk-panel-link">Открыть ссылку</a>
               <div class="sk-panel-status" :class="detailPanel.data.passed ? 'done' : 'active'">{{ detailPanel.data.passed ? 'Пройден' : 'Не пройден' }}</div>
             </template>
@@ -580,7 +596,33 @@ watch([planMonth, planYear], async () => {
 .sk-grade-badge { width: 42px; height: 42px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 800; color: #fff; flex-shrink: 0; box-shadow: 0 2px 10px rgba(0,0,0,0.3); }
 .sk-grade-body { flex: 1; min-width: 0; }
 .sk-grade-title { font-size: 18px; font-weight: 700; color: #f0f3ff; }
-.sk-grade-desc { font-size: 13px; color: rgba(200,215,255,0.5); margin-top: 3px; line-height: 1.4; }
+.sk-grade-desc {
+  margin-top: 6px; position: relative;
+  max-height: 60px; overflow: hidden;
+  transition: max-height 0.3s ease;
+}
+.sk-grade-desc.expanded { max-height: 2000px; }
+.sk-grade-desc:not(.expanded)::after {
+  content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 30px;
+  background: linear-gradient(transparent, rgba(15,18,30,0.95));
+  pointer-events: none;
+}
+.sk-grade-desc.expanded::after { display: none; }
+.sk-grade-desc-text {
+  font-size: 13px; color: rgba(200,215,255,0.6); line-height: 1.6;
+}
+:deep(.sk-grade-desc-text strong) { color: rgba(220,230,255,0.85); font-weight: 700; }
+:deep(.sk-desc-bullet) {
+  display: block; padding-left: 16px; position: relative; margin: 2px 0;
+}
+:deep(.sk-desc-bullet)::before {
+  content: '•'; position: absolute; left: 4px; color: rgba(100,160,255,0.5);
+}
+.sk-grade-desc-toggle {
+  background: none; border: none; color: rgba(100,160,255,0.6);
+  font-size: 11px; cursor: pointer; padding: 4px 0 0; font-weight: 600;
+}
+.sk-grade-desc-toggle:hover { color: #6ea8ff; }
 .sk-grade-meta { display: flex; gap: 10px; align-items: center; margin-top: 8px; flex-wrap: wrap; }
 .sk-grade-tasks-count { font-size: 13px; color: rgba(200,215,255,0.7); background: rgba(255,255,255,0.05); padding: 3px 10px; border-radius: 6px; font-weight: 600; }
 .sk-grade-deadline { font-size: 12px; color: #fbbf24; font-weight: 500; }

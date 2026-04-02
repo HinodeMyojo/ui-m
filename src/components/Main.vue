@@ -1187,22 +1187,20 @@ function closeTimeStats() {
 .main {
   flex: 1;
   width: 100%;
-  min-height: 100vh;
+  height: 100vh;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
   position: relative;
+  overflow: hidden;
 }
 
 .body {
   width: 100%;
-  min-height: 100vh;
-  flex: 5;
+  flex: 1;
   position: relative;
-  flex-direction: row;
-  align-items: center;
-  scrollbar-width: auto;
+  overflow-y: auto;
+  scrollbar-width: thin;
   scrollbar-color: #6e4aff #111;
   /* background: #11111113; */
 }
@@ -2408,8 +2406,8 @@ function closeTimeStats() {
 /* ====== MOBILE RESPONSIVE ====== */
 @media (max-width: 768px) {
   .main {
-    min-height: 100vh;
-    min-height: 100dvh;
+    height: 100vh;
+    height: 100dvh;
   }
 
   .header {
