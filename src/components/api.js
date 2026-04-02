@@ -1,6 +1,6 @@
 import router from "@/router";
 
-const API_BASE_URL = `${window.location.protocol}//82.202.136.167:5005`;
+const API_BASE_URL = import.meta.env.VITE_API_URL || `${window.location.protocol}//82.202.136.167:5005`;
 
 async function authorizedFetch(url, options = {}) {
   const token = localStorage.getItem("token");
@@ -208,19 +208,21 @@ export async function fetchTask(id) {
 export async function addTaskAPI(task) {
   const newTask = {
     title: task.title,
-    description: task.description ?? "", // если описание не указано — будет пустым
+    description: task.description ?? "",
     start: task.start || null,
     end: task.end || null,
     color: task.color || null,
     parentId: task.parentId || null,
     sticker: task.sticker || null,
-    isGlobal: task.isGlobal || false, // добавляем флаг глобальной задачи
+    isGlobal: task.isGlobal || false,
+    learningSkillId: task.learningSkillId || null,
+    learningGradeId: task.learningGradeId || null,
     subtasks: (task.subtasks || []).map((subtask) => ({
       title: subtask.title,
-      description: subtask.description ?? "", // опционально
-      color: task.color, // наследуем цвет от родительской задачи
+      description: subtask.description ?? "",
+      color: task.color,
       parentId: null,
-      subtasks: [], // пока без вложенности
+      subtasks: [],
       position: subtask.position,
     })),
   };
@@ -277,6 +279,13 @@ export async function lookupVocabWord(word) {
     `${API_BASE_URL}/api/v1/vocab/lookup?word=${encodeURIComponent(word)}`,
   );
   return await response.json();
+}
+
+export async function reorderTasksAPI(items) {
+  await authorizedFetch(`${API_BASE_URL}/api/v1/tasks/reorder`, {
+    method: "POST",
+    body: JSON.stringify(items),
+  });
 }
 
 export async function updateTaskAPI(id, patch) {
@@ -391,4 +400,118 @@ export async function linkJourneyMusic(sourceId, month, year) {
     body: JSON.stringify({ sourceId, month, year }),
   });
   return await response.json();
+}
+
+// === Learning Skills API ===
+
+export async function fetchLearningSkills() {
+  const response = await authorizedFetch(`${API_BASE_URL}/api/v1/learning-skills`);
+  return await response.json();
+}
+
+export async function fetchLearningSkill(id) {
+  const response = await authorizedFetch(`${API_BASE_URL}/api/v1/learning-skills/${id}`);
+  return await response.json();
+}
+
+export async function createLearningSkill(data) {
+  const response = await authorizedFetch(`${API_BASE_URL}/api/v1/learning-skills`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+  return await response.json();
+}
+
+export async function updateLearningSkill(id, data) {
+  await authorizedFetch(`${API_BASE_URL}/api/v1/learning-skills/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deleteLearningSkill(id) {
+  await authorizedFetch(`${API_BASE_URL}/api/v1/learning-skills/${id}`, {
+    method: "DELETE",
+  });
+}
+
+// Grades
+export async function createLearningGrade(data) {
+  const response = await authorizedFetch(`${API_BASE_URL}/api/v1/learning-skills/grades`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+  return await response.json();
+}
+
+export async function updateLearningGrade(id, data) {
+  await authorizedFetch(`${API_BASE_URL}/api/v1/learning-skills/grades/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deleteLearningGrade(id) {
+  await authorizedFetch(`${API_BASE_URL}/api/v1/learning-skills/grades/${id}`, {
+    method: "DELETE",
+  });
+}
+
+// Exams
+export async function createLearningExam(data) {
+  const response = await authorizedFetch(`${API_BASE_URL}/api/v1/learning-skills/exams`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+  return await response.json();
+}
+
+export async function updateLearningExam(id, data) {
+  await authorizedFetch(`${API_BASE_URL}/api/v1/learning-skills/exams/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deleteLearningExam(id) {
+  await authorizedFetch(`${API_BASE_URL}/api/v1/learning-skills/exams/${id}`, {
+    method: "DELETE",
+  });
+}
+
+// Month plan
+export async function fetchLearningMonthPlan(month, year) {
+  const response = await authorizedFetch(
+    `${API_BASE_URL}/api/v1/learning-skills/month-plan?month=${month}&year=${year}`,
+  );
+  return await response.json();
+}
+
+export async function setLearningMonthPlan(data) {
+  await authorizedFetch(`${API_BASE_URL}/api/v1/learning-skills/month-plan`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+// Assign task to skill
+export async function assignTaskLearningSkill(taskId, learningSkillId, learningGradeId) {
+  await authorizedFetch(`${API_BASE_URL}/api/v1/learning-skills/assign-task`, {
+    method: "POST",
+    body: JSON.stringify({ taskId, learningSkillId, learningGradeId }),
+  });
+}
+
+export async function removeLearningMonthPlan(learningSkillId, month, year) {
+  await authorizedFetch(`${API_BASE_URL}/api/v1/learning-skills/month-plan`, {
+    method: "DELETE",
+    body: JSON.stringify({ learningSkillId, month, year }),
+  });
+}
+
+export async function importLearningGrades(learningSkillId, grades) {
+  await authorizedFetch(`${API_BASE_URL}/api/v1/learning-skills/import-grades`, {
+    method: "POST",
+    body: JSON.stringify({ learningSkillId, grades }),
+  });
 }

@@ -78,6 +78,18 @@
           </div>
         </div>
       </div>
+      <!-- Skill assignment -->
+      <div v-if="taskSkills.length" class="task-skill-row">
+        <select v-model="taskSkillId" class="task-skill-select" @change="taskGradeId = null; saveTaskSkill()">
+          <option :value="null">Без навыка</option>
+          <option v-for="s in taskSkills" :key="s.id" :value="s.id">{{ s.title }}</option>
+        </select>
+        <select v-if="selectedTaskSkill?.grades?.length" v-model="taskGradeId" class="task-skill-select" @change="saveTaskSkill()">
+          <option :value="null">Уровень...</option>
+          <option v-for="g in selectedTaskSkill.grades" :key="g.id" :value="g.id">{{ g.title }}</option>
+        </select>
+      </div>
+
       <div class="inner-menu">
         <div class="inner-menu-content">
           <div
@@ -454,6 +466,8 @@ import {
   fetchTask,
   checkTask,
   fetchProgress,
+  fetchLearningSkills,
+  assignTaskLearningSkill,
 } from "../api.js";
 
 import {
@@ -481,6 +495,29 @@ import {
 import chat from "./test.js";
 import bonfire from "../../assets/gif/bonfire-dark-souls.gif";
 import ChatMessage from "../extension/ChatMessage.vue";
+
+// Learning skills
+const taskSkills = ref([]);
+const taskSkillId = ref(null);
+const taskGradeId = ref(null);
+
+async function loadTaskSkills() {
+  try {
+    taskSkills.value = await fetchLearningSkills();
+    // Init from current task
+    taskSkillId.value = props.task.learningSkillId || null;
+    taskGradeId.value = props.task.learningGradeId || null;
+  } catch (e) { console.error(e); }
+}
+
+const selectedTaskSkill = computed(() => {
+  return taskSkills.value.find((s) => s.id === taskSkillId.value);
+});
+
+async function saveTaskSkill() {
+  await assignTaskLearningSkill(props.task.id, taskSkillId.value || null, taskGradeId.value || null);
+  reloadTask();
+}
 
 // Icons
 const path = mdiSendCircleOutline;
@@ -899,6 +936,7 @@ async function sendMessage() {
 onMounted(() => {
   openTaskChat();
   getProgress();
+  loadTaskSkills();
   window.addEventListener("resize", scrollToBottom);
 });
 
@@ -1367,6 +1405,27 @@ function getFileIcon(type) {
 
 .subtask-btn:active {
   transform: scale(0.95);
+}
+
+.task-skill-row {
+  display: flex;
+  gap: 8px;
+  padding: 6px 12px;
+}
+
+.task-skill-select {
+  flex: 1;
+  background: rgba(23, 103, 253, 0.06);
+  border: 1px solid rgba(23, 103, 253, 0.2);
+  border-radius: 6px;
+  color: #fff;
+  padding: 6px 8px;
+  font-size: 12px;
+}
+
+.task-skill-select option {
+  background: #18191f;
+  color: #fff;
 }
 
 .json-btn {

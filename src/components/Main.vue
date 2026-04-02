@@ -8,6 +8,8 @@ import {
   deleteTaskAPI,
   updateTaskAPI,
   fetchTask,
+  fetchLearningSkills,
+  reorderTasksAPI,
 } from "./api.js";
 import { useRouter } from "vue-router";
 
@@ -79,6 +81,8 @@ const createEmptyTaskForm = () => ({
   steps: 0,
   stepActive: 0,
   isGlobal: false,
+  learningSkillId: null,
+  learningGradeId: null,
 });
 
 function openMdToPdfPage() {
@@ -105,10 +109,54 @@ const buildTime = typeof __BUILD_TIME__ !== 'undefined'
 const showBuildInfo = ref(false);
 
 const tasks = ref([]);
+const learningSkills = ref([]);
+const collapsedSkills = ref({}); // { skillId: true/false }
+const SKILL_ORDER_KEY = "skillDisplayOrder";
+const skillDisplayOrder = ref(JSON.parse(localStorage.getItem(SKILL_ORDER_KEY) || "[]"));
+
+function saveSkillOrder() {
+  localStorage.setItem(SKILL_ORDER_KEY, JSON.stringify(skillDisplayOrder.value));
+}
+
+async function loadLearningSkills() {
+  try {
+    learningSkills.value = await fetchLearningSkills();
+    const newIds = learningSkills.value.map(s => s.id);
+    // Preserve saved order, remove stale, append new
+    const ordered = skillDisplayOrder.value.filter(id => newIds.includes(id));
+    for (const id of newIds) {
+      if (!ordered.includes(id)) ordered.push(id);
+    }
+    skillDisplayOrder.value = ordered;
+    saveSkillOrder();
+  } catch (e) {
+    console.error(e);
+  }
+}
 
 async function loadTasks(date) {
   tasks.value = await fetchTasks(date);
 }
+
+function toggleSkillCollapse(skillId) {
+  collapsedSkills.value[skillId] = !collapsedSkills.value[skillId];
+}
+
+function moveSkillGroup(skillId, direction) {
+  const order = [...skillDisplayOrder.value];
+  const idx = order.indexOf(skillId);
+  if (idx === -1) return;
+  const newIdx = idx + direction;
+  if (newIdx < 0 || newIdx >= order.length) return;
+  [order[idx], order[newIdx]] = [order[newIdx], order[idx]];
+  skillDisplayOrder.value = order;
+  saveSkillOrder();
+}
+
+const selectedNewTaskSkill = computed(() => {
+  if (!newTask.value.learningSkillId) return null;
+  return learningSkills.value.find((s) => s.id === newTask.value.learningSkillId);
+});
 
 const currentDate = ref(new Date());
 const currentMonth = ref(currentDate.value.getMonth());
@@ -136,7 +184,7 @@ const visibleTasks = computed(() => {
   const msMonthStart = monthStart.value.getTime();
   const msMonthEnd = monthEnd.value.getTime();
 
-  return tasks.value
+  const mapped = tasks.value
     .map((task) => {
       const msTaskStart = new Date(task.start).getTime();
       const msTaskEnd = new Date(task.end).getTime();
@@ -153,6 +201,67 @@ const visibleTasks = computed(() => {
       };
     })
     .filter(Boolean);
+
+  // Sort: group by skill using custom display order, unassigned at the bottom
+  const orderMap = {};
+  skillDisplayOrder.value.forEach((id, i) => { orderMap[id] = i; });
+
+  mapped.sort((a, b) => {
+    const aSkill = a.learningSkillId || null;
+    const bSkill = b.learningSkillId || null;
+    if (aSkill === bSkill) return 0;
+    if (!aSkill) return 1;
+    if (!bSkill) return -1;
+    return (orderMap[aSkill] ?? 999) - (orderMap[bSkill] ?? 999);
+  });
+
+  return mapped;
+});
+
+// Build display rows: tasks (visible) + collapsed skill placeholders
+// Each row has a `rowIndex` for absolute positioning
+const displayData = computed(() => {
+  const tasks = visibleTasks.value;
+  const rows = []; // { type: 'task', task, rowIndex } or { type: 'collapsed', skill, taskCount, rowIndex }
+  const brackets = []; // { skillId, title, color, startRow, endRow }
+
+  // Group tasks by skill in order
+  let currentSkillId = null;
+  let groupTasks = [];
+
+  function flushGroup() {
+    if (!groupTasks.length) return;
+    const sid = groupTasks[0].learningSkillId || null;
+    const isCollapsed = sid && collapsedSkills.value[sid];
+    const skill = sid ? learningSkills.value.find(s => s.id === sid) : null;
+
+    if (isCollapsed && skill) {
+      const rowIdx = rows.length;
+      rows.push({ type: 'collapsed', skill, taskCount: groupTasks.length, rowIndex: rowIdx });
+    } else {
+      const startRow = rows.length;
+      for (const t of groupTasks) {
+        rows.push({ type: 'task', task: t, rowIndex: rows.length });
+      }
+      const endRow = rows.length - 1;
+      if (skill && startRow <= endRow) {
+        brackets.push({ skillId: sid, title: skill.title, color: skill.color, startRow, endRow });
+      }
+    }
+    groupTasks = [];
+  }
+
+  for (const t of tasks) {
+    const sid = t.learningSkillId || null;
+    if (sid !== currentSkillId) {
+      flushGroup();
+      currentSkillId = sid;
+    }
+    groupTasks.push(t);
+  }
+  flushGroup();
+
+  return { rows, brackets };
 });
 
 const draggedTask = ref(null);
@@ -217,27 +326,29 @@ const handleDragOver = (event) => {
   dropIndex.value = index;
 };
 
-const handleDrop = (event) => {
+const handleDrop = async (event) => {
   event.preventDefault();
   if (draggedTask.value !== null && dropIndex.value !== null) {
-    // Получаем индекс задачи в исходном массиве
     const draggedIndex = getTaskIndex(draggedTask.value);
-    // Получаем индекс задачи, на которую дропаем, в visibleTasks
     let insertIndex = dropIndex.value;
-    // Получаем задачу, на которую дропаем (если не в самый конец)
     let targetTask = visibleTasks.value[insertIndex];
-    // Получаем индекс в исходном массиве
     let targetIndex = targetTask
       ? getTaskIndex(targetTask)
       : tasks.value.length;
-    // Если перетаскиваем вниз по списку, и targetIndex > draggedIndex, уменьшаем targetIndex на 1
     if (targetIndex > draggedIndex) targetIndex--;
-    // Перемещаем задачу в исходном массиве
     if (draggedIndex !== -1) {
       const newTasks = [...tasks.value];
       const [movedTask] = newTasks.splice(draggedIndex, 1);
       newTasks.splice(targetIndex, 0, movedTask);
       tasks.value = newTasks;
+
+      // Save positions to backend
+      const reorderItems = newTasks.map((t, i) => ({ id: t.id, position: i }));
+      try {
+        await reorderTasksAPI(reorderItems);
+      } catch (e) {
+        console.error("Failed to save task order:", e);
+      }
     }
   }
   dropIndex.value = null;
@@ -288,6 +399,7 @@ async function openTaskDetails(task) {
 }
 function closeTaskDetails() {
   openedTask.value = null;
+  reloadTasksForCurrentDate();
 }
 
 function formatDate(date) {
@@ -420,7 +532,7 @@ function closeAddModal() {
 }
 
 function addTask() {
-  const { title, start, end, color, subtasks, isGlobal } = newTask.value;
+  const { title, start, end, color, subtasks, isGlobal, learningSkillId, learningGradeId } = newTask.value;
   if (!title || !end) return;
 
   const startDate = start
@@ -435,7 +547,9 @@ function addTask() {
     end: endDate,
     color,
     subtasks,
-    isGlobal, // передаем флаг глобальной задачи
+    isGlobal,
+    learningSkillId: learningSkillId || null,
+    learningGradeId: learningGradeId || null,
   };
 
   addTaskAPI(taskToAdd).then(() => {
@@ -470,6 +584,7 @@ function handleKeydown(e) {
 
 onMounted(() => {
   reloadTasksForCurrentDate();
+  loadLearningSkills();
   window.addEventListener("resize", updateCalendarWidth);
   updateCalendarWidth();
   window.addEventListener("keydown", handleKeydown);
@@ -666,28 +781,16 @@ function closeTimeStats() {
         </div>
         <v-icon icon="mdi-chevron-right" size="large" class="month-nav-icon" @click="handleNextMonth" />
       </div>
-      <div class="time-tracker-widget">
-        <TimeTrackerMini @openStats="openTimeStats" />
-      </div>
       <div class="header-right">
+        <button class="add-task-btn" @click="router.push('/learning-skills')">Навыки</button>
         <button class="add-task-btn" @click="openNyamaModal">Вкусняхи</button>
         <button class="add-task-btn" @click="openAddModal">
           + Добавить задачу
         </button>
         <button class="logout-btn" @click="logout">Выйти</button>
-        <button class="version-badge" @click="showBuildInfo = !showBuildInfo" :title="`v${appVersion} · ${buildTime}`">v{{ appVersion }}</button>
-        <div v-if="showBuildInfo" class="build-info-popup">
-          <div>Версия: <b>{{ appVersion }}</b></div>
-          <div>Сборка: <b>{{ buildTime }}</b></div>
-        </div>
       </div>
     </div>
     <div class="body">
-      <div class="taks-types-main-menu" @click="router.push('/diagrams')" title="Открыть Диаграммы">
-        <div class="taks-types-word">
-          <h3>Диаграммы</h3>
-        </div>
-      </div>
       <div class="columns-container" ref="calendarRef" @dragover="handleDragOver" @drop="handleDrop">
         <div v-for="col in daysInMonth" :key="col" ref="columnRef" class="column active" :class="{
           today:
@@ -698,72 +801,102 @@ function closeTimeStats() {
           <div class="column-number">{{ col }}</div>
         </div>
         <div class="tasks-container">
-          <template v-for="(task, index) in visibleTasks" :key="task.title">
-            <div v-if="dropIndex === index" class="drop-indicator" :style="{
-              top: `${TASKS_TOP_OFFSET + index * TASK_TOTAL_HEIGHT}px`,
-            }"></div>
-            <!-- <div>{{ task }}</div> -->
+          <!-- Skill brackets -->
+          <div
+            v-for="br in displayData.brackets"
+            :key="'br-' + br.skillId"
+            class="skill-bracket"
+            :style="{
+              top: (TASKS_TOP_OFFSET + br.startRow * TASK_TOTAL_HEIGHT - 4) + 'px',
+              height: ((br.endRow - br.startRow + 1) * TASK_TOTAL_HEIGHT - TASK_MARGIN + 8) + 'px',
+              borderColor: br.color,
+            }"
+          >
+            <div class="skill-bracket-controls">
+              <button class="skill-bracket-move" @click.stop="moveSkillGroup(br.skillId, -1)" title="Вверх">▲</button>
+              <button class="skill-bracket-move" @click.stop="moveSkillGroup(br.skillId, 1)" title="Вниз">▼</button>
+            </div>
+            <div class="skill-bracket-line" :style="{ borderColor: br.color }" @click="toggleSkillCollapse(br.skillId)" :title="br.title">
+              <span class="skill-bracket-label" :style="{ color: br.color }">{{ br.title }}</span>
+            </div>
+          </div>
+
+          <!-- Rows: tasks or collapsed placeholders -->
+          <template v-for="row in displayData.rows" :key="row.type + '-' + (row.task?.id || row.skill?.id)">
+            <!-- Collapsed skill row -->
+            <div
+              v-if="row.type === 'collapsed'"
+              class="skill-collapsed-row"
+              :style="{ top: (TASKS_TOP_OFFSET + row.rowIndex * TASK_TOTAL_HEIGHT) + 'px' }"
+              @click="toggleSkillCollapse(row.skill.id)"
+            >
+              <div class="skill-collapsed-dot" :style="{ background: row.skill.color }"></div>
+              <span class="skill-collapsed-name">{{ row.skill.title }}</span>
+              <span class="skill-collapsed-count">{{ row.taskCount }} задач</span>
+              <span class="skill-collapsed-expand">▸</span>
+            </div>
+          </template>
+
+          <template v-for="row in displayData.rows.filter(r => r.type === 'task')" :key="row.task.id">
             <div class="task-item" :class="{
-              'drag-over': dragOverTask === task,
-              dragging: draggedTask === task,
+              'drag-over': dragOverTask === row.task,
+              dragging: draggedTask === row.task,
             }" :style="{
-              top: `${TASKS_TOP_OFFSET + index * TASK_TOTAL_HEIGHT}px`,
-              left: `${(task.startDay - 1) * (100 / daysInMonth)}%`,
-              width: calcTaskWidth(task) + 'px',
+              top: `${TASKS_TOP_OFFSET + row.rowIndex * TASK_TOTAL_HEIGHT}px`,
+              left: `${(row.task.startDay - 1) * (100 / daysInMonth)}%`,
+              width: calcTaskWidth(row.task) + 'px',
               height: `${TASK_HEIGHT}px`,
-              // minWidth: getColumnWidth() + 'px',
               marginBottom: `${TASK_MARGIN}px`,
               background:
-                hoveredTask === task
-                  ? `linear-gradient(120deg, ${task.color}ee 90%, #18343b 100%)`
-                  : `linear-gradient(120deg, ${task.color}cc 25%, #18343b 100%)`,
-            }" draggable="true" @dragstart="handleDragStart(task, $event)" @dragend="handleDragEnd"
-              @mouseenter="hoveredTask = task" @mouseleave="hoveredTask = null" @click="openTaskDetails(task)">
+                hoveredTask === row.task
+                  ? `linear-gradient(120deg, ${row.task.color}ee 90%, #18343b 100%)`
+                  : `linear-gradient(120deg, ${row.task.color}cc 25%, #18343b 100%)`,
+            }" draggable="true" @dragstart="handleDragStart(row.task, $event)" @dragend="handleDragEnd"
+              @mouseenter="hoveredTask = row.task" @mouseleave="hoveredTask = null" @click="openTaskDetails(row.task)">
               <div class="task-inner">
                 <div class="task-row">
-                  <span class="task-title" v-if="task.totalDays >= 2">
-                    {{ task.title }}
+                  <span class="task-title" v-if="row.task.totalDays >= 2">
+                    {{ row.task.title }}
                   </span>
-                  <!-- <span class="task-icon">📚</span> -->
                   <div class="task-progres">
                     <div class="progress-thing" :style="{
                       backgroundColor: checkProgressBackgroundColor(
-                        checkProgress(task),
+                        checkProgress(row.task),
                       ),
                     }">
-                      {{ task.completedSubtasks }} / {{ task.totalSubtasks }}
+                      {{ row.task.completedSubtasks }} / {{ row.task.totalSubtasks }}
                     </div>
-                    <div v-if="task.totalDays >= 2">
-                      <div class="progress-icon" v-if="checkProgress(task) === PROGRESS_DONE">
+                    <div v-if="row.task.totalDays >= 2">
+                      <div class="progress-icon" v-if="checkProgress(row.task) === PROGRESS_DONE">
                         ✅
                       </div>
-                      <div class="progress-icon" v-if="checkProgress(task) === PROGRESS_NORMAL">
+                      <div class="progress-icon" v-if="checkProgress(row.task) === PROGRESS_NORMAL">
                         💨
                       </div>
-                      <div class="progress-icon" v-if="checkProgress(task) === PROGRESS_WARN">
+                      <div class="progress-icon" v-if="checkProgress(row.task) === PROGRESS_WARN">
                         ⚠️
                       </div>
-                      <div class="progress-icon" v-if="checkProgress(task) === PROGRESS_URGENT">
+                      <div class="progress-icon" v-if="checkProgress(row.task) === PROGRESS_URGENT">
                         ♨️
                       </div>
-                      <div class="progress-icon" v-if="checkProgress(task) === PROGRESS_FAILED">
+                      <div class="progress-icon" v-if="checkProgress(row.task) === PROGRESS_FAILED">
                         🤡
                       </div>
                     </div>
                   </div>
                 </div>
                 <div class="task-down">
-                  <div class="task-dates" :title="formatDate(task.start) + ' – ' + formatDate(task.end)
+                  <div class="task-dates" :title="formatDate(row.task.start) + ' – ' + formatDate(row.task.end)
                     " :class="{
                       'task-dates-small':
-                        task.steps > 12 || task.endDay - task.startDay + 1 < 4,
+                        row.task.steps > 12 || row.task.endDay - row.task.startDay + 1 < 4,
                     }">
-                    {{ formatShortDateRange(task.start, task.end) }}
+                    {{ formatShortDateRange(row.task.start, row.task.end) }}
                   </div>
-                  <div class="task-progress-bar-segments" v-if="task.steps > 0">
-                    <span v-for="n in task.steps" :key="n" class="segment" :class="{ filled: n <= task.stepActive }"
+                  <div class="task-progress-bar-segments" v-if="row.task.steps > 0">
+                    <span v-for="n in row.task.steps" :key="n" class="segment" :class="{ filled: n <= row.task.stepActive }"
                       :style="{
-                        backgroundColor: n <= task.stepActive ? task.color : '',
+                        backgroundColor: n <= row.task.stepActive ? row.task.color : '',
                       }"></span>
                   </div>
                 </div>
@@ -858,6 +991,22 @@ function closeTimeStats() {
             <label class="checkbox-label">
               <input v-model="newTask.isGlobal" type="checkbox" class="checkbox-input" />
               <span class="checkbox-text">Глобальная задача</span>
+            </label>
+
+            <!-- Навык -->
+            <label v-if="learningSkills.length">
+              Навык
+              <select v-model="newTask.learningSkillId" class="skill-select" @change="newTask.learningGradeId = null">
+                <option :value="null">Без навыка</option>
+                <option v-for="s in learningSkills" :key="s.id" :value="s.id">{{ s.title }}</option>
+              </select>
+            </label>
+            <label v-if="newTask.learningSkillId && selectedNewTaskSkill?.grades?.length">
+              Уровень
+              <select v-model="newTask.learningGradeId" class="skill-select">
+                <option :value="null">Не указан</option>
+                <option v-for="g in selectedNewTaskSkill.grades" :key="g.id" :value="g.id">{{ g.title }}</option>
+              </select>
             </label>
 
             <label>
@@ -1244,6 +1393,144 @@ function closeTimeStats() {
   bottom: 0;
   pointer-events: none;
   z-index: 2;
+}
+
+.skill-bracket {
+  position: absolute;
+  left: -36px;
+  width: 30px;
+  pointer-events: auto;
+  z-index: 3;
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+}
+
+.skill-bracket-controls {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 0.15s;
+  margin-right: 2px;
+}
+
+.skill-bracket:hover .skill-bracket-controls {
+  opacity: 1;
+}
+
+.skill-bracket-move {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.5);
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+  font-size: 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.skill-bracket-move:hover {
+  background: rgba(23, 103, 253, 0.2);
+  color: #fff;
+}
+
+.skill-bracket-line {
+  width: 6px;
+  border-left: 3px solid;
+  border-top: 3px solid;
+  border-bottom: 3px solid;
+  border-right: none;
+  border-radius: 4px 0 0 4px;
+  cursor: pointer;
+  transition: opacity 0.2s;
+  position: relative;
+  flex: 1;
+}
+
+.skill-bracket-line:hover {
+  opacity: 0.7;
+}
+
+.skill-bracket-label {
+  position: absolute;
+  left: -8px;
+  top: 50%;
+  transform: translateX(-100%) translateY(-50%);
+  font-size: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 0.15s;
+  pointer-events: none;
+}
+
+.skill-bracket:hover .skill-bracket-label {
+  opacity: 1;
+}
+
+.skill-collapsed-row {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 16px 0 24px;
+  cursor: pointer;
+  pointer-events: auto;
+  z-index: 3;
+  opacity: 0.7;
+  transition: opacity 0.15s;
+}
+
+.skill-collapsed-row:hover {
+  opacity: 1;
+}
+
+.skill-collapsed-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.skill-collapsed-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+}
+
+.skill-collapsed-count {
+  font-size: 11px;
+  color: rgba(255,255,255,0.4);
+}
+
+.skill-collapsed-expand {
+  font-size: 14px;
+  color: rgba(255,255,255,0.4);
+  margin-left: auto;
+}
+
+.skill-select {
+  width: 100%;
+  background: #18191f;
+  color: #fff;
+  border: 1px solid rgba(23, 103, 253, 0.2);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 14px;
+  margin-top: 4px;
+}
+
+.skill-select option {
+  background: #18191f;
+  color: #fff;
 }
 
 .task-item {

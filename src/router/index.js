@@ -65,6 +65,11 @@ const router = createRouter({
       name: "JourneyMap",
       component: () => import("../views/JourneyMapView.vue"),
     },
+    {
+      path: "/learning-skills",
+      name: "LearningSkills",
+      component: () => import("../views/LearningSkillsView.vue"),
+    },
   ],
 });
 
