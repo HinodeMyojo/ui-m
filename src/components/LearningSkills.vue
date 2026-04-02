@@ -147,7 +147,26 @@ const importPrompt = `Сгенерируй JSON-массив уровней дл
 
 // --- Helpers ---
 function gradeProgress(g) { return g.totalTasks ? Math.round((g.completedTasks / g.totalTasks) * 100) : 0; }
-function getExamForGrade(gid) { return selectedSkill.value?.exams?.find(e => e.afterGradeId === gid); }
+function getExamsForGrade(gid) { return (selectedSkill.value?.exams || []).filter(e => e.afterGradeId === gid); }
+
+// Auto-gradient color for grade badge: from skill color (first) to darker (last)
+function gradeColor(gi, total) {
+  const sk = selectedSkill.value;
+  if (!sk) return '#666';
+  const base = sk.color;
+  // Darken by mixing with black proportionally
+  const factor = total > 1 ? 1 - (gi / (total - 1)) * 0.6 : 1;
+  return adjustBrightness(base, factor);
+}
+
+function adjustBrightness(hex, factor) {
+  let c = hex.replace('#', '');
+  if (c.length === 3) c = c[0]+c[0]+c[1]+c[1]+c[2]+c[2];
+  const r = Math.round(parseInt(c.slice(0,2), 16) * factor);
+  const g = Math.round(parseInt(c.slice(2,4), 16) * factor);
+  const b = Math.round(parseInt(c.slice(4,6), 16) * factor);
+  return `rgb(${r},${g},${b})`;
+}
 function formatDateShort(d) { return d ? new Date(d).toLocaleDateString("ru", { day: "numeric", month: "short" }) : "?"; }
 
 function groupTasksByMonth(tasks) {
@@ -268,7 +287,7 @@ watch([planMonth, planYear], async () => {
         <div class="sk-grades">
           <div v-for="(grade, gi) in selectedSkill.grades" :key="grade.id" class="sk-grade-wrap">
             <div class="sk-grade" :class="{ completed: grade.isCompleted }" @click="openGradePanel(grade)">
-              <div class="sk-grade-badge" :style="{ background: grade.isCompleted ? '#22c55e' : selectedSkill.color }">
+              <div class="sk-grade-badge" :style="{ background: grade.isCompleted ? '#22c55e' : gradeColor(gi, selectedSkill.grades.length) }">
                 {{ grade.isCompleted ? '✓' : gi + 1 }}
               </div>
               <div class="sk-grade-body">
@@ -281,7 +300,7 @@ watch([planMonth, planYear], async () => {
                 </div>
               </div>
               <div class="sk-grade-progress">
-                <div class="sk-grade-progress-bar"><div class="sk-grade-progress-fill" :style="{ width: gradeProgress(grade) + '%', background: selectedSkill.color }"></div></div>
+                <div class="sk-grade-progress-bar"><div class="sk-grade-progress-fill" :style="{ width: gradeProgress(grade) + '%', background: gradeColor(gi, selectedSkill.grades.length) }"></div></div>
                 <span class="sk-grade-progress-pct">{{ gradeProgress(grade) }}%</span>
               </div>
               <div class="sk-grade-actions" @click.stop>
@@ -319,14 +338,14 @@ watch([planMonth, planYear], async () => {
             </div>
             <div v-else class="sk-no-tasks">Привяжи задачи на главной</div>
 
-            <!-- Exam -->
-            <div v-if="getExamForGrade(grade.id)" class="sk-exam" :class="{ passed: getExamForGrade(grade.id).passed }" @click="openExamPanel(getExamForGrade(grade.id))">
-              <div class="sk-exam-icon">{{ getExamForGrade(grade.id).passed ? '🏆' : '📝' }}</div>
+            <!-- Exams (multiple per grade) -->
+            <div v-for="exam in getExamsForGrade(grade.id)" :key="exam.id" class="sk-exam" :class="{ passed: exam.passed }" @click="openExamPanel(exam)">
+              <div class="sk-exam-icon">{{ exam.passed ? '🏆' : '📝' }}</div>
               <div class="sk-exam-body">
-                <div class="sk-exam-label">{{ getExamForGrade(grade.id).passed ? 'Тест пройден' : 'Промежуточный тест' }}</div>
-                <div class="sk-exam-name">{{ getExamForGrade(grade.id).title }}</div>
+                <div class="sk-exam-label">{{ exam.passed ? 'Тест пройден' : 'Промежуточный тест' }}</div>
+                <div class="sk-exam-name">{{ exam.title }}</div>
               </div>
-              <input type="checkbox" class="sk-exam-cb" :checked="getExamForGrade(grade.id).passed" @change.stop="toggleExamPassed(getExamForGrade(grade.id))" @click.stop />
+              <input type="checkbox" class="sk-exam-cb" :checked="exam.passed" @change.stop="toggleExamPassed(exam)" @click.stop />
             </div>
 
             <div v-if="gi < selectedSkill.grades.length - 1" class="sk-connector" :style="{ background: selectedSkill.color + '20' }"></div>
@@ -353,7 +372,7 @@ watch([planMonth, planYear], async () => {
 
             <!-- Grade panel -->
             <template v-if="detailPanel.type === 'grade'">
-              <div class="sk-panel-badge" :style="{ background: selectedSkill?.color }">{{ detailPanel.data.position + 1 }}</div>
+              <div class="sk-panel-badge" :style="{ background: gradeColor(detailPanel.data.position, selectedSkill?.grades?.length || 1) }">{{ detailPanel.data.position + 1 }}</div>
               <h3>{{ detailPanel.data.title }}</h3>
               <div v-if="detailPanel.data.imageUrl" class="sk-panel-img"><img :src="detailPanel.data.imageUrl" /></div>
               <p class="sk-panel-desc">{{ detailPanel.data.description || 'Нет описания' }}</p>
