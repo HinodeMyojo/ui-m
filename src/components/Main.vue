@@ -387,7 +387,22 @@ function importSubtasksFromJson() {
 }
 
 function copyPromptToClipboard() {
-  navigator.clipboard.writeText(jsonImportPrompt).catch(() => {});
+  if (navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(jsonImportPrompt).catch(() => fallbackCopy(jsonImportPrompt));
+  } else {
+    fallbackCopy(jsonImportPrompt);
+  }
+}
+
+function fallbackCopy(text) {
+  const ta = document.createElement("textarea");
+  ta.value = text;
+  ta.style.position = "fixed";
+  ta.style.left = "-9999px";
+  document.body.appendChild(ta);
+  ta.select();
+  document.execCommand("copy");
+  document.body.removeChild(ta);
 }
 
 function openAddModal() {
