@@ -287,7 +287,8 @@ const MIN_TASK_WIDTH = ref(120);
 
 function updateCalendarWidth() {
   if (calendarRef.value) {
-    calendarWidth.value = calendarRef.value.offsetWidth;
+    // Subtract padding-left (44px) since tasks-container starts after it
+    calendarWidth.value = calendarRef.value.offsetWidth - 44;
   }
 }
 
@@ -1395,7 +1396,7 @@ function closeTimeStats() {
 .tasks-container {
   position: absolute;
   top: 0;
-  left: 0;
+  left: 44px;
   right: 0;
   bottom: 0;
   pointer-events: none;
@@ -1698,17 +1699,16 @@ function closeTimeStats() {
 }
 
 .header-left {
-  flex: 1;
-  width: 100%;
+  flex: 0 0 auto;
+  max-width: 280px;
   height: 100%;
   display: flex;
   align-items: center;
-  justify-content: center;
   /* background-color: #6e4aff; */
 }
 
 .header-center {
-  flex: 0.9;
+  flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1725,11 +1725,11 @@ function closeTimeStats() {
 }
 
 .header-right {
-  flex: 1;
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  position: relative;
+  gap: 8px;
 }
 
 .month-block {
