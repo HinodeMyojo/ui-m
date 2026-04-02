@@ -287,8 +287,7 @@ const MIN_TASK_WIDTH = ref(120);
 
 function updateCalendarWidth() {
   if (calendarRef.value) {
-    // Subtract padding-left (44px) since tasks-container starts after it
-    calendarWidth.value = calendarRef.value.offsetWidth - 44;
+    calendarWidth.value = calendarRef.value.offsetWidth;
   }
 }
 
@@ -1186,20 +1185,24 @@ function closeTimeStats() {
 
 <style scoped>
 .main {
+  flex: 1;
   width: 100%;
-  height: 100vh;
+  min-height: 100vh;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  align-items: center;
+  justify-content: center;
+  position: relative;
 }
 
 .body {
   width: 100%;
-  flex: 1;
-  min-height: 0;
+  min-height: 100vh;
+  flex: 5;
   position: relative;
-  overflow-y: auto;
-  scrollbar-width: thin;
+  flex-direction: row;
+  align-items: center;
+  scrollbar-width: auto;
   scrollbar-color: #6e4aff #111;
   /* background: #11111113; */
 }
@@ -1253,7 +1256,6 @@ function closeTimeStats() {
   display: flex;
   position: relative;
   background: transparent;
-  padding-left: 44px;
 }
 
 .column {
@@ -1396,7 +1398,7 @@ function closeTimeStats() {
 .tasks-container {
   position: absolute;
   top: 0;
-  left: 44px;
+  left: 0;
   right: 0;
   bottom: 0;
   pointer-events: none;
@@ -1405,8 +1407,8 @@ function closeTimeStats() {
 
 .skill-bracket {
   position: absolute;
-  left: 4px;
-  width: 34px;
+  left: -36px;
+  width: 30px;
   pointer-events: auto;
   z-index: 3;
   display: flex;
@@ -1467,8 +1469,9 @@ function closeTimeStats() {
 
 .skill-bracket-label {
   position: absolute;
-  left: 10px;
-  top: -14px;
+  left: -8px;
+  top: 50%;
+  transform: translateX(-100%) translateY(-50%);
   font-size: 10px;
   font-weight: 600;
   white-space: nowrap;
@@ -1690,25 +1693,26 @@ function closeTimeStats() {
 
 .header {
   width: 100%;
+  flex: 1;
   display: flex;
   align-items: center;
   justify-content: space-between;
   border-bottom: 2px solid #1e2025;
   min-height: 62px;
-  flex-shrink: 0;
 }
 
 .header-left {
-  flex: 0 0 auto;
-  max-width: 280px;
+  flex: 1;
+  width: 100%;
   height: 100%;
   display: flex;
   align-items: center;
+  justify-content: center;
   /* background-color: #6e4aff; */
 }
 
 .header-center {
-  flex: 1;
+  flex: 0.9;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1725,11 +1729,11 @@ function closeTimeStats() {
 }
 
 .header-right {
-  flex: 0 0 auto;
+  flex: 1;
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 8px;
+  position: relative;
 }
 
 .month-block {
@@ -2403,8 +2407,8 @@ function closeTimeStats() {
 /* ====== MOBILE RESPONSIVE ====== */
 @media (max-width: 768px) {
   .main {
-    height: 100vh;
-    height: 100dvh;
+    min-height: 100vh;
+    min-height: 100dvh;
   }
 
   .header {
