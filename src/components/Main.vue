@@ -323,6 +323,73 @@ function removeSubtask(idx) {
   newTask.value.subtasks.splice(idx, 1);
 }
 
+// --- JSON Import ---
+const showJsonImport = ref(false);
+const jsonImportText = ref("");
+const jsonImportError = ref("");
+
+const jsonImportPrompt = `Сгенерируй JSON-массив подзадач для проекта/задачи, которую я опишу.
+
+Формат — массив объектов:
+[
+  { "title": "Название подзадачи" },
+  { "title": "Ещё одна подзадача" }
+]
+
+Правила:
+- Каждый объект ОБЯЗАН иметь поле "title" (строка)
+- Разбивай задачу на конкретные, выполнимые шаги
+- Порядок = логическая последовательность выполнения
+- Без вложенности — плоский массив
+- Только JSON, без markdown, без пояснений
+
+Пример запроса: "Сделать лендинг для кофейни"
+Пример ответа:
+[
+  { "title": "Собрать референсы и мудборд" },
+  { "title": "Нарисовать wireframe главной страницы" },
+  { "title": "Дизайн Hero-секции" },
+  { "title": "Секция меню с карточками напитков" },
+  { "title": "Секция 'О нас' с фото" },
+  { "title": "Контакты и карта" },
+  { "title": "Адаптив под мобильные" },
+  { "title": "Вёрстка HTML/CSS" },
+  { "title": "Подключить форму обратной связи" },
+  { "title": "Деплой на хостинг" }
+]
+
+Моя задача:`;
+
+function importSubtasksFromJson() {
+  jsonImportError.value = "";
+  try {
+    const parsed = JSON.parse(jsonImportText.value.trim());
+    if (!Array.isArray(parsed)) {
+      jsonImportError.value = "JSON должен быть массивом [ ... ]";
+      return;
+    }
+    const startPos = newTask.value.subtasks.length;
+    for (let i = 0; i < parsed.length; i++) {
+      const item = parsed[i];
+      const title = item.title || item.name || item.text;
+      if (!title) continue;
+      newTask.value.subtasks.push({
+        title: String(title),
+        completed: false,
+        position: startPos + i,
+      });
+    }
+    jsonImportText.value = "";
+    showJsonImport.value = false;
+  } catch (e) {
+    jsonImportError.value = "Невалидный JSON: " + e.message;
+  }
+}
+
+function copyPromptToClipboard() {
+  navigator.clipboard.writeText(jsonImportPrompt).catch(() => {});
+}
+
 function openAddModal() {
   showAddModal.value = true;
   resetNewTaskForm();
@@ -787,6 +854,27 @@ function closeTimeStats() {
                   +
                 </button>
               </div>
+
+              <!-- JSON Import -->
+              <button type="button" class="json-import-toggle" @click="showJsonImport = !showJsonImport">
+                {{ showJsonImport ? '▾ Скрыть импорт JSON' : '▸ Импорт из JSON' }}
+              </button>
+
+              <div v-if="showJsonImport" class="json-import-section">
+                <div class="json-import-prompt-row">
+                  <span class="json-import-hint">Скопируй промпт для нейронки, опиши задачу — вставь сюда результат</span>
+                  <button type="button" class="json-import-copy-btn" @click="copyPromptToClipboard">📋 Копировать промпт</button>
+                </div>
+                <textarea
+                  v-model="jsonImportText"
+                  class="json-import-textarea"
+                  rows="6"
+                  placeholder='[{ "title": "Подзадача 1" }, { "title": "Подзадача 2" }]'
+                ></textarea>
+                <div v-if="jsonImportError" class="json-import-error">{{ jsonImportError }}</div>
+                <button type="button" class="json-import-btn" @click="importSubtasksFromJson">Импортировать</button>
+              </div>
+
               <ul v-if="newTask.subtasks && newTask.subtasks.length">
                 <li v-for="(sub, idx) in newTask.subtasks" :key="idx">
                   <div class="added-subtask">
@@ -1480,6 +1568,101 @@ function closeTimeStats() {
 .add-subtask:hover {
   background: #232b33;
   box-shadow: 0 4px 16px 0 rgba(44, 47, 54, 0.18);
+}
+
+.json-import-toggle {
+  background: none;
+  border: none;
+  color: rgba(23, 103, 253, 0.8);
+  font-size: 13px;
+  cursor: pointer;
+  padding: 6px 0;
+  margin-top: 8px;
+  display: block;
+}
+
+.json-import-toggle:hover {
+  color: #1767fd;
+}
+
+.json-import-section {
+  margin-top: 8px;
+  padding: 12px;
+  background: rgba(23, 103, 253, 0.04);
+  border: 1px solid rgba(23, 103, 253, 0.15);
+  border-radius: 10px;
+}
+
+.json-import-prompt-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  gap: 8px;
+}
+
+.json-import-hint {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 11px;
+  flex: 1;
+}
+
+.json-import-copy-btn {
+  background: rgba(23, 103, 253, 0.1);
+  border: 1px solid rgba(23, 103, 253, 0.3);
+  color: #1767fd;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s;
+}
+
+.json-import-copy-btn:hover {
+  background: rgba(23, 103, 253, 0.2);
+}
+
+.json-import-textarea {
+  width: 100%;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(23, 103, 253, 0.2);
+  border-radius: 8px;
+  padding: 10px;
+  color: #fff;
+  font-size: 12px;
+  font-family: monospace;
+  resize: vertical;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.json-import-textarea:focus {
+  border-color: rgba(23, 103, 253, 0.5);
+}
+
+.json-import-error {
+  color: #f87171;
+  font-size: 12px;
+  margin-top: 6px;
+}
+
+.json-import-btn {
+  margin-top: 8px;
+  width: 100%;
+  padding: 8px;
+  background: linear-gradient(135deg, #1767fd, #6e4aff);
+  border: none;
+  border-radius: 8px;
+  color: #fff;
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.json-import-btn:hover {
+  filter: brightness(1.15);
 }
 
 .modal-card {
