@@ -242,6 +242,36 @@ export async function deleteTaskAPI(id) {
   });
 }
 
+// chat api
+export async function fetchChatMessages(chatId, context) {
+  let url = `${API_BASE_URL}/api/v1/chats/messages?chat_id=${chatId}`;
+  if (context) url += `&context=${encodeURIComponent(context)}`;
+  const response = await authorizedFetch(url);
+  return await response.json();
+}
+
+export async function sendChatMessage(chatId, text, context, files, images) {
+  const token = localStorage.getItem("token");
+  const formData = new FormData();
+  formData.append("chat_id", chatId);
+  formData.append("text", text);
+  formData.append("context", context || "task");
+  if (images) for (const img of images) formData.append("images", img);
+  if (files) for (const f of files) formData.append("files", f);
+
+  const response = await fetch(`${API_BASE_URL}/api/v1/chats/message`, {
+    method: "POST",
+    headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    body: formData,
+  });
+  if (response.status === 401) {
+    localStorage.removeItem("token");
+    window.location.href = "/login";
+    throw new Error("Unauthorized");
+  }
+  return await response.json();
+}
+
 // vocabulary api
 export async function fetchVocabCards() {
   const response = await authorizedFetch(`${API_BASE_URL}/api/v1/vocab`);

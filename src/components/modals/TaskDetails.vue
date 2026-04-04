@@ -190,14 +190,13 @@
         >
           <div class="chat-header" ref="chatHeaderRef">
             <div class="chat-header-content">
-              <button
-                v-if="chatValue?.id !== null"
-                class="back-button"
-                @click="openTaskChat"
-              >
-                <svg-icon type="mdi" :path="mdiArrowLeft" size="20"></svg-icon>
-              </button>
-              <h3>{{ chatValue?.name || task.title }}</h3>
+              <h3>Чат</h3>
+              <div class="chat-context-tabs">
+                <button class="chat-ctx-tab" :class="{ active: chatContext === 'task' }" @click="setChatContext('task')">Задача</button>
+                <button v-if="task.learningSkillId" class="chat-ctx-tab" :class="{ active: chatContext === 'skill:' + task.learningSkillId }" @click="setChatContext('skill:' + task.learningSkillId)">Навык</button>
+                <button v-if="task.learningGradeId" class="chat-ctx-tab" :class="{ active: chatContext === 'grade:' + task.learningGradeId }" @click="setChatContext('grade:' + task.learningGradeId)">Уровень</button>
+                <button class="chat-ctx-tab" :class="{ active: chatContext === 'all' }" @click="setChatContext('all')">Все</button>
+              </div>
             </div>
           </div>
           <!-- Зоны загрузки внутри чата, но перед сообщениями -->
@@ -468,6 +467,8 @@ import {
   fetchProgress,
   fetchLearningSkills,
   assignTaskLearningSkill,
+  fetchChatMessages,
+  sendChatMessage,
 } from "../api.js";
 
 import {
@@ -605,8 +606,10 @@ const reloadTask = async () => {
 };
 
 // Chat functionality
-const messagesVar = ref(null);
+const messagesVar = ref([]);
 const chatValue = ref(null);
+const chatContext = ref("task"); // "task" | "skill:{id}" | "grade:{id}"
+const chatLoading = ref(false);
 const chatMainRef = ref(null);
 const chatMessageRef = ref(null);
 
@@ -875,62 +878,62 @@ const isSelected = function (subtask) {
 const clickSubtask = async (subtask) => {
   selectedSubtask.value = subtask;
   selectedSubtaskId.value = subtask.id;
-  chatValue.value = { name: subtask.title };
-  const chatR = chat[chatValue.value.id];
-  if (chatR) {
-    messagesVar.value = chatR.messages;
+};
+
+// Загрузить сообщения из API
+async function loadChatMessages() {
+  const chat = task.value?.chat;
+  if (!chat?.id) return;
+  chatLoading.value = true;
+  try {
+    const msgs = await fetchChatMessages(chat.id, chatContext.value);
+    messagesVar.value = msgs || [];
+  } catch (e) {
+    console.error("Failed to load messages:", e);
+    messagesVar.value = [];
+  } finally {
+    chatLoading.value = false;
     setTimeout(scrollToBottom, 100);
   }
-};
+}
 
 // Функция для открытия общего чата задачи
 const openTaskChat = () => {
   chatValue.value = task.value.chat;
-  chatValue.value.id = null;
-  messagesVar.value = chatValue.value.messages;
-  setTimeout(scrollToBottom, 100);
+  chatContext.value = "task";
+  loadChatMessages();
 };
+
+// Переключить контекст чата
+function setChatContext(ctx) {
+  chatContext.value = ctx;
+  loadChatMessages();
+}
 
 async function deleteTask(task) {
   await deleteTaskAPI(task.id);
   location.reload();
 }
 
-// Прокрутка при отправке сообщения
+// Отправка сообщения через API
 async function sendMessage() {
-  const chatMessageRef = ref(null);
+  const chat = task.value?.chat;
+  if (!chat?.id) return;
+
   const messageText = chatMessageRef.value?.getMessage() || "";
+  if (!messageText.trim() && previewFiles.value.length === 0) return;
 
-  if (!messageText && previewFiles.value.length === 0) return;
+  const imageFiles = previewFiles.value.filter(f => f.type?.startsWith("image/")).map(f => f.file);
+  const otherFiles = previewFiles.value.filter(f => !f.type?.startsWith("image/")).map(f => f.file);
 
-  const newMessage = {
-    id: Date.now(),
-    text: messageText,
-    date: new Date().toLocaleTimeString(),
-    attachments: {
-      images: previewFiles.value
-        .filter((file) => file.type.startsWith("image/"))
-        .map((file) => ({
-          id: Date.now() + Math.random(),
-          original: file.preview,
-          thumbnail: file.preview,
-        })),
-      files: previewFiles.value
-        .filter((file) => !file.type.startsWith("image/"))
-        .map((file) => ({
-          id: Date.now() + Math.random(),
-          name: file.name,
-          type: file.type,
-          size: file.file.size,
-          url: URL.createObjectURL(file.file),
-        })),
-    },
-  };
-
-  messagesVar.value = [...(messagesVar.value || []), newMessage];
-  chatMessageRef.value?.clearMessage();
-  previewFiles.value = [];
-  setTimeout(scrollToBottom, 100);
+  try {
+    await sendChatMessage(chat.id, messageText.trim(), chatContext.value, otherFiles, imageFiles);
+    chatMessageRef.value?.clearMessage();
+    previewFiles.value = [];
+    await loadChatMessages();
+  } catch (e) {
+    console.error("Failed to send message:", e);
+  }
 }
 
 onMounted(() => {
@@ -2343,10 +2346,47 @@ function getFileIcon(type) {
 .chat-header-content {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   width: 100%;
   padding: 0 8px;
   min-width: 0;
+}
+
+.chat-header-content h3 {
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(255,255,255,0.6);
+  flex-shrink: 0;
+}
+
+.chat-context-tabs {
+  display: flex;
+  gap: 3px;
+  flex: 1;
+  min-width: 0;
+}
+
+.chat-ctx-tab {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  color: rgba(255,255,255,0.5);
+  padding: 3px 8px;
+  border-radius: 5px;
+  font-size: 11px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.12s;
+}
+
+.chat-ctx-tab:hover {
+  background: rgba(255,255,255,0.08);
+  color: #fff;
+}
+
+.chat-ctx-tab.active {
+  background: rgba(23,103,253,0.15);
+  border-color: rgba(23,103,253,0.3);
+  color: #6ea8ff;
 }
 
 .back-button {

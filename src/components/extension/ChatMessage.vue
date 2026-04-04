@@ -3,6 +3,7 @@
     <textarea
       v-model="message"
       @input="adjustTextarea"
+      @keydown.enter.exact="$emit('send')"
       ref="textarea"
       class="autoresize"
       placeholder="Введите текст..."
@@ -13,13 +14,28 @@
 <script setup>
 import { ref } from "vue";
 
+const emit = defineEmits(["send"]);
 const message = ref("");
 const textarea = ref(null);
 
 const adjustTextarea = () => {
+  if (!textarea.value) return;
   textarea.value.style.height = "auto";
   textarea.value.style.height = `${textarea.value.scrollHeight}px`;
 };
+
+function getMessage() {
+  return message.value;
+}
+
+function clearMessage() {
+  message.value = "";
+  if (textarea.value) {
+    textarea.value.style.height = "auto";
+  }
+}
+
+defineExpose({ getMessage, clearMessage });
 </script>
 
 <style scoped>
@@ -34,9 +50,10 @@ const adjustTextarea = () => {
   max-height: 120px;
   box-sizing: border-box;
   resize: none;
-  -webkit-transition: 0.5s;
-  transition: 0.5s;
+  transition: 0.3s;
   outline: none;
   background-color: transparent;
+  color: #fff;
+  font-size: 14px;
 }
 </style>
