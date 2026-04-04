@@ -799,6 +799,11 @@ function closeTimeStats() {
           + Добавить задачу
         </button>
         <button class="logout-btn" @click="logout">Выйти</button>
+        <button class="version-badge" @click="showBuildInfo = !showBuildInfo" :title="`v${appVersion} · ${buildTime}`">v{{ appVersion }}</button>
+        <div v-if="showBuildInfo" class="build-info-popup">
+          <div>Версия: <b>{{ appVersion }}</b></div>
+          <div>Сборка: <b>{{ buildTime }}</b></div>
+        </div>
       </div>
     </div>
     <div class="body">
@@ -1099,9 +1104,9 @@ function closeTimeStats() {
           <div class="icon">🗺️</div>
           <p class="text">Карта пути</p>
         </button>
-        <button class="nyamaaa nyamaaa-soon nyamaaa-unknown" disabled>
-          <div class="icon">❓</div>
-          <span class="nyama-badge">Неизвестно</span>
+        <button class="nyamaaa" @click="router.push('/testing')">
+          <div class="icon">📝</div>
+          <p class="text">Тестирование</p>
         </button>
         <button class="nyamaaa nyamaaa-soon nyamaaa-unknown" disabled>
           <div class="icon">❓</div>

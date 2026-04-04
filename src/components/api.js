@@ -545,3 +545,46 @@ export async function importLearningGrades(learningSkillId, grades) {
     body: JSON.stringify({ learningSkillId, grades }),
   });
 }
+
+// === Testing Platform API ===
+
+const T = `${API_BASE_URL}/api/v1/testing`;
+
+// Suites
+export async function fetchTestSuites() { return (await authorizedFetch(`${T}/suites`)).json(); }
+export async function fetchTestSuite(id) { return (await authorizedFetch(`${T}/suites/${id}`)).json(); }
+export async function createTestSuite(data) { return (await authorizedFetch(`${T}/suites`, { method: "POST", body: JSON.stringify(data) })).json(); }
+export async function updateTestSuite(id, data) { await authorizedFetch(`${T}/suites/${id}`, { method: "PUT", body: JSON.stringify(data) }); }
+export async function deleteTestSuite(id) { await authorizedFetch(`${T}/suites/${id}`, { method: "DELETE" }); }
+
+// Topics
+export async function createTestTopic(data) { return (await authorizedFetch(`${T}/topics`, { method: "POST", body: JSON.stringify(data) })).json(); }
+export async function updateTestTopic(id, data) { await authorizedFetch(`${T}/topics/${id}`, { method: "PUT", body: JSON.stringify(data) }); }
+export async function deleteTestTopic(id) { await authorizedFetch(`${T}/topics/${id}`, { method: "DELETE" }); }
+
+// Subtopics
+export async function createTestSubtopic(data) { return (await authorizedFetch(`${T}/subtopics`, { method: "POST", body: JSON.stringify(data) })).json(); }
+export async function updateTestSubtopic(id, data) { await authorizedFetch(`${T}/subtopics/${id}`, { method: "PUT", body: JSON.stringify(data) }); }
+export async function deleteTestSubtopic(id) { await authorizedFetch(`${T}/subtopics/${id}`, { method: "DELETE" }); }
+
+// Questions
+export async function fetchTestQuestions(topicId, subtopicId) {
+  let url = `${T}/questions?`;
+  if (subtopicId) url += `subtopic_id=${subtopicId}`;
+  else if (topicId) url += `topic_id=${topicId}`;
+  return (await authorizedFetch(url)).json();
+}
+export async function createTestQuestion(data) { return (await authorizedFetch(`${T}/questions`, { method: "POST", body: JSON.stringify(data) })).json(); }
+export async function updateTestQuestion(id, data) { await authorizedFetch(`${T}/questions/${id}`, { method: "PUT", body: JSON.stringify(data) }); }
+export async function deleteTestQuestion(id) { await authorizedFetch(`${T}/questions/${id}`, { method: "DELETE" }); }
+export async function importTestQuestions(data) { return (await authorizedFetch(`${T}/questions/import`, { method: "POST", body: JSON.stringify(data) })).json(); }
+
+// Exams
+export async function createTestExam(data) { return (await authorizedFetch(`${T}/exams`, { method: "POST", body: JSON.stringify(data) })).json(); }
+export async function fetchTestExam(id) { return (await authorizedFetch(`${T}/exams/${id}`)).json(); }
+export async function submitTestAnswer(data) { await authorizedFetch(`${T}/exams/answer`, { method: "POST", body: JSON.stringify(data) }); }
+export async function finishTestExam(data) { return (await authorizedFetch(`${T}/exams/finish`, { method: "POST", body: JSON.stringify(data) })).json(); }
+export async function fetchExamHistory(suiteId) { return (await authorizedFetch(`${T}/exams/history?suite_id=${suiteId}`)).json(); }
+
+// Stats
+export async function fetchTestStats(suiteId) { return (await authorizedFetch(`${T}/stats?suite_id=${suiteId}`)).json(); }

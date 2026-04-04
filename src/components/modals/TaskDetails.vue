@@ -233,8 +233,9 @@
           </div>
           <div class="chat-main" ref="chatMainRef">
             <div class="chat-main-inner">
-              <div v-if="messagesVar == null" class="empty-chat">
-                <img src="@/assets/gif/bonfire-dark-souls.gif" alt="" />
+              <div v-if="!messagesVar || !messagesVar.length" class="empty-chat">
+                <img src="@/assets/gif/bonfire-dark-souls.gif" alt="" class="bonfire-bg" />
+                <span class="empty-chat-text">Напиши первое сообщение</span>
               </div>
               <div
                 v-for="message in messagesVar"
@@ -1774,11 +1775,22 @@ function getFileIcon(type) {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 16px;
-  color: #ffffff;
-  opacity: 0.6;
-  font-size: 14px;
+  gap: 8px;
   user-select: none;
+}
+
+.bonfire-bg {
+  width: 120px;
+  height: 120px;
+  object-fit: contain;
+  opacity: 0.5;
+  filter: drop-shadow(0 0 20px rgba(255, 150, 50, 0.3));
+}
+
+.empty-chat-text {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.25);
+  font-style: italic;
 }
 
 .chat-main-inner {
