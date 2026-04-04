@@ -2,10 +2,10 @@
 import { ref, computed, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import {
-  fetchTestSuites, fetchTestSuite, createTestSuite, deleteTestSuite,
-  createTestTopic, deleteTestTopic,
-  createTestSubtopic, deleteTestSubtopic,
-  fetchTestQuestions, createTestQuestion, deleteTestQuestion, importTestQuestions,
+  fetchTestSuites, fetchTestSuite, createTestSuite, updateTestSuite, deleteTestSuite,
+  createTestTopic, updateTestTopic, deleteTestTopic,
+  createTestSubtopic, updateTestSubtopic, deleteTestSubtopic,
+  fetchTestQuestions, createTestQuestion, updateTestQuestion, deleteTestQuestion, importTestQuestions,
   createTestExam, submitTestAnswer, finishTestExam,
   fetchExamHistory, fetchTestStats,
   fetchLearningSkills,
@@ -29,17 +29,25 @@ const examAnswers = ref({});
 const examResults = ref(null);
 const examMode = ref("exam");
 
+// Practice mode — instant feedback
+const practiceResult = ref(null); // { isCorrect, explanation } shown after each answer in practice
+
 // Modals
-const modal = ref(null); // 'suite' | 'topic' | 'subtopic' | 'question' | 'importQ' | 'importTopics' | 'examSetup'
+const modal = ref(null); // 'suite' | 'editSuite' | 'topic' | 'editTopic' | 'subtopic' | 'question' | 'editQuestion' | 'importQ' | 'importTopics' | 'examSetup'
+
+// List filtering
+const filterSkillId = ref(null);
 
 // Forms
-const suiteForm = ref({ title: "", description: "", passingScore: 60, learningSkillId: null, learningGradeId: null });
+const suiteForm = ref({ title: "", description: "", icon: "📋", passingScore: 60, learningSkillId: null, learningGradeId: null });
 const topicForm = ref({ title: "", description: "" });
 const subtopicForm = ref({ testTopicId: "", title: "" });
 const importJson = ref("");
 const importError = ref("");
 const importTopicsJson = ref("");
 const importTopicsError = ref("");
+const editTopicForm = ref({ id: null, title: "", description: "" });
+const editSubtopicForm = ref({ id: null, title: "" });
 const examSetup = ref({ questionCount: 20, mode: "exam", shuffle: true, timeLimitMin: null, topicIds: [], difficulties: [], types: [] });
 
 // Question form — dynamic by type
@@ -89,6 +97,23 @@ async function saveSuite() {
 }
 async function removeSuite(id) { if (!confirm("Удалить?")) return; await deleteTestSuite(id); await loadSuites(); }
 
+function startEditSuite(s) {
+  suiteForm.value = { title: s.title, description: s.description || "", icon: s.icon || "📋", passingScore: s.passingScore, learningSkillId: s.learningSkillId, learningGradeId: s.learningGradeId };
+  modal.value = "editSuite";
+}
+async function saveEditSuite() {
+  if (!selectedSuite.value) return;
+  await updateTestSuite(selectedSuite.value.id, suiteForm.value);
+  modal.value = null;
+  await openSuite(selectedSuite.value.id);
+}
+
+// Filtered suites
+const filteredSuites = computed(() => {
+  if (!filterSkillId.value) return suites.value;
+  return suites.value.filter(s => s.learningSkillId === filterSkillId.value);
+});
+
 // --- Topic ---
 async function saveTopic() {
   if (!topicForm.value.title.trim() || !selectedSuite.value) return;
@@ -97,6 +122,18 @@ async function saveTopic() {
   await openSuite(selectedSuite.value.id);
 }
 async function removeTopic(id) { await deleteTestTopic(id); await openSuite(selectedSuite.value.id); }
+
+function startEditTopic(t) { editTopicForm.value = { id: t.id, title: t.title, description: t.description || "" }; modal.value = "editTopic"; }
+async function saveEditTopic() {
+  await updateTestTopic(editTopicForm.value.id, { title: editTopicForm.value.title, description: editTopicForm.value.description });
+  modal.value = null; await openSuite(selectedSuite.value.id);
+}
+
+function startEditSubtopic(sub) { editSubtopicForm.value = { id: sub.id, title: sub.title }; modal.value = "editSubtopic"; }
+async function saveEditSubtopic() {
+  await updateTestSubtopic(editSubtopicForm.value.id, { title: editSubtopicForm.value.title });
+  modal.value = null; await openSuite(selectedSuite.value.id);
+}
 
 // --- Subtopic ---
 async function saveSubtopic() {
@@ -234,9 +271,31 @@ function selectAnswer(qid, answer) { examAnswers.value[qid] = answer; }
 
 async function submitAndNext() {
   const q = currentQ.value;
+
+  // If practice result is showing — just advance to next question
+  if (practiceResult.value) {
+    practiceResult.value = null;
+    if (examIdx.value < exam.value.questions.length - 1) { examIdx.value++; }
+    else { const r = await finishTestExam({ testExamId: exam.value.id }); examResults.value = r; view.value = "results"; }
+    return;
+  }
+
+  // Submit answer
   if (q && examAnswers.value[q.id]) {
     await submitTestAnswer({ testExamId: exam.value.id, testQuestionId: q.id, givenAnswer: JSON.stringify(examAnswers.value[q.id]) });
   }
+
+  // In learning mode — show feedback, don't advance yet
+  if (examMode.value === "learning" && q) {
+    let correctData = {};
+    try { correctData = JSON.parse(q.correct || "{}"); } catch(e) {}
+    const givenId = examAnswers.value[q.id]?.id;
+    const isCorrect = givenId === correctData.id;
+    practiceResult.value = { isCorrect, explanation: q.explanation || "", correctId: correctData.id };
+    return;
+  }
+
+  // Exam mode — advance immediately
   if (examIdx.value < exam.value.questions.length - 1) { examIdx.value++; }
   else { const r = await finishTestExam({ testExamId: exam.value.id }); examResults.value = r; view.value = "results"; }
 }
@@ -284,10 +343,12 @@ onMounted(async () => { await loadSuites(); await loadSkills(); });
       <div class="tp-head-actions">
         <button v-if="view === 'list'" class="tp-btn tp-btn--primary" @click="modal = 'suite'">+ Тест</button>
         <template v-if="view === 'detail'">
+          <button class="tp-btn" @click="startEditSuite(selectedSuite)">✎ Тест</button>
           <button class="tp-btn" @click="modal = 'topic'">+ Тема</button>
-          <button class="tp-btn" @click="modal = 'importTopics'">{ } Темы из JSON</button>
-          <button class="tp-btn tp-btn--primary" @click="modal = 'examSetup'">Экзамен</button>
-          <button class="tp-btn" @click="openStats">Стат.</button>
+          <button class="tp-btn" @click="modal = 'importTopics'">{ } JSON</button>
+          <button class="tp-btn tp-btn--primary" @click="examSetup.mode = 'learning'; modal = 'examSetup'">Тестирование</button>
+          <button class="tp-btn tp-btn--primary" @click="examSetup.mode = 'exam'; modal = 'examSetup'">Экзамен</button>
+          <button class="tp-btn" @click="openStats">Статистика</button>
         </template>
       </div>
     </header>
@@ -295,12 +356,22 @@ onMounted(async () => { await loadSuites(); await loadSkills(); });
     <div class="tp-body">
       <!-- LIST -->
       <div v-if="view === 'list'" class="tp-list">
-        <div v-if="!suites.length" class="tp-empty"><div class="tp-empty-icon">📝</div><h3>Нет тестов</h3><p>Создай первый тест для самоподготовки</p></div>
-        <div v-for="s in suites" :key="s.id" class="tp-suite-card" @click="openSuite(s.id)">
-          <div class="tp-suite-icon">📋</div>
+        <!-- Skill filter -->
+        <div v-if="allSkills.length" class="tp-filter-bar">
+          <button class="tp-filter-btn" :class="{ active: !filterSkillId }" @click="filterSkillId = null">Все</button>
+          <button v-for="sk in allSkills" :key="sk.id" class="tp-filter-btn" :class="{ active: filterSkillId === sk.id }" @click="filterSkillId = sk.id" :style="filterSkillId === sk.id ? { borderColor: sk.color, color: sk.color } : {}">
+            {{ sk.icon || '📚' }} {{ sk.title }}
+          </button>
+        </div>
+        <div v-if="!filteredSuites.length" class="tp-empty"><div class="tp-empty-icon">📝</div><h3>Нет тестов</h3><p>Создай первый тест для самоподготовки</p></div>
+        <div v-for="s in filteredSuites" :key="s.id" class="tp-suite-card" @click="openSuite(s.id)">
+          <div class="tp-suite-icon">{{ s.icon || '📋' }}</div>
           <div class="tp-suite-info">
             <div class="tp-suite-title">{{ s.title }}</div>
-            <div class="tp-suite-meta">{{ s.totalQuestions }} вопр. · порог {{ s.passingScore }}%</div>
+            <div class="tp-suite-meta">
+              {{ s.totalQuestions }} вопр. · {{ s.totalExams }} экз. · {{ s.totalPractices }} практ.
+              <span v-if="s.bestScore > 0"> · лучший {{ Math.round(s.bestScore) }}%</span>
+            </div>
           </div>
           <button class="tp-rm" @click.stop="removeSuite(s.id)">✕</button>
         </div>
@@ -319,12 +390,14 @@ onMounted(async () => { await loadSuites(); await loadSkills(); });
             <span class="tp-topic-num">{{ topic.position + 1 }}</span>
             <span class="tp-topic-title">{{ topic.title }}</span>
             <span class="tp-topic-count">{{ topic.totalQuestions }} вопр.</span>
+            <button class="tp-btn tp-btn--sm" @click.stop="startEditTopic(topic)">✎</button>
             <button class="tp-rm" @click.stop="removeTopic(topic.id)">✕</button>
           </div>
 
           <div v-if="topic.subtopics?.length" class="tp-subtopics">
             <div v-for="sub in topic.subtopics" :key="sub.id" class="tp-sub" @click.stop="loadQuestions(topic.id, sub.id)">
               {{ sub.title }} <span class="tp-sub-n">{{ sub.totalQuestions }}</span>
+              <button class="tp-btn tp-btn--sm" @click.stop="startEditSubtopic(sub)" style="padding:2px 6px;font-size:10px">✎</button>
               <button class="tp-rm tp-rm--sm" @click.stop="deleteTestSubtopic(sub.id).then(() => openSuite(selectedSuite.id))">✕</button>
             </div>
           </div>
@@ -379,14 +452,20 @@ onMounted(async () => { await loadSuites(); await loadSkills(); });
             <textarea class="tp-text-input" :class="{ code: currentQ.type === 'code_input' }" rows="5" :placeholder="currentQ.type === 'code_input' ? 'Код...' : 'Ответ...'" :value="examAnswers[currentQ.id]?.text || ''" @input="selectAnswer(currentQ.id, { text: $event.target.value })"></textarea>
           </div>
 
-          <!-- Learning mode explanation -->
-          <div v-if="examMode === 'learning' && examAnswers[currentQ.id] && currentQ.explanation" class="tp-explanation">
-            {{ currentQ.explanation }}
+          <!-- Practice mode: instant feedback -->
+          <div v-if="practiceResult" class="tp-practice-result" :class="{ correct: practiceResult.isCorrect, wrong: !practiceResult.isCorrect }">
+            <div class="tp-practice-verdict">{{ practiceResult.isCorrect ? '✓ Правильно!' : '✗ Неправильно' }}</div>
+            <div v-if="!practiceResult.isCorrect && practiceResult.correctId" class="tp-practice-correct">
+              Правильный ответ: {{ parseOpts(currentQ.options)?.find(o => o.id === practiceResult.correctId)?.text || practiceResult.correctId }}
+            </div>
+            <div v-if="practiceResult.explanation" class="tp-practice-explanation">{{ practiceResult.explanation }}</div>
           </div>
 
           <div class="tp-exam-nav">
             <button class="tp-btn" :disabled="examIdx === 0" @click="examIdx--">← Назад</button>
-            <button class="tp-btn tp-btn--primary" @click="submitAndNext">{{ examIdx < exam.questions.length - 1 ? 'Далее →' : 'Завершить' }}</button>
+            <button class="tp-btn tp-btn--primary" @click="submitAndNext">
+              {{ practiceResult ? 'Далее →' : (examIdx < exam.questions.length - 1 ? 'Ответить →' : 'Завершить') }}
+            </button>
           </div>
         </div>
       </div>
@@ -412,10 +491,29 @@ onMounted(async () => { await loadSuites(); await loadSkills(); });
       <div v-if="view === 'stats' && stats" class="tp-stats">
         <div class="tp-stats-cards">
           <div class="tp-sc"><div class="tp-sc-v">{{ stats.totalQuestions }}</div><div class="tp-sc-l">Вопросов</div></div>
-          <div class="tp-sc"><div class="tp-sc-v">{{ stats.totalAttempted }}</div><div class="tp-sc-l">Попыток</div></div>
-          <div class="tp-sc"><div class="tp-sc-v">{{ Math.round(stats.correctPercent) }}%</div><div class="tp-sc-l">Правильных</div></div>
+          <div class="tp-sc"><div class="tp-sc-v">{{ stats.totalExams }}</div><div class="tp-sc-l">Экзаменов</div></div>
+          <div class="tp-sc"><div class="tp-sc-v">{{ stats.totalPractices }}</div><div class="tp-sc-l">Тестирований</div></div>
+          <div class="tp-sc"><div class="tp-sc-v">{{ Math.round(stats.avgScore) }}%</div><div class="tp-sc-l">Средний балл</div></div>
+          <div class="tp-sc"><div class="tp-sc-v" style="color:#4ade80">{{ Math.round(stats.bestScore) }}%</div><div class="tp-sc-l">Лучший</div></div>
         </div>
-        <div v-if="stats.byTopic?.length" class="tp-stats-section">
+
+        <div class="tp-stats-cards" style="margin-top:8px">
+          <div class="tp-sc"><div class="tp-sc-v">{{ stats.totalAnswered }}</div><div class="tp-sc-l">Отвечено</div></div>
+          <div class="tp-sc"><div class="tp-sc-v">{{ stats.totalCorrect }}</div><div class="tp-sc-l">Правильных</div></div>
+          <div class="tp-sc"><div class="tp-sc-v">{{ Math.round(stats.correctPercent) }}%</div><div class="tp-sc-l">Точность</div></div>
+        </div>
+
+        <!-- Weak topics -->
+        <div v-if="stats.weakTopics?.length" class="tp-stats-section" style="margin-top:16px">
+          <h3 style="color:#f87171">Слабые места (&lt; 60%)</h3>
+          <div v-for="t in stats.weakTopics" :key="t.topicId" class="tp-stats-row">
+            <span class="tp-stats-name">{{ t.topicName }}</span>
+            <div class="tp-stats-bar"><div class="tp-stats-fill" :style="{ width: t.percent + '%', background: '#f87171' }"></div></div>
+            <span class="tp-stats-pct" style="color:#f87171">{{ Math.round(t.percent) }}%</span>
+          </div>
+        </div>
+
+        <div v-if="stats.byTopic?.length" class="tp-stats-section" style="margin-top:16px">
           <h3>По темам</h3>
           <div v-for="t in stats.byTopic" :key="t.topicId" class="tp-stats-row">
             <span class="tp-stats-name">{{ t.topicName }}</span>
@@ -423,6 +521,35 @@ onMounted(async () => { await loadSuites(); await loadSkills(); });
             <span class="tp-stats-pct">{{ Math.round(t.percent) }}%</span>
           </div>
         </div>
+
+        <div v-if="Object.keys(stats.byDifficulty || {}).length" class="tp-stats-section" style="margin-top:16px">
+          <h3>По сложности</h3>
+          <div v-for="(val, key) in stats.byDifficulty" :key="key" class="tp-stats-row">
+            <span class="tp-stats-name" :style="{ color: key === 'easy' ? '#4ade80' : key === 'medium' ? '#facc15' : '#f87171' }">{{ key }}</span>
+            <div class="tp-stats-bar"><div class="tp-stats-fill" :style="{ width: val.percent + '%' }"></div></div>
+            <span class="tp-stats-pct">{{ val.correct }}/{{ val.total }} ({{ Math.round(val.percent) }}%)</span>
+          </div>
+        </div>
+
+        <div v-if="Object.keys(stats.byType || {}).length" class="tp-stats-section" style="margin-top:16px">
+          <h3>По типу вопросов</h3>
+          <div v-for="(val, key) in stats.byType" :key="key" class="tp-stats-row">
+            <span class="tp-stats-name">{{ typeLabel(key) }}</span>
+            <div class="tp-stats-bar"><div class="tp-stats-fill" :style="{ width: val.percent + '%' }"></div></div>
+            <span class="tp-stats-pct">{{ val.correct }}/{{ val.total }}</span>
+          </div>
+        </div>
+
+        <div v-if="stats.examHistory?.length" class="tp-stats-section" style="margin-top:16px">
+          <h3>История</h3>
+          <div v-for="e in stats.examHistory" :key="e.id" class="tp-history-row">
+            <span class="tp-history-date">{{ e.startedAt ? new Date(e.startedAt).toLocaleDateString('ru') : '—' }}</span>
+            <span class="tp-history-score" :class="{ passed: e.passed }">{{ Math.round(e.scorePercent) }}%</span>
+            <span>{{ e.correctCount }}/{{ e.totalQuestions }}</span>
+            <span class="tp-history-mode">{{ e.mode === 'learning' ? 'Тест' : 'Экзамен' }}</span>
+          </div>
+        </div>
+
         <button class="tp-btn" @click="view = 'detail'" style="margin-top:16px">Назад</button>
       </div>
     </div>
@@ -591,7 +718,35 @@ onMounted(async () => { await loadSuites(); await loadSkills(); });
       </div>
       <div class="tp-fg"><label>Лимит (мин), пусто — без</label><input v-model.number="examSetup.timeLimitMin" type="number" class="form-input" min="1" /></div>
       <div class="tp-fg"><label><input type="checkbox" v-model="examSetup.shuffle" /> Перемешать вопросы</label></div>
-      <button class="tp-submit" @click="startExam">Начать экзамен</button>
+      <button class="tp-submit" @click="startExam">{{ examSetup.mode === 'learning' ? 'Начать тестирование' : 'Начать экзамен' }}</button>
+    </div></div></transition>
+
+    <!-- Edit Suite -->
+    <transition name="modal-fade"><div v-if="modal === 'editSuite'" class="modal-overlay" @click.self="modal = null"><div class="modal-card tp-modal">
+      <button class="modal-close" @click="modal = null">×</button>
+      <h2 class="modal-title">Редактировать тест</h2>
+      <div class="tp-fg"><label>Иконка</label><input v-model="suiteForm.icon" class="form-input" maxlength="4" style="width:60px;font-size:24px;text-align:center" /></div>
+      <div class="tp-fg"><label>Название</label><input v-model="suiteForm.title" class="form-input" /></div>
+      <div class="tp-fg"><label>Описание</label><textarea v-model="suiteForm.description" class="form-input" rows="2"></textarea></div>
+      <div class="tp-fg"><label>Проходной балл (%)</label><input v-model.number="suiteForm.passingScore" type="number" class="form-input" min="1" max="100" /></div>
+      <button class="tp-submit" @click="saveEditSuite">Сохранить</button>
+    </div></div></transition>
+
+    <!-- Edit Topic -->
+    <transition name="modal-fade"><div v-if="modal === 'editTopic'" class="modal-overlay" @click.self="modal = null"><div class="modal-card tp-modal">
+      <button class="modal-close" @click="modal = null">×</button>
+      <h2 class="modal-title">Редактировать тему</h2>
+      <div class="tp-fg"><label>Название</label><input v-model="editTopicForm.title" class="form-input" /></div>
+      <div class="tp-fg"><label>Описание</label><textarea v-model="editTopicForm.description" class="form-input" rows="2"></textarea></div>
+      <button class="tp-submit" @click="saveEditTopic">Сохранить</button>
+    </div></div></transition>
+
+    <!-- Edit Subtopic -->
+    <transition name="modal-fade"><div v-if="modal === 'editSubtopic'" class="modal-overlay" @click.self="modal = null"><div class="modal-card tp-modal">
+      <button class="modal-close" @click="modal = null">×</button>
+      <h2 class="modal-title">Редактировать подтему</h2>
+      <div class="tp-fg"><label>Название</label><input v-model="editSubtopicForm.title" class="form-input" /></div>
+      <button class="tp-submit" @click="saveEditSubtopic">Сохранить</button>
     </div></div></transition>
   </div>
 </template>
@@ -738,6 +893,24 @@ onMounted(async () => { await loadSuites(); await loadSkills(); });
 .tp-err { color: #f87171; font-size: 12px; margin-top: 4px; }
 .tp-import-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
 .tp-import-row span { font-size: 11px; color: rgba(200,215,255,0.4); }
+
+/* Filter bar */
+.tp-filter-bar { display: flex; gap: 6px; margin-bottom: 14px; flex-wrap: wrap; }
+.tp-filter-btn { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); color: rgba(200,215,255,0.5); padding: 5px 12px; border-radius: 8px; font-size: 12px; cursor: pointer; }
+.tp-filter-btn:hover { background: rgba(255,255,255,0.06); }
+.tp-filter-btn.active { background: rgba(23,103,253,0.1); border-color: rgba(23,103,253,0.3); color: #6ea8ff; }
+
+/* Practice result */
+.tp-practice-result { margin-top: 16px; padding: 16px 20px; border-radius: 12px; }
+.tp-practice-result.correct { background: rgba(74,222,128,0.08); border: 2px solid rgba(74,222,128,0.25); }
+.tp-practice-result.wrong { background: rgba(248,113,113,0.08); border: 2px solid rgba(248,113,113,0.25); }
+.tp-practice-verdict { font-size: 16px; font-weight: 700; margin-bottom: 6px; }
+.tp-practice-result.correct .tp-practice-verdict { color: #4ade80; }
+.tp-practice-result.wrong .tp-practice-verdict { color: #f87171; }
+.tp-practice-correct { font-size: 13px; color: rgba(200,215,255,0.6); margin-bottom: 6px; }
+.tp-practice-explanation { font-size: 13px; color: rgba(200,215,255,0.5); line-height: 1.5; border-top: 1px solid rgba(255,255,255,0.06); padding-top: 8px; margin-top: 6px; }
+
+.tp-history-mode { font-size: 11px; color: rgba(200,215,255,0.3); margin-left: auto; }
 
 /* Question form rows */
 .tp-opt-row { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
