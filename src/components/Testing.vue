@@ -303,14 +303,28 @@ async function submitAndNext() {
   if (examMode.value === "learning" && q) {
     let correctData = {};
     try { correctData = JSON.parse(q.correct || "{}"); } catch(e) {}
+
+    // Normalize correct data: support both {"id":"0"} and legacy [0] formats
+    let correctId = correctData.id;
+    let correctIds = correctData.ids;
+    if (Array.isArray(correctData)) {
+      // Legacy format: [0] or [1,2,3]
+      const arr = correctData.map(String);
+      if (arr.length === 1 && (q.type === "single_choice" || q.type === "true_false" || q.type === "image_choice")) {
+        correctId = arr[0];
+      } else {
+        correctIds = arr;
+      }
+    }
+
     const given = examAnswers.value[q.id];
     let isCorrect = false;
     if (q.type === "multiple_choice") {
       const givenIds = [...(given?.ids || [])].sort();
-      const correctIds = [...(correctData.ids || [])].sort();
-      isCorrect = givenIds.length === correctIds.length && givenIds.every((v, i) => v === correctIds[i]);
+      const cIds = [...(correctIds || [])].map(String).sort();
+      isCorrect = givenIds.length === cIds.length && givenIds.every((v, i) => v === cIds[i]);
     } else if (q.type === "true_false" || q.type === "single_choice" || q.type === "image_choice") {
-      isCorrect = given?.id === correctData.id;
+      isCorrect = given?.id === correctId;
     } else if (q.type === "free_text") {
       const givenText = (given?.text || "").toLowerCase().trim();
       const keywords = correctData.keywords || [];
@@ -323,7 +337,7 @@ async function submitAndNext() {
       // ordering, matching, fill_blanks — strict compare
       isCorrect = !!given && JSON.stringify(given) === JSON.stringify(correctData);
     }
-    practiceResult.value = { isCorrect, explanation: q.explanation || "", correctId: correctData.id, correctIds: correctData.ids, correctExpected: correctData.expected, correctKeywords: correctData.keywords };
+    practiceResult.value = { isCorrect, explanation: q.explanation || "", correctId, correctIds, correctExpected: correctData.expected, correctKeywords: correctData.keywords };
     return;
   }
 
