@@ -276,6 +276,12 @@ function quickTest(topicIds) {
 }
 
 function selectAnswer(qid, answer) { examAnswers.value[qid] = answer; }
+function toggleMulti(qid, optId) {
+  const cur = examAnswers.value[qid]?.ids || [];
+  const idx = cur.indexOf(optId);
+  const ids = idx === -1 ? [...cur, optId] : cur.filter(i => i !== optId);
+  examAnswers.value[qid] = { ids };
+}
 
 async function submitAndNext() {
   const q = currentQ.value;
@@ -297,9 +303,27 @@ async function submitAndNext() {
   if (examMode.value === "learning" && q) {
     let correctData = {};
     try { correctData = JSON.parse(q.correct || "{}"); } catch(e) {}
-    const givenId = examAnswers.value[q.id]?.id;
-    const isCorrect = givenId === correctData.id;
-    practiceResult.value = { isCorrect, explanation: q.explanation || "", correctId: correctData.id };
+    const given = examAnswers.value[q.id];
+    let isCorrect = false;
+    if (q.type === "multiple_choice") {
+      const givenIds = [...(given?.ids || [])].sort();
+      const correctIds = [...(correctData.ids || [])].sort();
+      isCorrect = givenIds.length === correctIds.length && givenIds.every((v, i) => v === correctIds[i]);
+    } else if (q.type === "true_false" || q.type === "single_choice" || q.type === "image_choice") {
+      isCorrect = given?.id === correctData.id;
+    } else if (q.type === "free_text") {
+      const givenText = (given?.text || "").toLowerCase().trim();
+      const keywords = correctData.keywords || [];
+      isCorrect = givenText.length > 0 && keywords.length > 0 && keywords.some(k => givenText.includes(k.toLowerCase()));
+    } else if (q.type === "code_input") {
+      const givenCode = (given?.text || "").trim().toLowerCase();
+      const expected = (correctData.expected || "").trim().toLowerCase();
+      isCorrect = givenCode.length > 0 && expected.length > 0 && givenCode === expected;
+    } else {
+      // ordering, matching, fill_blanks — strict compare
+      isCorrect = !!given && JSON.stringify(given) === JSON.stringify(correctData);
+    }
+    practiceResult.value = { isCorrect, explanation: q.explanation || "", correctId: correctData.id, correctIds: correctData.ids, correctExpected: correctData.expected, correctKeywords: correctData.keywords };
     return;
   }
 
@@ -467,11 +491,20 @@ onMounted(async () => { await loadSuites(); await loadSkills(); });
             <div v-if="!practiceResult.isCorrect && practiceResult.correctId" class="tp-practice-correct">
               Правильный ответ: {{ parseOpts(currentQ.options)?.find(o => o.id === practiceResult.correctId)?.text || practiceResult.correctId }}
             </div>
+            <div v-if="!practiceResult.isCorrect && practiceResult.correctIds?.length" class="tp-practice-correct">
+              Правильные ответы: {{ practiceResult.correctIds.map(id => parseOpts(currentQ.options)?.find(o => o.id === id)?.text || id).join(', ') }}
+            </div>
+            <div v-if="!practiceResult.isCorrect && practiceResult.correctExpected" class="tp-practice-correct">
+              Правильный ответ: <code>{{ practiceResult.correctExpected }}</code>
+            </div>
+            <div v-if="!practiceResult.isCorrect && practiceResult.correctKeywords?.length" class="tp-practice-correct">
+              Ключевые слова: {{ practiceResult.correctKeywords.join(', ') }}
+            </div>
             <div v-if="practiceResult.explanation" class="tp-practice-explanation">{{ practiceResult.explanation }}</div>
           </div>
 
           <div class="tp-exam-nav">
-            <button class="tp-btn" :disabled="examIdx === 0" @click="examIdx--">← Назад</button>
+            <button class="tp-btn" :disabled="examIdx === 0" @click="practiceResult = null; examIdx--">← Назад</button>
             <button class="tp-btn tp-btn--primary" @click="submitAndNext">
               {{ practiceResult ? 'Далее →' : (examIdx < exam.questions.length - 1 ? 'Ответить →' : 'Завершить') }}
             </button>
