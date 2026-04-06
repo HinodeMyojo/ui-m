@@ -267,6 +267,14 @@ async function startExam() {
   } catch(e) { alert("Нет вопросов для экзамена"); }
 }
 
+function quickTest(topicIds) {
+  examSetup.value.topicIds = topicIds;
+  examSetup.value.mode = "learning";
+  examSetup.value.questionCount = 999;
+  examSetup.value.shuffle = true;
+  startExam();
+}
+
 function selectAnswer(qid, answer) { examAnswers.value[qid] = answer; }
 
 async function submitAndNext() {
@@ -346,8 +354,8 @@ onMounted(async () => { await loadSuites(); await loadSkills(); });
           <button class="tp-btn" @click="startEditSuite(selectedSuite)">✎ Тест</button>
           <button class="tp-btn" @click="modal = 'topic'">+ Тема</button>
           <button class="tp-btn" @click="modal = 'importTopics'">{ } JSON</button>
-          <button class="tp-btn tp-btn--primary" @click="examSetup.mode = 'learning'; modal = 'examSetup'">Тестирование</button>
-          <button class="tp-btn tp-btn--primary" @click="examSetup.mode = 'exam'; modal = 'examSetup'">Экзамен</button>
+          <button class="tp-btn tp-btn--primary" @click="examSetup = { questionCount: 0, mode: 'learning', shuffle: true, timeLimitMin: null, topicIds: [], difficulties: [], types: [] }; modal = 'examSetup'">Тестирование</button>
+          <button class="tp-btn tp-btn--primary" @click="examSetup = { questionCount: 20, mode: 'exam', shuffle: true, timeLimitMin: null, topicIds: [], difficulties: [], types: [] }; modal = 'examSetup'">Экзамен</button>
           <button class="tp-btn" @click="openStats">Статистика</button>
         </template>
       </div>
@@ -390,6 +398,7 @@ onMounted(async () => { await loadSuites(); await loadSkills(); });
             <span class="tp-topic-num">{{ topic.position + 1 }}</span>
             <span class="tp-topic-title">{{ topic.title }}</span>
             <span class="tp-topic-count">{{ topic.totalQuestions }} вопр.</span>
+            <button class="tp-btn tp-btn--sm" @click.stop="quickTest([topic.id])" title="Тестирование по теме">▶</button>
             <button class="tp-btn tp-btn--sm" @click.stop="startEditTopic(topic)">✎</button>
             <button class="tp-rm" @click.stop="removeTopic(topic.id)">✕</button>
           </div>
@@ -709,13 +718,31 @@ onMounted(async () => { await loadSuites(); await loadSkills(); });
     </div></div></transition>
 
     <!-- Exam Setup -->
-    <transition name="modal-fade"><div v-if="modal === 'examSetup'" class="modal-overlay" @click.self="modal = null"><div class="modal-card tp-modal">
+    <transition name="modal-fade"><div v-if="modal === 'examSetup'" class="modal-overlay" @click.self="modal = null"><div class="modal-card tp-modal tp-modal--wide">
       <button class="modal-close" @click="modal = null">×</button>
-      <h2 class="modal-title">Настройки экзамена</h2>
-      <div class="tp-fg"><label>Количество вопросов</label><input v-model.number="examSetup.questionCount" type="number" class="form-input" min="1" /></div>
-      <div class="tp-fg"><label>Режим</label>
-        <select v-model="examSetup.mode" class="form-input"><option value="exam">Экзамен</option><option value="learning">Обучение (с подсказками)</option></select>
+      <h2 class="modal-title">{{ examSetup.mode === 'learning' ? 'Настройки тестирования' : 'Настройки экзамена' }}</h2>
+
+      <!-- Topic/Subtopic selection -->
+      <div class="tp-fg">
+        <label>Темы (выбери нужные, пусто = все)</label>
+        <div class="tp-topic-select">
+          <div v-for="topic in selectedSuite?.topics" :key="topic.id" class="tp-topic-check">
+            <label class="tp-check-label">
+              <input type="checkbox" :value="topic.id" v-model="examSetup.topicIds" />
+              <span class="tp-check-title">{{ topic.title }}</span>
+              <span class="tp-check-count">{{ topic.totalQuestions }} вопр.</span>
+            </label>
+          </div>
+        </div>
       </div>
+
+      <div class="tp-fg"><label>Режим</label>
+        <select v-model="examSetup.mode" class="form-input">
+          <option value="learning">Тестирование (с подсказками)</option>
+          <option value="exam">Экзамен (результат в конце)</option>
+        </select>
+      </div>
+      <div class="tp-fg"><label>Количество вопросов (0 = все)</label><input v-model.number="examSetup.questionCount" type="number" class="form-input" min="0" /></div>
       <div class="tp-fg"><label>Лимит (мин), пусто — без</label><input v-model.number="examSetup.timeLimitMin" type="number" class="form-input" min="1" /></div>
       <div class="tp-fg"><label><input type="checkbox" v-model="examSetup.shuffle" /> Перемешать вопросы</label></div>
       <button class="tp-submit" @click="startExam">{{ examSetup.mode === 'learning' ? 'Начать тестирование' : 'Начать экзамен' }}</button>
@@ -911,6 +938,14 @@ onMounted(async () => { await loadSuites(); await loadSkills(); });
 .tp-practice-explanation { font-size: 13px; color: rgba(200,215,255,0.5); line-height: 1.5; border-top: 1px solid rgba(255,255,255,0.06); padding-top: 8px; margin-top: 6px; }
 
 .tp-history-mode { font-size: 11px; color: rgba(200,215,255,0.3); margin-left: auto; }
+
+/* Topic selection in exam setup */
+.tp-topic-select { max-height: 200px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; padding: 4px 0; }
+.tp-topic-check { padding: 2px 0; }
+.tp-check-label { display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px; color: rgba(200,215,255,0.7); }
+.tp-check-label input { accent-color: #1767fd; width: 16px; height: 16px; }
+.tp-check-title { flex: 1; }
+.tp-check-count { font-size: 11px; color: rgba(200,215,255,0.35); }
 
 /* Question form rows */
 .tp-opt-row { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
