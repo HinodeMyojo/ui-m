@@ -276,6 +276,22 @@ function quickTest(topicIds) {
 }
 
 function selectAnswer(qid, answer) { examAnswers.value[qid] = answer; }
+function setMatchPair(qid, leftId, rightId) {
+  const cur = examAnswers.value[qid]?.pairs || {};
+  examAnswers.value[qid] = { pairs: { ...cur, [leftId]: rightId } };
+}
+const shuffledRightsCache = {};
+function shuffledRights(q) {
+  if (shuffledRightsCache[q.id]) return shuffledRightsCache[q.id];
+  const opts = parseOpts(q.options);
+  const arr = opts.map((o, i) => ({ id: o.id ?? i, right: o.right }));
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  shuffledRightsCache[q.id] = arr;
+  return arr;
+}
 function toggleMulti(qid, optId) {
   const cur = examAnswers.value[qid]?.ids || [];
   const idx = cur.indexOf(optId);
@@ -308,12 +324,15 @@ async function submitAndNext() {
     let correctId = correctData.id;
     let correctIds = correctData.ids;
     if (Array.isArray(correctData)) {
-      // Legacy format: [0] or [1,2,3]
-      const arr = correctData.map(String);
-      if (arr.length === 1 && (q.type === "single_choice" || q.type === "true_false" || q.type === "image_choice")) {
-        correctId = arr[0];
-      } else {
-        correctIds = arr;
+      // Legacy format: [0] or [1,2,3] — but skip nested arrays (matching pairs)
+      const isFlat = correctData.every(x => typeof x !== "object");
+      if (isFlat) {
+        const arr = correctData.map(String);
+        if (arr.length === 1 && (q.type === "single_choice" || q.type === "true_false" || q.type === "image_choice")) {
+          correctId = arr[0];
+        } else if (q.type === "multiple_choice") {
+          correctIds = arr;
+        }
       }
     }
 
@@ -333,6 +352,17 @@ async function submitAndNext() {
       const givenCode = (given?.text || "").trim().toLowerCase();
       const expected = (correctData.expected || "").trim().toLowerCase();
       isCorrect = givenCode.length > 0 && expected.length > 0 && givenCode === expected;
+    } else if (q.type === "matching") {
+      // correctData может быть { pairs: [{left,right}] } или legacy [[0,0],[1,1]]
+      const givenPairs = given?.pairs || {};
+      let expectedMap = {};
+      if (Array.isArray(correctData)) {
+        correctData.forEach(p => { if (Array.isArray(p)) expectedMap[String(p[0])] = String(p[1]); });
+      } else if (Array.isArray(correctData.pairs)) {
+        correctData.pairs.forEach(p => { expectedMap[String(p.left)] = String(p.right); });
+      }
+      const keys = Object.keys(expectedMap);
+      isCorrect = keys.length > 0 && keys.every(k => String(givenPairs[k]) === expectedMap[k]);
     } else {
       // ordering, matching, fill_blanks — strict compare
       isCorrect = !!given && JSON.stringify(given) === JSON.stringify(correctData);
@@ -492,6 +522,22 @@ onMounted(async () => { await loadSuites(); await loadSkills(); });
               <img v-if="opt.imageUrl" :src="opt.imageUrl" class="tp-opt-img" />
               <span>{{ opt.text }}</span>
             </button>
+          </div>
+
+          <!-- Matching: для каждого левого выбираем правый -->
+          <div v-if="currentQ.type === 'matching'" class="tp-match-game">
+            <div v-for="(pair, i) in parseOpts(currentQ.options)" :key="pair.id || i" class="tp-match-game-row">
+              <div class="tp-match-left">{{ pair.left }}</div>
+              <select class="form-input tp-match-select" :value="examAnswers[currentQ.id]?.pairs?.[String(pair.id ?? i)] ?? ''" @change="setMatchPair(currentQ.id, String(pair.id ?? i), $event.target.value)">
+                <option value="">— выбери —</option>
+                <option v-for="(opt, j) in shuffledRights(currentQ)" :key="opt.id || j" :value="String(opt.id ?? j)">{{ opt.right }}</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Ordering / fill_blanks — заглушка пока -->
+          <div v-if="['ordering','fill_blanks'].includes(currentQ.type)" class="tp-no-q" style="padding:16px;color:#facc15">
+            ⚠ Тип "{{ typeLabel(currentQ.type) }}" пока не поддерживается в UI.
           </div>
 
           <!-- Text / Code -->
@@ -999,4 +1045,8 @@ onMounted(async () => { await loadSuites(); await loadSkills(); });
 .tp-opt-num { width: 20px; font-size: 12px; color: rgba(200,215,255,0.4); text-align: center; }
 .tp-match-row { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
 .tp-match-row span { color: rgba(200,215,255,0.3); }
+.tp-match-game { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+.tp-match-game-row { display: flex; align-items: center; gap: 12px; }
+.tp-match-left { flex: 1; padding: 10px 14px; background: rgba(23,103,253,0.06); border: 1px solid rgba(23,103,253,0.15); border-radius: 8px; font-size: 13px; }
+.tp-match-select { flex: 1; min-width: 0; }
 </style>
