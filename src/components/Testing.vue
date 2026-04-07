@@ -292,6 +292,24 @@ function shuffledRights(q) {
   shuffledRightsCache[q.id] = arr;
   return arr;
 }
+function orderingCurrent(q) {
+  const opts = parseOpts(q.options);
+  const cur = examAnswers.value[q.id]?.order;
+  if (!Array.isArray(cur) || cur.length !== opts.length) {
+    // initialize: same order as options (user must rearrange)
+    const init = opts.map(o => String(o.id));
+    examAnswers.value[q.id] = { order: init };
+    return opts;
+  }
+  return cur.map(id => opts.find(o => String(o.id) === String(id))).filter(Boolean);
+}
+function moveOrdering(q, i, dir) {
+  const cur = [...(examAnswers.value[q.id]?.order || [])];
+  const j = i + dir;
+  if (j < 0 || j >= cur.length) return;
+  [cur[i], cur[j]] = [cur[j], cur[i]];
+  examAnswers.value[q.id] = { order: cur };
+}
 function toggleMulti(qid, optId) {
   const cur = examAnswers.value[qid]?.ids || [];
   const idx = cur.indexOf(optId);
@@ -535,8 +553,20 @@ onMounted(async () => { await loadSuites(); await loadSkills(); });
             </div>
           </div>
 
-          <!-- Ordering / fill_blanks — заглушка пока -->
-          <div v-if="['ordering','fill_blanks'].includes(currentQ.type)" class="tp-no-q" style="padding:16px;color:#facc15">
+          <!-- Ordering: расставить элементы в правильном порядке (стрелки вверх/вниз) -->
+          <div v-if="currentQ.type === 'ordering'" class="tp-order-list">
+            <div v-for="(item, i) in orderingCurrent(currentQ)" :key="item.id" class="tp-order-row">
+              <span class="tp-order-num">{{ i + 1 }}</span>
+              <div class="tp-order-text">{{ item.text }}</div>
+              <div class="tp-order-btns">
+                <button class="tp-btn tp-btn--sm" :disabled="i === 0" @click="moveOrdering(currentQ, i, -1)">↑</button>
+                <button class="tp-btn tp-btn--sm" :disabled="i === orderingCurrent(currentQ).length - 1" @click="moveOrdering(currentQ, i, 1)">↓</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- fill_blanks — заглушка пока -->
+          <div v-if="currentQ.type === 'fill_blanks'" class="tp-no-q" style="padding:16px;color:#facc15">
             ⚠ Тип "{{ typeLabel(currentQ.type) }}" пока не поддерживается в UI.
           </div>
 
@@ -1046,6 +1076,11 @@ onMounted(async () => { await loadSuites(); await loadSkills(); });
 .tp-match-row { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
 .tp-match-row span { color: rgba(200,215,255,0.3); }
 .tp-match-game { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+.tp-order-list { display: flex; flex-direction: column; gap: 8px; }
+.tp-order-row { display: flex; align-items: center; gap: 12px; padding: 10px 14px; background: rgba(23,103,253,0.06); border: 1px solid rgba(23,103,253,0.15); border-radius: 8px; }
+.tp-order-num { width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; border-radius: 50%; background: rgba(23,103,253,0.2); font-size: 12px; font-weight: 600; flex-shrink: 0; }
+.tp-order-text { flex: 1; font-size: 13px; }
+.tp-order-btns { display: flex; gap: 4px; }
 .tp-match-game-row { display: flex; align-items: center; gap: 12px; }
 .tp-match-left { flex: 1; padding: 10px 14px; background: rgba(23,103,253,0.06); border: 1px solid rgba(23,103,253,0.15); border-radius: 8px; font-size: 13px; }
 .tp-match-select { flex: 1; min-width: 0; }
