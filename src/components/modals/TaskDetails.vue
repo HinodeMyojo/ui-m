@@ -27,10 +27,42 @@
     </div>
     <div class="content">
       <div class="content-header">
-        <div class="title">
+        <div class="title" v-if="!isEditingTask">
           <h3>{{ task.title }}</h3>
+          <div class="task-dates-line">
+            {{ formatTaskDate(task.start) }} – {{ formatTaskDate(task.end) }}
+          </div>
+        </div>
+        <div class="task-edit-form" v-else>
+          <input
+            v-model="editForm.title"
+            type="text"
+            class="task-edit-title"
+            maxlength="200"
+            placeholder="Название"
+          />
+          <div class="task-edit-dates">
+            <label>
+              Начало
+              <input v-model="editForm.start" type="date" />
+            </label>
+            <label>
+              Окончание
+              <input v-model="editForm.end" type="date" />
+            </label>
+          </div>
+          <div v-if="editError" class="task-edit-error">{{ editError }}</div>
         </div>
         <div class="icons">
+          <div v-if="!isEditingTask" class="trash-icon" @click="startEditTask" title="Редактировать">
+            <svg-icon type="mdi" :path="mdiPencil" size="24"></svg-icon>
+          </div>
+          <div v-if="isEditingTask" class="trash-icon" @click="saveEditTask" title="Сохранить">
+            <svg-icon type="mdi" :path="mdiCheck" size="24"></svg-icon>
+          </div>
+          <div v-if="isEditingTask" class="trash-icon" @click="cancelEditTask" title="Отмена">
+            <svg-icon type="mdi" :path="mdiClose" size="24"></svg-icon>
+          </div>
           <div class="trash-icon" @click="deleteTask(task)">
             <svg-icon type="mdi" :path="trash" size="24"></svg-icon>
           </div>
@@ -599,6 +631,81 @@ const props = defineProps({
 });
 
 const task = ref(props.task);
+
+// Inline task editing (title + dates)
+const isEditingTask = ref(false);
+const editForm = ref({ title: "", start: "", end: "" });
+const editError = ref("");
+
+function toDateInput(value) {
+  if (!value) return "";
+  const d = value instanceof Date ? value : new Date(value);
+  if (isNaN(d)) return "";
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function formatTaskDate(value) {
+  if (!value) return "";
+  const d = value instanceof Date ? value : new Date(value);
+  if (isNaN(d)) return "";
+  return d.toLocaleDateString("ru-RU", { day: "2-digit", month: "short", year: "numeric" });
+}
+
+function startEditTask() {
+  editForm.value = {
+    title: task.value.title || "",
+    start: toDateInput(task.value.start),
+    end: toDateInput(task.value.end),
+  };
+  editError.value = "";
+  isEditingTask.value = true;
+}
+
+function cancelEditTask() {
+  isEditingTask.value = false;
+  editError.value = "";
+}
+
+async function saveEditTask() {
+  const title = (editForm.value.title || "").trim();
+  if (!title) {
+    editError.value = "Введите название";
+    return;
+  }
+  if (!editForm.value.start || !editForm.value.end) {
+    editError.value = "Укажите даты";
+    return;
+  }
+  const startDate = new Date(editForm.value.start);
+  const endDate = new Date(editForm.value.end);
+  if (isNaN(startDate) || isNaN(endDate)) {
+    editError.value = "Некорректные даты";
+    return;
+  }
+  if (endDate < startDate) {
+    editError.value = "Дата окончания раньше начала";
+    return;
+  }
+  try {
+    await updateTaskAPI(task.value.id, {
+      title,
+      start: startDate,
+      end: endDate,
+      color: task.value.color,
+      isGlobal: task.value.isGlobal,
+    });
+    task.value.title = title;
+    task.value.start = startDate;
+    task.value.end = endDate;
+    isEditingTask.value = false;
+  } catch (e) {
+    console.error(e);
+    editError.value = "Не удалось сохранить";
+  }
+}
 
 const reloadTask = async () => {
   var taskResponse = await fetchTask(task.value.id);
@@ -1282,10 +1389,59 @@ function getFileIcon(type) {
 
 .title {
   display: flex;
+  flex-direction: column;
   justify-content: center;
   align-items: center;
   width: 100%;
   height: 100%;
+  text-align: center;
+}
+
+.task-dates-line {
+  font-size: 12px;
+  opacity: 0.7;
+  margin-top: 4px;
+}
+
+.task-edit-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  padding: 4px 8px;
+}
+.task-edit-title {
+  width: 100%;
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid #444;
+  background: #1a1a1a;
+  color: #fff;
+  font-size: 16px;
+}
+.task-edit-dates {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.task-edit-dates label {
+  display: flex;
+  flex-direction: column;
+  font-size: 11px;
+  opacity: 0.8;
+  gap: 2px;
+}
+.task-edit-dates input {
+  padding: 4px 6px;
+  border-radius: 6px;
+  border: 1px solid #444;
+  background: #1a1a1a;
+  color: #fff;
+}
+.task-edit-error {
+  color: #ff6b6b;
+  font-size: 12px;
   text-align: center;
 }
 
