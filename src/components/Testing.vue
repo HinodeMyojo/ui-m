@@ -1,6 +1,13 @@
 <script setup>
 import { ref, computed, onMounted } from "vue";
 import { useRouter } from "vue-router";
+import { marked } from "marked";
+
+marked.setOptions({ breaks: true, gfm: true });
+function renderMd(text) {
+  if (text == null) return "";
+  return marked.parse(String(text));
+}
 import {
   fetchTestSuites, fetchTestSuite, createTestSuite, updateTestSuite, deleteTestSuite,
   createTestTopic, updateTestTopic, deleteTestTopic,
@@ -508,7 +515,7 @@ onMounted(async () => { await loadSuites(); await loadSkills(); });
               <div v-for="q in questions" :key="q.id" class="tp-q">
                 <span class="tp-q-diff" :style="{ background: diffColor(q.difficulty) }">{{ diffLabel(q.difficulty) }}</span>
                 <span class="tp-q-type">{{ typeLabel(q.type) }}</span>
-                <span class="tp-q-text">{{ q.question }}</span>
+                <span class="tp-q-text md-content" v-html="renderMd(q.question)"></span>
                 <button class="tp-rm tp-rm--sm" @click="deleteTestQuestion(q.id).then(() => loadQuestions(topic.id))">✕</button>
               </div>
             </div>
@@ -532,7 +539,7 @@ onMounted(async () => { await loadSuites(); await loadSkills(); });
             <span v-if="currentQ.tags" class="tp-exam-q-tags">{{ currentQ.tags }}</span>
           </div>
           <div v-if="currentQ.imageUrl" class="tp-exam-q-img"><img :src="currentQ.imageUrl" /></div>
-          <div class="tp-exam-q-text">{{ currentQ.question }}</div>
+          <div class="tp-exam-q-text md-content" v-html="renderMd(currentQ.question)"></div>
 
           <!-- Choice -->
           <div v-if="['single_choice','multiple_choice','true_false','image_choice'].includes(currentQ.type)" class="tp-opts">
@@ -982,6 +989,30 @@ onMounted(async () => { await loadSuites(); await loadSkills(); });
 .tp-exam-q-img { margin-bottom: 14px; border-radius: 10px; overflow: hidden; max-height: 250px; }
 .tp-exam-q-img img { width: 100%; display: block; }
 .tp-exam-q-text { font-size: 16px; line-height: 1.6; margin-bottom: 18px; color: #f0f3ff; }
+.md-content :deep(pre) {
+  background: #0f1320;
+  border: 1px solid #2a3150;
+  border-radius: 8px;
+  padding: 10px 12px;
+  overflow-x: auto;
+  margin: 8px 0;
+}
+.md-content :deep(code) {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+  background: #0f1320;
+  border: 1px solid #2a3150;
+  border-radius: 4px;
+  padding: 1px 5px;
+  color: #e6ecff;
+}
+.md-content :deep(pre code) {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  white-space: pre;
+}
+.md-content :deep(p) { margin: 4px 0; }
 
 .tp-opts { display: flex; flex-direction: column; gap: 8px; }
 .tp-opt { text-align: left; padding: 14px 18px; background: rgba(255,255,255,0.03); border: 2px solid rgba(255,255,255,0.08); border-radius: 12px; color: #e0e6f4; font-size: 14px; cursor: pointer; transition: all 0.15s; display: flex; align-items: center; gap: 10px; }
