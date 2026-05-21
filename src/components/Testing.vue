@@ -1,12 +1,40 @@
 <script setup>
-import { ref, computed, onMounted } from "vue";
+import { ref, computed, onMounted, onBeforeUnmount, nextTick } from "vue";
 import { useRouter } from "vue-router";
-import { marked } from "marked";
+import { Marked } from "marked";
+import hljs from "highlight.js";
+import "highlight.js/styles/atom-one-dark.css";
 
-marked.setOptions({ breaks: true, gfm: true });
+const mdParser = new Marked({
+  gfm: true,
+  breaks: true,
+  renderer: {
+    code({ text, lang }) {
+      let highlighted;
+      if (lang && hljs.getLanguage(lang)) {
+        try { highlighted = hljs.highlight(text, { language: lang }).value; }
+        catch { highlighted = hljs.highlightAuto(text).value; }
+      } else {
+        highlighted = hljs.highlightAuto(text).value;
+      }
+      const cls = lang ? ` class="hljs language-${lang}"` : ' class="hljs"';
+      const langLabel = lang ? `<span class="study-code-lang">${lang}</span>` : '';
+      return `<div class="study-code-block">${langLabel}<pre><code${cls}>${highlighted}\n</code></pre></div>`;
+    },
+    image({ href, title, text }) {
+      const t = title ? ` title="${title}"` : "";
+      const a = text ? ` alt="${text.replace(/"/g, '&quot;')}"` : "";
+      return `<img src="${href}"${a}${t} class="study-img" loading="lazy" />`;
+    },
+    link({ href, title, text }) {
+      const t = title ? ` title="${title}"` : "";
+      return `<a href="${href}"${t} target="_blank" rel="noopener noreferrer">${text}</a>`;
+    },
+  },
+});
 function renderMd(text) {
   if (text == null) return "";
-  return marked.parse(String(text));
+  return mdParser.parse(String(text));
 }
 import {
   fetchTestSuites, fetchTestSuite, createTestSuite, updateTestSuite, deleteTestSuite,
@@ -21,13 +49,21 @@ import {
 const router = useRouter();
 
 // --- State ---
-const view = ref("list"); // list | detail | exam | results | stats
+const view = ref("list"); // list | detail | exam | results | stats | study
 const suites = ref([]);
 const selectedSuite = ref(null);
 const selectedTopicId = ref(null);
 const questions = ref([]);
 const loading = ref(false);
 const allSkills = ref([]);
+
+// Study (learning / memorization) mode
+const studyQuestions = ref([]);
+const studyIdx = ref(0);
+const studyTitle = ref("");
+const studyShowAnswer = ref(true);   // toggle: hide/show answer (for active recall)
+const studyListOpen = ref(false);    // mobile-friendly side list toggle
+const currentStudyQ = computed(() => studyQuestions.value[studyIdx.value] || null);
 
 // Exam
 const exam = ref(null);
@@ -259,6 +295,23 @@ function copyPrompt(type) {
   const prompts = {
     topics: `Сгенерируй JSON массив тем для теста. Формат: [{"title":"Тема 1","description":"Описание"}]. Только JSON. Тест:`,
     questions: `Сгенерируй JSON вопросов. Формат: {"questions":[{"type":"single_choice","difficulty":"medium","tags":["tag"],"subtopic":"1-1","question":"Текст","options":["A","B","C"],"correct":[0],"explanation":"Почему"}]}. Типы: single_choice, multiple_choice, true_false, free_text, code_input, ordering, matching. Только JSON. Тема:`,
+    study: `Сгенерируй JSON вопросов с ПОДРОБНЫМИ ответами для заучивания (билеты экзамена).
+Формат: {"questions":[
+  {
+    "type":"free_text",
+    "difficulty":"medium",
+    "question":"Текст вопроса (можно markdown)",
+    "options":[],
+    "correct":[],
+    "explanation":"ПОДРОБНЫЙ ответ в markdown — несколько абзацев, с заголовками (## ...), списками, кодом в \`\`\`lang ... \`\`\`, таблицами, формулами в коде. Без сокращений, развёрнутый материал для заучивания."
+  }
+]}
+Правила:
+- Поле "explanation" — главное, оно содержит ПОЛНЫЙ ответ для заучивания. Не экономь, пиши подробно с примерами.
+- Используй markdown: ## заголовки, **жирный**, списки, \`\`\`lang ... \`\`\` для кода.
+- Картинки можно вставлять как ![alt](url).
+- Если у вопроса есть варианты — заполни options и correct, но всё равно дай развёрнутое объяснение.
+Только JSON, без комментариев. Билет / тема:`,
   };
   const ta = document.createElement("textarea");
   ta.value = prompts[type]; ta.style.cssText = "position:fixed;left:-9999px";
@@ -407,13 +460,91 @@ async function openStats() {
   view.value = "stats";
 }
 
+// --- Study mode (memorization) ---
+async function startStudySuite() {
+  if (!selectedSuite.value) return;
+  loading.value = true;
+  try {
+    const all = [];
+    for (const topic of (selectedSuite.value.topics || [])) {
+      const qs = await fetchTestQuestions(topic.id, null);
+      // mark each question with its topic title for the header label
+      for (const q of qs) all.push({ ...q, _topicTitle: topic.title, _topicPosition: topic.position });
+    }
+    if (!all.length) { alert("Нет вопросов для обучения. Сначала загрузи вопросы с подробными ответами."); return; }
+    studyQuestions.value = all;
+    studyIdx.value = 0;
+    studyTitle.value = selectedSuite.value.title;
+    studyShowAnswer.value = true;
+    view.value = "study";
+  } finally { loading.value = false; }
+}
+
+async function startStudyTopic(topic) {
+  loading.value = true;
+  try {
+    const qs = await fetchTestQuestions(topic.id, null);
+    if (!qs.length) { alert("В этом билете нет вопросов"); return; }
+    studyQuestions.value = qs.map(q => ({ ...q, _topicTitle: topic.title, _topicPosition: topic.position }));
+    studyIdx.value = 0;
+    studyTitle.value = topic.title;
+    studyShowAnswer.value = true;
+    view.value = "study";
+  } finally { loading.value = false; }
+}
+
+async function startStudySubtopic(topic, sub) {
+  loading.value = true;
+  try {
+    const qs = await fetchTestQuestions(topic.id, sub.id);
+    if (!qs.length) { alert("В этом билете нет вопросов"); return; }
+    studyQuestions.value = qs.map(q => ({ ...q, _topicTitle: topic.title + " · " + sub.title, _topicPosition: topic.position }));
+    studyIdx.value = 0;
+    studyTitle.value = sub.title;
+    studyShowAnswer.value = true;
+    view.value = "study";
+  } finally { loading.value = false; }
+}
+
+function studyPrev() { if (studyIdx.value > 0) { studyIdx.value--; studyShowAnswer.value = true; scrollStudyTop(); } }
+function studyNext() { if (studyIdx.value < studyQuestions.value.length - 1) { studyIdx.value++; studyShowAnswer.value = true; scrollStudyTop(); } }
+function studyJump(i) { studyIdx.value = i; studyShowAnswer.value = true; studyListOpen.value = false; scrollStudyTop(); }
+function scrollStudyTop() {
+  nextTick(() => {
+    const el = document.querySelector(".tp-study-scroll");
+    if (el) el.scrollTop = 0;
+  });
+}
+function studyKeydown(e) {
+  if (view.value !== "study") return;
+  if (e.target?.tagName === "INPUT" || e.target?.tagName === "TEXTAREA") return;
+  if (e.key === "ArrowLeft") studyPrev();
+  else if (e.key === "ArrowRight" || e.key === " ") { e.preventDefault(); studyNext(); }
+  else if (e.key === "h" || e.key === "H") studyShowAnswer.value = !studyShowAnswer.value;
+}
+
 function goBack() {
-  if (view.value === "exam" || view.value === "results" || view.value === "stats") view.value = "detail";
+  if (view.value === "exam" || view.value === "results" || view.value === "stats" || view.value === "study") view.value = "detail";
   else if (view.value === "detail") { view.value = "list"; selectedSuite.value = null; }
   else router.push("/");
 }
 
 function parseOpts(json) { try { return JSON.parse(json); } catch { return []; } }
+function studyCorrectText(q) {
+  if (!q) return "";
+  let c = {};
+  try { c = JSON.parse(q.correct || "{}"); } catch {}
+  const opts = parseOpts(q.options);
+  const findText = (id) => opts.find(o => String(o.id) === String(id))?.text || id;
+  if (Array.isArray(c)) {
+    const ids = c.filter(x => typeof x !== "object").map(String);
+    if (ids.length === 1) return findText(ids[0]);
+    if (ids.length > 1) return ids.map(findText).join(", ");
+  }
+  if (c.id != null) return findText(c.id);
+  if (Array.isArray(c.ids)) return c.ids.map(findText).join(", ");
+  return "—";
+}
 function diffLabel(d) { return d === 1 ? "Easy" : d === 2 ? "Medium" : "Hard"; }
 function diffColor(d) { return d === 1 ? "#4ade80" : d === 2 ? "#facc15" : "#f87171"; }
 function typeLabel(t) { const m = { single_choice:"Один",multiple_choice:"Несколько",true_false:"Да/Нет",free_text:"Текст",code_input:"Код",fill_blanks:"Пропуски",ordering:"Порядок",matching:"Соответствие",image_choice:"Картинка" }; return m[t] || t; }
@@ -425,7 +556,12 @@ const questionTypes = [
   { v: "ordering", l: "Порядок" }, { v: "matching", l: "Соответствие" }, { v: "image_choice", l: "Картинка" },
 ];
 
-onMounted(async () => { await loadSuites(); await loadSkills(); });
+onMounted(async () => {
+  await loadSuites();
+  await loadSkills();
+  window.addEventListener("keydown", studyKeydown);
+});
+onBeforeUnmount(() => { window.removeEventListener("keydown", studyKeydown); });
 </script>
 
 <template>
@@ -433,7 +569,7 @@ onMounted(async () => { await loadSuites(); await loadSkills(); });
     <header class="tp-head">
       <button class="tp-back" @click="goBack">←</button>
       <div class="tp-head-title">
-        <h1>{{ view === 'list' ? 'Тестирование' : view === 'exam' ? 'Экзамен' : view === 'results' ? 'Результаты' : view === 'stats' ? 'Статистика' : selectedSuite?.title || '' }}</h1>
+        <h1>{{ view === 'list' ? 'Тестирование' : view === 'exam' ? 'Экзамен' : view === 'results' ? 'Результаты' : view === 'stats' ? 'Статистика' : view === 'study' ? ('Обучение · ' + (studyTitle || '')) : selectedSuite?.title || '' }}</h1>
         <!-- Skill/Grade badge -->
         <div v-if="view === 'detail' && suiteSkill" class="tp-suite-skill-badge" :style="{ borderColor: suiteSkill.color }">
           <span class="tp-suite-skill-icon" :style="{ background: suiteSkill.color + '25' }">{{ suiteSkill.icon || '📚' }}</span>
@@ -447,6 +583,7 @@ onMounted(async () => { await loadSuites(); await loadSkills(); });
           <button class="tp-btn" @click="startEditSuite(selectedSuite)">✎ Тест</button>
           <button class="tp-btn" @click="modal = 'topic'">+ Тема</button>
           <button class="tp-btn" @click="modal = 'importTopics'">{ } JSON</button>
+          <button class="tp-btn tp-btn--study" @click="startStudySuite" title="Читать вопросы с подробными ответами">📖 Учить</button>
           <button class="tp-btn tp-btn--primary" @click="examSetup = { questionCount: 0, mode: 'learning', shuffle: true, timeLimitMin: null, topicIds: [], difficulties: [], types: [] }; modal = 'examSetup'">Тестирование</button>
           <button class="tp-btn tp-btn--primary" @click="examSetup = { questionCount: 20, mode: 'exam', shuffle: true, timeLimitMin: null, topicIds: [], difficulties: [], types: [] }; modal = 'examSetup'">Экзамен</button>
           <button class="tp-btn" @click="openStats">Статистика</button>
@@ -491,6 +628,7 @@ onMounted(async () => { await loadSuites(); await loadSkills(); });
             <span class="tp-topic-num">{{ topic.position + 1 }}</span>
             <span class="tp-topic-title">{{ topic.title }}</span>
             <span class="tp-topic-count">{{ topic.totalQuestions }} вопр.</span>
+            <button class="tp-btn tp-btn--sm tp-btn--study" @click.stop="startStudyTopic(topic)" title="Учить вопросы билета">📖</button>
             <button class="tp-btn tp-btn--sm" @click.stop="quickTest([topic.id])" title="Тестирование по теме">▶</button>
             <button class="tp-btn tp-btn--sm" @click.stop="startEditTopic(topic)">✎</button>
             <button class="tp-rm" @click.stop="removeTopic(topic.id)">✕</button>
@@ -499,6 +637,7 @@ onMounted(async () => { await loadSuites(); await loadSkills(); });
           <div v-if="topic.subtopics?.length" class="tp-subtopics">
             <div v-for="sub in topic.subtopics" :key="sub.id" class="tp-sub" @click.stop="loadQuestions(topic.id, sub.id)">
               {{ sub.title }} <span class="tp-sub-n">{{ sub.totalQuestions }}</span>
+              <button class="tp-btn tp-btn--sm tp-btn--study" @click.stop="startStudySubtopic(topic, sub)" style="padding:2px 6px;font-size:10px" title="Учить вопросы билета">📖</button>
               <button class="tp-btn tp-btn--sm" @click.stop="startEditSubtopic(sub)" style="padding:2px 6px;font-size:10px">✎</button>
               <button class="tp-rm tp-rm--sm" @click.stop="deleteTestSubtopic(sub.id).then(() => openSuite(selectedSuite.id))">✕</button>
             </div>
@@ -605,6 +744,88 @@ onMounted(async () => { await loadSuites(); await loadSkills(); });
             <button class="tp-btn tp-btn--primary" @click="submitAndNext">
               {{ practiceResult ? 'Далее →' : (examIdx < exam.questions.length - 1 ? 'Ответить →' : 'Завершить') }}
             </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- STUDY (learning / memorization) -->
+      <div v-if="view === 'study'" class="tp-study">
+        <div class="tp-study-bar">
+          <button class="tp-btn tp-btn--sm tp-study-list-btn" @click="studyListOpen = !studyListOpen" title="Список вопросов">☰</button>
+          <span class="tp-study-counter">{{ studyIdx + 1 }} / {{ studyQuestions.length }}</span>
+          <div class="tp-study-track"><div class="tp-study-fill" :style="{ width: ((studyIdx + 1) / studyQuestions.length * 100) + '%' }"></div></div>
+          <button class="tp-btn tp-btn--sm" @click="studyShowAnswer = !studyShowAnswer" :title="studyShowAnswer ? 'Скрыть ответ (H)' : 'Показать ответ (H)'">
+            {{ studyShowAnswer ? '👁 Скрыть' : '👁 Показать' }}
+          </button>
+        </div>
+
+        <div class="tp-study-wrap">
+          <!-- Mobile-only backdrop to close side panel on tap-outside -->
+          <div v-if="studyListOpen" class="tp-study-backdrop" @click="studyListOpen = false"></div>
+          <!-- Side list of questions (collapsible on mobile) -->
+          <aside class="tp-study-side" :class="{ open: studyListOpen }">
+            <div class="tp-study-side-head">
+              <span>Вопросы ({{ studyQuestions.length }})</span>
+              <button class="tp-study-side-close" @click="studyListOpen = false">✕</button>
+            </div>
+            <div class="tp-study-side-list">
+              <button
+                v-for="(q, i) in studyQuestions"
+                :key="q.id"
+                class="tp-study-side-item"
+                :class="{ active: i === studyIdx, done: i < studyIdx }"
+                @click="studyJump(i)">
+                <span class="tp-study-side-num">{{ i + 1 }}</span>
+                <span class="tp-study-side-text">{{ (q.question || '').replace(/[#`*_]/g, '').slice(0, 70) }}</span>
+              </button>
+            </div>
+          </aside>
+
+          <!-- Main card -->
+          <div class="tp-study-main">
+            <div class="tp-study-scroll" v-if="currentStudyQ">
+              <div class="tp-study-card">
+                <div class="tp-study-meta">
+                  <span v-if="currentStudyQ._topicTitle" class="tp-study-topic">{{ currentStudyQ._topicTitle }}</span>
+                  <span class="tp-study-q-num">Вопрос {{ studyIdx + 1 }}</span>
+                </div>
+
+                <div class="tp-study-q-label">Вопрос</div>
+                <div class="tp-study-question md-content study-md" v-html="renderMd(currentStudyQ.question)"></div>
+
+                <div v-if="currentStudyQ.imageUrl" class="tp-study-q-img">
+                  <img :src="currentStudyQ.imageUrl" />
+                </div>
+
+                <div class="tp-study-divider"></div>
+
+                <div class="tp-study-q-label">Ответ</div>
+
+                <div v-if="!studyShowAnswer" class="tp-study-hidden" @click="studyShowAnswer = true">
+                  <div class="tp-study-hidden-icon">🔒</div>
+                  <div>Ответ скрыт. Попробуй вспомнить, потом нажми, чтобы показать.</div>
+                </div>
+
+                <div v-else>
+                  <div v-if="currentStudyQ.explanation" class="tp-study-answer md-content study-md" v-html="renderMd(currentStudyQ.explanation)"></div>
+                  <div v-else class="tp-study-no-answer">
+                    Подробный ответ ещё не добавлен. Открой вопрос в редакторе и заполни поле «Объяснение» — туда можно вставить markdown, код, формулы, картинки.
+                  </div>
+
+                  <!-- For multi-choice questions: also show the "correct option(s)" briefly -->
+                  <div v-if="['single_choice','multiple_choice','true_false','image_choice'].includes(currentStudyQ.type)" class="tp-study-correct-block">
+                    <div class="tp-study-correct-label">Правильный вариант:</div>
+                    <div class="tp-study-correct-text">{{ studyCorrectText(currentStudyQ) }}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="tp-study-nav">
+              <button class="tp-btn" :disabled="studyIdx === 0" @click="studyPrev">← Предыдущий</button>
+              <span class="tp-study-hint">← / → · Пробел · H — скрыть/показать</span>
+              <button class="tp-btn tp-btn--primary" :disabled="studyIdx >= studyQuestions.length - 1" @click="studyNext">Следующий →</button>
+            </div>
           </div>
         </div>
       </div>
@@ -841,7 +1062,13 @@ onMounted(async () => { await loadSuites(); await loadSkills(); });
     <transition name="modal-fade"><div v-if="modal === 'importQ'" class="modal-overlay" @click.self="modal = null"><div class="modal-card tp-modal">
       <button class="modal-close" @click="modal = null">×</button>
       <h2 class="modal-title">Импорт вопросов</h2>
-      <div class="tp-import-row"><span>Скопируй промпт для AI</span><button class="tp-btn tp-btn--sm" @click="copyPrompt('questions')">Копировать</button></div>
+      <div class="tp-import-row">
+        <span>Скопируй промпт для AI</span>
+        <div style="display:flex;gap:6px">
+          <button class="tp-btn tp-btn--sm" @click="copyPrompt('questions')" title="Короткие вопросы для тестирования">Тест-промпт</button>
+          <button class="tp-btn tp-btn--sm tp-btn--study" @click="copyPrompt('study')" title="Подробные ответы для заучивания">📖 Обучение-промпт</button>
+        </div>
+      </div>
       <textarea v-model="importJson" class="form-input tp-mono" rows="10" placeholder='{"questions":[...]}'></textarea>
       <div v-if="importError" class="tp-err">{{ importError }}</div>
       <button class="tp-submit" @click="doImportQuestions">Импортировать</button>
@@ -1013,6 +1240,8 @@ onMounted(async () => { await loadSuites(); await loadSkills(); });
   white-space: pre;
 }
 .md-content :deep(p) { margin: 4px 0; }
+.md-content :deep(.study-code-block) { position: relative; }
+.md-content :deep(.study-code-lang) { position: absolute; top: 4px; right: 8px; font-size: 10px; color: rgba(200,215,255,0.4); text-transform: uppercase; letter-spacing: 0.5px; font-family: monospace; pointer-events: none; }
 
 .tp-opts { display: flex; flex-direction: column; gap: 8px; }
 .tp-opt { text-align: left; padding: 14px 18px; background: rgba(255,255,255,0.03); border: 2px solid rgba(255,255,255,0.08); border-radius: 12px; color: #e0e6f4; font-size: 14px; cursor: pointer; transition: all 0.15s; display: flex; align-items: center; gap: 10px; }
@@ -1115,4 +1344,145 @@ onMounted(async () => { await loadSuites(); await loadSkills(); });
 .tp-match-game-row { display: flex; align-items: center; gap: 12px; }
 .tp-match-left { flex: 1; padding: 10px 14px; background: rgba(23,103,253,0.06); border: 1px solid rgba(23,103,253,0.15); border-radius: 8px; font-size: 13px; }
 .tp-match-select { flex: 1; min-width: 0; }
+
+/* === Study (learning / memorization) === */
+.tp-btn--study { background: rgba(139,92,246,0.1); border-color: rgba(139,92,246,0.3); color: #c7a4ff; }
+.tp-btn--study:hover { background: rgba(139,92,246,0.18); }
+
+.tp-study { display: flex; flex-direction: column; height: 100%; max-width: 1200px; margin: 0 auto; width: 100%; }
+.tp-study-bar { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+.tp-study-counter { font-size: 14px; font-weight: 700; color: rgba(200,215,255,0.6); white-space: nowrap; }
+.tp-study-track { flex: 1; min-width: 100px; height: 8px; background: rgba(255,255,255,0.06); border-radius: 4px; overflow: hidden; }
+.tp-study-fill { height: 100%; background: linear-gradient(90deg, #8b5cf6, #c084fc); border-radius: 4px; transition: width 0.3s; }
+.tp-study-list-btn { display: none; }
+
+.tp-study-wrap { display: grid; grid-template-columns: 260px 1fr; gap: 16px; flex: 1; min-height: 0; }
+
+.tp-study-side { background: rgba(255,255,255,0.025); border: 1px solid rgba(255,255,255,0.06); border-radius: 12px; display: flex; flex-direction: column; min-height: 0; }
+.tp-study-backdrop { display: none; }
+.tp-study-side-head { padding: 12px 14px; font-size: 12px; font-weight: 700; color: rgba(200,215,255,0.5); border-bottom: 1px solid rgba(255,255,255,0.05); flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; }
+.tp-study-side-close { display: none; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: rgba(200,215,255,0.6); width: 32px; height: 32px; border-radius: 8px; cursor: pointer; font-size: 14px; }
+.tp-study-side-close:hover { color: #fff; background: rgba(255,255,255,0.1); }
+.tp-study-side-list { overflow-y: auto; padding: 6px; flex: 1; min-height: 0; }
+.tp-study-side-item { display: flex; align-items: flex-start; gap: 8px; width: 100%; text-align: left; padding: 8px 10px; background: transparent; border: 1px solid transparent; border-radius: 8px; color: rgba(200,215,255,0.65); font-size: 12px; cursor: pointer; margin-bottom: 2px; line-height: 1.4; }
+.tp-study-side-item:hover { background: rgba(255,255,255,0.04); color: #fff; }
+.tp-study-side-item.active { background: rgba(139,92,246,0.15); border-color: rgba(139,92,246,0.35); color: #fff; }
+.tp-study-side-item.done .tp-study-side-num { background: rgba(74,222,128,0.2); color: #4ade80; }
+.tp-study-side-num { flex-shrink: 0; width: 22px; height: 22px; border-radius: 50%; background: rgba(255,255,255,0.06); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; }
+.tp-study-side-item.active .tp-study-side-num { background: #8b5cf6; color: #fff; }
+.tp-study-side-text { flex: 1; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+
+.tp-study-main { display: flex; flex-direction: column; min-height: 0; }
+.tp-study-scroll { flex: 1; overflow-y: auto; padding-right: 6px; }
+.tp-study-card { background: rgba(255,255,255,0.025); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 28px; }
+.tp-study-meta { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+.tp-study-topic { padding: 4px 12px; background: rgba(139,92,246,0.12); border: 1px solid rgba(139,92,246,0.25); border-radius: 8px; font-size: 12px; color: #c7a4ff; font-weight: 600; }
+.tp-study-q-num { padding: 4px 12px; background: rgba(255,255,255,0.05); border-radius: 8px; font-size: 12px; color: rgba(200,215,255,0.6); }
+
+.tp-study-q-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: rgba(139,92,246,0.8); margin-bottom: 8px; }
+.tp-study-question { font-size: 17px; line-height: 1.65; color: #f0f3ff; font-weight: 500; }
+.tp-study-q-img { margin: 14px 0; border-radius: 10px; overflow: hidden; }
+.tp-study-q-img img { width: 100%; display: block; max-height: 320px; object-fit: contain; background: rgba(0,0,0,0.3); }
+
+.tp-study-divider { height: 1px; background: linear-gradient(90deg, transparent, rgba(139,92,246,0.4), transparent); margin: 22px 0 18px; }
+
+.tp-study-answer { font-size: 15px; line-height: 1.75; color: #e4e8ef; }
+.tp-study-no-answer { padding: 16px 18px; border-radius: 10px; background: rgba(250,204,21,0.06); border: 1px solid rgba(250,204,21,0.2); color: #facc15; font-size: 13px; line-height: 1.5; }
+
+.tp-study-hidden { padding: 36px 20px; border-radius: 12px; background: rgba(139,92,246,0.05); border: 1px dashed rgba(139,92,246,0.3); color: rgba(200,215,255,0.55); font-size: 14px; text-align: center; cursor: pointer; transition: all 0.15s; }
+.tp-study-hidden:hover { background: rgba(139,92,246,0.1); }
+.tp-study-hidden-icon { font-size: 32px; margin-bottom: 8px; }
+
+.tp-study-correct-block { margin-top: 18px; padding: 12px 16px; background: rgba(74,222,128,0.06); border: 1px solid rgba(74,222,128,0.2); border-radius: 10px; }
+.tp-study-correct-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #4ade80; margin-bottom: 4px; }
+.tp-study-correct-text { font-size: 14px; color: #e4e8ef; }
+
+.tp-study-nav { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 4px 0; flex-shrink: 0; }
+.tp-study-hint { font-size: 11px; color: rgba(200,215,255,0.3); text-align: center; flex: 1; }
+
+/* Markdown content in study mode — large readable typography */
+.study-md :deep(p) { margin: 0.6em 0; line-height: 1.7; }
+.study-md :deep(h1) { font-size: 22px; font-weight: 700; margin: 18px 0 10px; color: #f5f7ff; }
+.study-md :deep(h2) { font-size: 19px; font-weight: 700; margin: 16px 0 8px; color: #f0f3ff; }
+.study-md :deep(h3) { font-size: 17px; font-weight: 600; margin: 14px 0 6px; color: #e4e8ef; }
+.study-md :deep(h4),
+.study-md :deep(h5),
+.study-md :deep(h6) { font-size: 15px; font-weight: 600; margin: 12px 0 4px; color: rgba(228,232,239,0.9); }
+.study-md :deep(ul),
+.study-md :deep(ol) { margin: 0.6em 0; padding-left: 24px; line-height: 1.7; }
+.study-md :deep(li) { margin: 4px 0; }
+.study-md :deep(blockquote) { margin: 10px 0; padding: 8px 14px; border-left: 3px solid rgba(139,92,246,0.5); background: rgba(139,92,246,0.05); color: rgba(200,215,255,0.75); border-radius: 0 6px 6px 0; }
+.study-md :deep(strong) { color: #f0f3ff; font-weight: 700; }
+.study-md :deep(em) { color: rgba(228,232,239,0.95); }
+.study-md :deep(a) { color: #6ea8ff; text-decoration: underline; }
+.study-md :deep(table) { border-collapse: collapse; margin: 10px 0; width: 100%; font-size: 13px; }
+.study-md :deep(th),
+.study-md :deep(td) { border: 1px solid rgba(255,255,255,0.1); padding: 6px 10px; text-align: left; }
+.study-md :deep(th) { background: rgba(139,92,246,0.08); font-weight: 700; }
+.study-md :deep(hr) { border: none; border-top: 1px solid rgba(255,255,255,0.08); margin: 16px 0; }
+.study-md :deep(img),
+.study-md :deep(.study-img) { max-width: 100%; height: auto; display: block; margin: 12px 0; border-radius: 8px; background: rgba(0,0,0,0.2); }
+.study-md :deep(code) { background: #0f1320; border: 1px solid #2a3150; border-radius: 4px; padding: 1px 6px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.9em; color: #e6ecff; }
+.study-md :deep(.study-code-block) { position: relative; margin: 12px 0; background: #0f1320; border: 1px solid #2a3150; border-radius: 10px; overflow: hidden; }
+.study-md :deep(.study-code-lang) { position: absolute; top: 6px; right: 10px; font-size: 10px; color: rgba(200,215,255,0.4); text-transform: uppercase; letter-spacing: 0.5px; font-family: monospace; }
+.study-md :deep(.study-code-block pre) { margin: 0; padding: 14px 16px; overflow-x: auto; background: transparent; }
+.study-md :deep(.study-code-block code) { background: transparent; border: 0; padding: 0; font-size: 13px; line-height: 1.5; white-space: pre; }
+
+/* === Mobile === */
+@media (max-width: 768px) {
+  .tp-head { padding: 10px 12px; gap: 8px; }
+  .tp-head-title h1 { font-size: 15px; }
+  .tp-head-actions { flex-wrap: wrap; gap: 4px; }
+  .tp-head-actions .tp-btn { padding: 5px 9px; font-size: 11px; }
+  .tp-body { padding: 12px; }
+
+  .tp-suite-card { padding: 12px; }
+  .tp-suite-icon { font-size: 22px; }
+  .tp-suite-title { font-size: 14px; }
+
+  .tp-topic-head { padding: 10px 12px; flex-wrap: wrap; gap: 6px; }
+  .tp-topic-title { font-size: 14px; min-width: 0; }
+  .tp-topic-count { font-size: 11px; }
+
+  .tp-exam-card { padding: 16px; border-radius: 12px; }
+  .tp-exam-q-text { font-size: 15px; }
+  .tp-opt { padding: 11px 14px; font-size: 13px; }
+
+  /* Study mode: stack list above content, collapsible */
+  .tp-study-wrap { grid-template-columns: 1fr; gap: 10px; }
+  .tp-study-list-btn { display: inline-flex; }
+  .tp-study-backdrop { display: block; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 99; }
+  .tp-study-side { position: fixed; top: 0; left: 0; bottom: 0; width: min(320px, 85vw); right: auto; z-index: 100; border-radius: 0; background: #0e1018; transform: translateX(-100%); transition: transform 0.2s ease; box-shadow: 4px 0 24px rgba(0,0,0,0.4); }
+  .tp-study-side.open { transform: translateX(0); }
+  .tp-study-side-head { padding: 14px 16px; font-size: 14px; }
+  .tp-study-side-close { display: inline-flex; align-items: center; justify-content: center; }
+  .tp-study-card { padding: 16px; border-radius: 12px; }
+  .tp-study-question { font-size: 15px; }
+  .tp-study-answer { font-size: 14px; line-height: 1.7; }
+  .tp-study-nav { flex-wrap: wrap; }
+  .tp-study-hint { display: none; }
+  .study-md :deep(h1) { font-size: 19px; }
+  .study-md :deep(h2) { font-size: 17px; }
+  .study-md :deep(h3) { font-size: 15px; }
+  .study-md :deep(.study-code-block pre) { padding: 10px 12px; }
+  .study-md :deep(.study-code-block code) { font-size: 12px; }
+
+  /* Topic select / filter scroll horizontally */
+  .tp-filter-bar { overflow-x: auto; flex-wrap: nowrap; padding-bottom: 4px; }
+  .tp-filter-btn { flex-shrink: 0; }
+
+  /* Modals fill width */
+  .tp-modal,
+  .tp-modal--wide { max-width: calc(100vw - 24px); }
+}
+
+@media (max-width: 480px) {
+  .tp-head-actions .tp-btn { padding: 4px 7px; font-size: 10.5px; }
+  .tp-study-card { padding: 14px; }
+  .tp-study-meta { gap: 6px; }
+  .tp-study-topic,
+  .tp-study-q-num { padding: 3px 9px; font-size: 11px; }
+  .tp-study-nav .tp-btn { flex: 1; padding: 8px 10px; }
+}
+
 </style>
