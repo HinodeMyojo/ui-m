@@ -132,7 +132,7 @@
           >
             <div
               v-for="(subtask, index) in task.subtasks"
-              :key="index"
+              :key="subtask.id"
               draggable="true"
               @dragstart="startDrag($event, subtask)"
               @click="clickSubtask(subtask)"
@@ -502,6 +502,7 @@ import {
   assignTaskLearningSkill,
   fetchChatMessages,
   sendChatMessage,
+  reorderTasksAPI,
 } from "../api.js";
 
 import {
@@ -1177,7 +1178,7 @@ function startDrag(event, subtask) {
   event.stopPropagation();
 }
 
-function onSubtaskDrop(event, subtasks) {
+async function onSubtaskDrop(event, subtasks) {
   if (event.dataTransfer.types.includes("Files")) {
     return;
   }
@@ -1188,11 +1189,19 @@ function onSubtaskDrop(event, subtasks) {
     event.target.closest(".subtasks").children
   ).findIndex((el) => el.contains(event.target));
 
-  if (fromIndex !== -1 && toIndex !== -1) {
+  event.stopPropagation();
+
+  if (fromIndex !== -1 && toIndex !== -1 && fromIndex !== toIndex) {
     const [removed] = subtasks.splice(fromIndex, 1);
     subtasks.splice(toIndex, 0, removed);
+    try {
+      await reorderTasksAPI(
+        subtasks.map((s, i) => ({ id: s.id, position: i + 1 }))
+      );
+    } catch (error) {
+      console.error("Ошибка при сохранении порядка подзадач:", error);
+    }
   }
-  event.stopPropagation();
 }
 
 const editingMessageId = ref(null);
