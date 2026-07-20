@@ -117,6 +117,50 @@ async function mutate(fn) {
   }
 }
 
+// клик по чипу — точный выбор уровня (повторный клик по активному — снять)
+function setLevel(activity, levelKey) {
+  const entry = entryFor(activity.id);
+  const current = entry?.level || "";
+  const next = current === levelKey ? "" : levelKey;
+  mutate(() =>
+    setDisciplineEntry({
+      date: props.date,
+      activityId: activity.id,
+      level: next,
+      variant: entry?.variant || null,
+    }),
+  );
+}
+
+// «⚡ весь минимум» — закрыть все неотмеченные мин-задачи разом
+const unmarkedMin = computed(() => {
+  const list = [];
+  for (const row of skillRows.value) {
+    if (!row.active || row.rested) continue;
+    for (const a of row.leveled) {
+      if (a.minDesc && !entryFor(a.id)) list.push(a);
+    }
+  }
+  return list;
+});
+
+async function completeAllMin() {
+  if (busy.value || !unmarkedMin.value.length) return;
+  busy.value = true;
+  try {
+    for (const a of unmarkedMin.value) {
+      await setDisciplineEntry({ date: props.date, activityId: a.id, level: "min" });
+    }
+    emit("changed");
+  } catch (e) {
+    console.error("discipline bulk error", e);
+    alert("Не все отметки сохранились — обнови страницу");
+    emit("changed");
+  } finally {
+    busy.value = false;
+  }
+}
+
 function cycleLevel(activity) {
   const levels = activityLevels(activity).map((l) => l.key);
   const entry = entryFor(activity.id);
@@ -217,6 +261,9 @@ function saveNote() {
 
 <template>
   <div class="dsc-checklist" v-if="dayData">
+    <button v-if="unmarkedMin.length > 1" class="dsc-bulk-min" :disabled="busy" @click="completeAllMin">
+      ⚡ Закрыть весь минимум ({{ unmarkedMin.length }})
+    </button>
     <div v-for="row in skillRows" :key="row.skill.planSkillId" class="dsc-skill"
       :class="{ 'dsc-skill-closed': row.closed || row.rested, 'dsc-skill-inactive': !row.active }">
       <div class="dsc-skill-head">
@@ -247,7 +294,7 @@ function saveNote() {
               'dsc-lvl-' + l.key,
               { 'dsc-lvl-active': (entryFor(a.id)?.level || '') === l.key ||
                  LEVEL_ORDER.indexOf(entryFor(a.id)?.level || '') > LEVEL_ORDER.indexOf(l.key) },
-            ]" :title="l.desc">
+            ]" :title="l.desc" @click.stop="setLevel(a, l.key)">
               {{ LEVEL_LABELS[l.key] }}
             </span>
           </span>
@@ -306,6 +353,31 @@ function saveNote() {
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+
+.dsc-bulk-min {
+  background: #4d3f12;
+  border: 1px solid #ffd666;
+  color: #ffd666;
+  border-radius: 8px;
+  padding: 7px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  min-height: 34px;
+}
+
+.dsc-bulk-min:hover:not(:disabled) {
+  background: #5d4c16;
+}
+
+.dsc-bulk-min:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.dsc-lvl {
+  cursor: pointer;
 }
 
 .dsc-skill {

@@ -126,6 +126,11 @@ function openDay(d) {
   if (d.status === "pre") return;
   modalDate.value = d.date;
 }
+
+const WEEKDAY_FULL = ["воскресенье", "понедельник", "вторник", "среда", "четверг", "пятница", "суббота"];
+function weekdayName(dateStr) {
+  return WEEKDAY_FULL[new Date(dateStr + "T12:00:00").getDay()];
+}
 </script>
 
 <template>
@@ -188,7 +193,7 @@ function openDay(d) {
           </div>
         </div>
 
-        <div class="dsc-today-label">Сегодня, {{ today.slice(8) }} число</div>
+        <div class="dsc-today-label">Сегодня, {{ parseInt(today.slice(8)) }} число · {{ weekdayName(today) }}</div>
         <DisciplineChecklist :month="month" :date="today" @changed="load" />
       </template>
 
