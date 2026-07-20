@@ -22,6 +22,7 @@ import TimeTrackerMini from "./elements/TimeTrackerMini.vue";
 import TimeStatsModal from "@/components/elements/TimeStatsModal.vue";
 
 import SkillsMiniWidget from "./elements/SkillsMiniWidget.vue";
+import DisciplineTracker from "./discipline/DisciplineTracker.vue";
 
 const DEFAULT_TASK_COLOR = "#25636A";
 const CONFETTI_DELAY_MS = 200;
@@ -806,6 +807,7 @@ function closeTimeStats() {
         </div>
       </div>
     </div>
+    <div class="body-wrap">
     <div class="body">
       <div class="columns-container" ref="calendarRef" @dragover="handleDragOver" @drop="handleDrop">
         <div v-for="col in daysInMonth" :key="col" ref="columnRef" class="column active" :class="{
@@ -924,6 +926,8 @@ function closeTimeStats() {
           }"></div>
         </div>
       </div>
+    </div>
+    <DisciplineTracker />
     </div>
   </div>
   <!-- <transition name="modal-fade">
@@ -1198,6 +1202,19 @@ function closeTimeStats() {
   align-items: center;
   justify-content: center;
   position: relative;
+}
+
+.body-wrap {
+  width: 100%;
+  display: flex;
+  align-items: stretch;
+  flex: 5;
+  min-height: 0;
+}
+
+.body-wrap > .body {
+  flex: 1;
+  min-width: 0;
 }
 
 .body {
@@ -2414,6 +2431,8 @@ function closeTimeStats() {
   .main {
     min-height: 100vh;
     min-height: 100dvh;
+    /* место под стики-бар трекера дисциплины */
+    padding-bottom: 56px;
   }
 
   .header {

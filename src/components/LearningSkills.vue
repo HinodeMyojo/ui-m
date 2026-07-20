@@ -8,8 +8,10 @@ import {
   fetchLearningMonthPlan, setLearningMonthPlan, removeLearningMonthPlan,
   importLearningGrades,
 } from "./api.js";
+import DisciplinePlanEditor from "./discipline/DisciplinePlanEditor.vue";
 
 const router = useRouter();
+const showDailyPlan = ref(false);
 
 // --- State ---
 const allSkills = ref([]);
@@ -250,8 +252,13 @@ watch([planMonth, planYear], async () => {
         <span class="sk-month-name">{{ monthNames[planMonth - 1] }} {{ planYear }}</span>
         <button class="sk-mn" @click="nextPlanMonth">▶</button>
       </div>
+      <button class="sk-create" @click="showDailyPlan = !showDailyPlan">📅 Ежедневный план</button>
       <button class="sk-create" @click="showCreateSkill = true; editingSkill = null; skillForm = { title: '', description: '', color: '#60a5fa', icon: '📚', grades: '' }">+ Навык</button>
     </header>
+
+    <div v-if="showDailyPlan" class="sk-daily-plan">
+      <DisciplinePlanEditor />
+    </div>
 
     <div class="sk-body">
       <!-- Left: active skills this month + SP -->
@@ -530,6 +537,7 @@ watch([planMonth, planYear], async () => {
 .sk-create:hover { box-shadow: 0 4px 20px rgba(23,103,253,0.5); transform: translateY(-1px); }
 
 .sk-body { flex: 1; display: flex; overflow: hidden; position: relative; }
+.sk-daily-plan { padding: 14px 16px; border-bottom: 1px solid rgba(100,140,255,0.08); max-height: 60vh; overflow-y: auto; }
 
 /* ===== Sidebar ===== */
 .sk-sidebar { width: 310px; border-right: 1px solid rgba(100,140,255,0.06); display: flex; flex-direction: column; overflow-y: auto; padding: 16px; gap: 12px; flex-shrink: 0; background: rgba(0,0,0,0.15); }

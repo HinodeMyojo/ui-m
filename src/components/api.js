@@ -588,3 +588,68 @@ export async function fetchExamHistory(suiteId) { return (await authorizedFetch(
 
 // Stats
 export async function fetchTestStats(suiteId) { return (await authorizedFetch(`${T}/stats?suite_id=${suiteId}`)).json(); }
+
+// === Discipline (трекер мин/сред/макс) ===
+
+const D = `${API_BASE_URL}/api/v1/discipline`;
+
+// Логическая дата: до 03:00 ночи считается предыдущий день
+export function disciplineLogicalToday() {
+  const now = new Date(Date.now() - 3 * 60 * 60 * 1000);
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, "0");
+  const d = String(now.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+export async function fetchDisciplineMonth(month, year) {
+  const today = disciplineLogicalToday();
+  const response = await authorizedFetch(
+    `${D}/month?month=${month}&year=${year}&today=${today}`,
+  );
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || "не удалось загрузить месяц");
+  return data;
+}
+
+export async function updateDisciplinePlan(id, data) {
+  await authorizedFetch(`${D}/plan/${id}`, { method: "PUT", body: JSON.stringify(data) });
+}
+
+export async function createDisciplineActivity(data) {
+  return (await authorizedFetch(`${D}/activities`, { method: "POST", body: JSON.stringify(data) })).json();
+}
+
+export async function updateDisciplineActivity(id, data) {
+  await authorizedFetch(`${D}/activities/${id}`, { method: "PUT", body: JSON.stringify(data) });
+}
+
+export async function deleteDisciplineActivity(id) {
+  await authorizedFetch(`${D}/activities/${id}`, { method: "DELETE" });
+}
+
+export async function addDisciplinePlanSkill(data) {
+  return (await authorizedFetch(`${D}/plan-skills`, { method: "POST", body: JSON.stringify(data) })).json();
+}
+
+export async function updateDisciplinePlanSkill(id, data) {
+  await authorizedFetch(`${D}/plan-skills/${id}`, { method: "PUT", body: JSON.stringify(data) });
+}
+
+export async function deleteDisciplinePlanSkill(id) {
+  await authorizedFetch(`${D}/plan-skills/${id}`, { method: "DELETE" });
+}
+
+// data: { id?, date, activityId?, adhocTitle?, adhocSkillId?, level, variant? }
+export async function setDisciplineEntry(data) {
+  await authorizedFetch(`${D}/entry`, { method: "POST", body: JSON.stringify(data) });
+}
+
+// data: { date, learningSkillId, remove? }
+export async function setDisciplineRest(data) {
+  await authorizedFetch(`${D}/rest`, { method: "POST", body: JSON.stringify(data) });
+}
+
+export async function setDisciplineDayNote(data) {
+  await authorizedFetch(`${D}/day-note`, { method: "PUT", body: JSON.stringify(data) });
+}
