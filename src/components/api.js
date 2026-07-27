@@ -816,3 +816,88 @@ export async function syncWorkDayToGoogle(date) {
   });
   return workJson(response, "синхронизация не удалась");
 }
+
+// === Task log (статусы, блокеры, решения, документы) ===
+
+const TL = `${API_BASE_URL}/api/v1/task-log`;
+
+export async function fetchTaskStatuses() {
+  const response = await authorizedFetch(`${TL}/statuses`);
+  return workJson(response, "не удалось загрузить статусы");
+}
+
+export async function createTaskStatus(data) {
+  const response = await authorizedFetch(`${TL}/statuses`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+  return workJson(response, "не удалось создать статус");
+}
+
+export async function updateTaskStatus(id, data) {
+  await authorizedFetch(`${TL}/statuses/${id}`, { method: "PUT", body: JSON.stringify(data) });
+}
+
+export async function deleteTaskStatus(id) {
+  await authorizedFetch(`${TL}/statuses/${id}`, { method: "DELETE" });
+}
+
+export async function reorderTaskStatuses(order) {
+  await authorizedFetch(`${TL}/statuses/reorder`, {
+    method: "POST",
+    body: JSON.stringify({ order }),
+  });
+}
+
+// Полная панель задачи: статус, подзадачи со статусами и блокерами, вся лента
+export async function fetchTaskLogBoard(taskId) {
+  const response = await authorizedFetch(`${TL}/board/${taskId}`);
+  return workJson(response, "не удалось загрузить ленту задачи");
+}
+
+// Лента одной задачи/подзадачи
+export async function fetchTaskLogEntries(taskId) {
+  const response = await authorizedFetch(`${TL}/entries?taskId=${taskId}`);
+  return workJson(response, "не удалось загрузить ленту");
+}
+
+// Сводка по одной задаче/подзадаче
+export async function fetchTaskLogNode(taskId) {
+  const response = await authorizedFetch(`${TL}/node/${taskId}`);
+  return workJson(response, "не удалось загрузить сводку");
+}
+
+// data: { taskId, kind, text, url?, statusId?, entryDate?, workItemId? }
+export async function createTaskLogEntry(data) {
+  const response = await authorizedFetch(`${TL}/entries`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+  return workJson(response, "не удалось добавить запись");
+}
+
+export async function updateTaskLogEntry(id, data) {
+  await authorizedFetch(`${TL}/entries/${id}`, { method: "PUT", body: JSON.stringify(data) });
+}
+
+export async function deleteTaskLogEntry(id) {
+  await authorizedFetch(`${TL}/entries/${id}`, { method: "DELETE" });
+}
+
+export async function resolveTaskLogEntry(id, resolved) {
+  await authorizedFetch(`${TL}/entries/${id}/resolve`, {
+    method: "POST",
+    body: JSON.stringify({ resolved }),
+  });
+}
+
+// data: { taskId, statusId, comment?, entryDate?, workItemId? }
+export async function setTaskLogStatus(data) {
+  const response = await authorizedFetch(`${TL}/status`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+  if (!response.ok) {
+    throw new Error((await response.json().catch(() => ({}))).error || "не удалось сменить статус");
+  }
+}

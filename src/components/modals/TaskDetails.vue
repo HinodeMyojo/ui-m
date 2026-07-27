@@ -161,8 +161,52 @@
                   >
                     {{ formatDeadline(subtask.end) }}
                   </div>
+                  <div class="subtask-log-row">
+                    <span
+                      v-if="logNodeOf(subtask.id)?.statusName"
+                      class="subtask-status"
+                      :style="{
+                        borderColor: logNodeOf(subtask.id).statusColor,
+                        color: logNodeOf(subtask.id).statusColor,
+                      }"
+                    >
+                      {{ logNodeOf(subtask.id).statusName }}
+                    </span>
+                    <span v-if="logNodeOf(subtask.id)?.openBlockers" class="subtask-blockers">
+                      🚧 {{ logNodeOf(subtask.id).openBlockers }}
+                    </span>
+                    <button
+                      v-if="logNodeOf(subtask.id)?.lastWorkDate"
+                      class="subtask-diary"
+                      :title="'В ежедневник: ' + logNodeOf(subtask.id).lastWorkDate"
+                      @click.stop="openInDiary(subtask.id)"
+                    >
+                      📓 в ежедневник
+                    </button>
+                  </div>
                 </span>
               </div>
+            </div>
+          </div>
+
+          <!-- Статус, блокеры и лента выбранной подзадачи (или самой задачи) -->
+          <div class="subtask-log">
+            <button class="subtask-log-toggle" @click="logPanelOpen = !logPanelOpen">
+              {{ logPanelOpen ? "▾" : "▸" }} Статус и лента
+              <span class="subtask-log-target">
+                {{ selectedSubtask ? selectedSubtask.title : "задачи целиком" }}
+              </span>
+              <span v-if="logBoard?.task?.openBlockers" class="subtask-blockers">
+                🚧 {{ logBoard.task.openBlockers }}
+              </span>
+            </button>
+            <div v-if="logPanelOpen" class="subtask-log-body">
+              <TaskLogPanel
+                :key="selectedSubtaskId || task.id"
+                :task-id="selectedSubtaskId || task.id"
+                compact
+                @changed="loadLogBoard"
+              />
             </div>
           </div>
           <div class="subtask-buttons">
@@ -348,6 +392,44 @@
                   </template>
 
                   <div class="message-content">
+                    <!-- Плашка типа записи: статус, блокер, решение, документ -->
+                    <div
+                      v-if="entryMeta(message)"
+                      class="message-kind"
+                      :class="{ resolved: message.kind === 'blocker' && message.resolved }"
+                      :style="{ borderLeftColor: entryMeta(message).color }"
+                    >
+                      <span class="message-kind-label" :style="{ color: entryMeta(message).color }">
+                        {{ entryMeta(message).icon }} {{ entryMeta(message).label }}
+                      </span>
+                      <span
+                        v-if="statusOf(message)"
+                        class="message-kind-status"
+                        :style="{ borderColor: statusOf(message).color, color: statusOf(message).color }"
+                      >
+                        {{ statusOf(message).name }}
+                      </span>
+                      <span v-if="subtaskNameOf(message)" class="message-kind-sub">
+                        · {{ subtaskNameOf(message) }}
+                      </span>
+                      <span v-if="message.workItemId" class="message-kind-src" title="Записано из ежедневника">📓</span>
+                      <button
+                        v-if="message.kind === 'blocker'"
+                        class="message-kind-btn"
+                        @click="toggleChatBlocker(message)"
+                      >
+                        {{ message.resolved ? "вернуть" : "снять" }}
+                      </button>
+                    </div>
+                    <a
+                      v-if="message.url"
+                      :href="message.url"
+                      target="_blank"
+                      rel="noopener"
+                      class="message-kind-url"
+                    >
+                      {{ message.url }}
+                    </a>
                     <div class="message-text" v-if="!isEditing(message.id)">
                       {{ message.text }}
                     </div>
@@ -489,6 +571,7 @@
 <script setup>
 import SvgIcon from "@jamescoyle/vue-icon";
 import UniversalSubtaskModal from "./UniversalSubtaskModal.vue";
+import TaskLogPanel from "../tasklog/TaskLogPanel.vue";
 
 import {
   fetchTasks,
@@ -503,6 +586,8 @@ import {
   fetchChatMessages,
   sendChatMessage,
   reorderTasksAPI,
+  fetchTaskLogBoard,
+  resolveTaskLogEntry,
 } from "../api.js";
 
 import {
@@ -527,6 +612,7 @@ import {
   nextTick,
 } from "vue";
 
+import { useRouter } from "vue-router";
 import chat from "./test.js";
 import bonfire from "../../assets/gif/bonfire-dark-souls.gif";
 import ChatMessage from "../extension/ChatMessage.vue";
@@ -632,6 +718,67 @@ const props = defineProps({
 });
 
 const task = ref(props.task);
+
+// --- Статусы, блокеры и лента задачи ---
+
+const router = useRouter();
+const logBoard = ref(null);
+const logPanelOpen = ref(false);
+
+// Раскраска записей прямо в чате: у каждого типа свой цвет и подпись
+const ENTRY_KINDS = {
+  blocker: { icon: "🔴", label: "Блокер", color: "#e5484d" },
+  status: { icon: "🟡", label: "Статус", color: "#ffd666" },
+  decision: { icon: "💡", label: "Решение", color: "#a98bff" },
+  doc: { icon: "📄", label: "Документ", color: "#4aa8ff" },
+};
+
+async function loadLogBoard() {
+  if (!task.value?.id) return;
+  try {
+    logBoard.value = await fetchTaskLogBoard(task.value.id);
+  } catch (e) {
+    logBoard.value = null;
+  }
+}
+
+// Сводка (статус, блокеры, дни в ежедневнике) по подзадаче или самой задаче
+function logNodeOf(id) {
+  if (!logBoard.value) return null;
+  if (logBoard.value.task?.id === id) return logBoard.value.task;
+  return logBoard.value.subtasks?.find((n) => n.id === id) || null;
+}
+
+function entryMeta(message) {
+  return ENTRY_KINDS[message?.kind] || null;
+}
+
+function statusOf(message) {
+  if (!message?.statusId || !logBoard.value) return null;
+  return logBoard.value.statuses?.find((s) => s.id === message.statusId) || null;
+}
+
+function subtaskNameOf(message) {
+  if (!message?.subtaskId) return "";
+  return logNodeOf(message.subtaskId)?.title || "";
+}
+
+async function toggleChatBlocker(message) {
+  try {
+    await resolveTaskLogEntry(message.id, !message.resolved);
+    message.resolved = !message.resolved;
+    await loadLogBoard();
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+// Переход на самый свежий день ежедневника, где эта подзадача фигурировала
+function openInDiary(id) {
+  const node = logNodeOf(id);
+  if (!node?.lastWorkDate) return;
+  router.push({ path: "/today", query: { date: node.lastWorkDate } });
+}
 
 // Inline task editing (title + dates)
 const isEditingTask = ref(false);
@@ -1049,6 +1196,7 @@ onMounted(() => {
   openTaskChat();
   getProgress();
   loadTaskSkills();
+  loadLogBoard();
   window.addEventListener("resize", scrollToBottom);
 });
 
@@ -1314,6 +1462,147 @@ function getFileIcon(type) {
   flex-direction: column;
   gap: 4px;
   min-width: 0;
+}
+
+/* --- Статусы, блокеры и лента подзадач --- */
+
+.subtask-log-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
+  margin-top: 3px;
+}
+
+.subtask-status {
+  font-size: 10px;
+  border: 1px solid;
+  border-radius: 20px;
+  padding: 1px 7px;
+  white-space: nowrap;
+}
+
+.subtask-blockers {
+  font-size: 10px;
+  color: #ff9ba0;
+  border: 1px solid #6b2b2e;
+  border-radius: 20px;
+  padding: 1px 7px;
+  white-space: nowrap;
+}
+
+.subtask-diary {
+  background: none;
+  border: 1px solid #2f3340;
+  color: #6ba4ff;
+  border-radius: 20px;
+  padding: 1px 7px;
+  font-size: 10px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.subtask-diary:hover {
+  border-color: #1767fd;
+}
+
+.subtask-log {
+  margin-top: 10px;
+  border-top: 1px solid #2a2d38;
+  padding-top: 8px;
+}
+
+.subtask-log-toggle {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  background: none;
+  border: none;
+  color: #b7bccb;
+  cursor: pointer;
+  font-size: 13px;
+  text-align: left;
+  padding: 2px 0;
+}
+
+.subtask-log-target {
+  color: #6e7382;
+  font-size: 11.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.subtask-log-body {
+  margin-top: 9px;
+  max-height: 46vh;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.message-kind {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  border-left: 3px solid #5b616e;
+  padding: 2px 0 2px 8px;
+  margin-bottom: 5px;
+}
+
+.message-kind.resolved {
+  opacity: 0.55;
+}
+
+.message-kind-label {
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.message-kind-status {
+  font-size: 10px;
+  border: 1px solid;
+  border-radius: 20px;
+  padding: 1px 7px;
+}
+
+.message-kind-sub {
+  font-size: 11px;
+  color: #8f95a6;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.message-kind-src {
+  font-size: 11px;
+}
+
+.message-kind-btn {
+  background: none;
+  border: 1px solid #2f3340;
+  color: #8f95a6;
+  border-radius: 20px;
+  padding: 1px 8px;
+  font-size: 10px;
+  cursor: pointer;
+  margin-left: auto;
+}
+
+.message-kind-btn:hover {
+  border-color: #63c94f;
+  color: #63c94f;
+}
+
+.message-kind-url {
+  display: block;
+  color: #6ba4ff;
+  font-size: 12px;
+  margin-bottom: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .subtask-deadline {

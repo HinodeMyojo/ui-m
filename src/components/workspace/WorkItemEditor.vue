@@ -2,6 +2,7 @@
 import { ref, computed, watch, onBeforeUnmount } from "vue";
 import MarkdownField from "./MarkdownField.vue";
 import TaskPickerModal from "./TaskPickerModal.vue";
+import TaskLogPanel from "@/components/tasklog/TaskLogPanel.vue";
 import {
   updateWorkItem,
   fetchWorkItem,
@@ -68,6 +69,7 @@ const saving = ref(false);
 const savedAt = ref(null);
 const error = ref("");
 const taskPicker = ref(false);
+const openLogTaskId = ref(null);
 const newNote = ref("");
 const newCheck = ref("");
 const newLink = ref({ url: "", title: "", kind: "other" });
@@ -471,7 +473,13 @@ async function applyTasks(ids) {
 }
 
 function detachTask(index) {
+  if (form.value.tasks[index]?.id === openLogTaskId.value) openLogTaskId.value = null;
   form.value.tasks.splice(index, 1);
+}
+
+// Лента раскрывается только у одной задачи за раз — иначе карточка расползается.
+function toggleLog(taskId) {
+  openLogTaskId.value = openLogTaskId.value === taskId ? null : taskId;
 }
 
 // --- Файлы ---
@@ -728,12 +736,39 @@ const totalSpent = computed(
           <button class="wie-chip" @click="taskPicker = true">+ прикрепить</button>
         </div>
         <div v-if="!form.tasks.length" class="wie-empty">ничего не прикреплено</div>
-        <div v-for="(t, i) in form.tasks" :key="t.id" class="wie-task">
-          <span class="wie-task-dot" :style="{ background: t.color || '#1767fd' }"></span>
-          <span class="wie-task-title" :class="{ done: t.done }">{{ t.title }}</span>
-          <span v-if="t.parentTitle" class="wie-task-parent">← {{ t.parentTitle }}</span>
-          <span v-if="t.isGlobal" class="wie-badge">глобальная</span>
-          <button class="wie-x" title="Отвязать" @click="detachTask(i)">✕</button>
+        <div v-for="(t, i) in form.tasks" :key="t.id" class="wie-task-wrap">
+          <div class="wie-task">
+            <span class="wie-task-dot" :style="{ background: t.color || '#1767fd' }"></span>
+            <span class="wie-task-title" :class="{ done: t.done }">{{ t.title }}</span>
+            <span v-if="t.parentTitle" class="wie-task-parent">← {{ t.parentTitle }}</span>
+            <span
+              v-if="t.statusName"
+              class="wie-task-status"
+              :style="{ borderColor: t.statusColor, color: t.statusColor }"
+            >
+              {{ t.statusName }}
+            </span>
+            <span v-if="t.openBlockers" class="wie-task-blockers">🚧 {{ t.openBlockers }}</span>
+            <button
+              class="wie-task-log"
+              :class="{ on: openLogTaskId === t.id }"
+              title="Статус, блокеры, лента"
+              @click="toggleLog(t.id)"
+            >
+              {{ openLogTaskId === t.id ? "▾" : "▸" }} лента
+            </button>
+            <button class="wie-x" title="Отвязать" @click="detachTask(i)">✕</button>
+          </div>
+
+          <div v-if="openLogTaskId === t.id" class="wie-task-panel">
+            <TaskLogPanel
+              :task-id="t.id"
+              :work-item-id="item.id"
+              :entry-date="date"
+              compact
+              @changed="emit('changed', { keepSelection: true })"
+            />
+          </div>
         </div>
       </div>
 
@@ -1195,6 +1230,12 @@ select.wie-input {
   font-style: italic;
 }
 
+.wie-task-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
 .wie-task {
   display: flex;
   align-items: center;
@@ -1203,6 +1244,45 @@ select.wie-input {
   border: 1px solid #262a36;
   border-radius: 8px;
   padding: 7px 9px;
+  flex-wrap: wrap;
+}
+
+.wie-task-status {
+  font-size: 10.5px;
+  border: 1px solid;
+  border-radius: 20px;
+  padding: 1px 8px;
+  flex-shrink: 0;
+}
+
+.wie-task-blockers {
+  font-size: 10.5px;
+  color: #ff9ba0;
+  border: 1px solid #6b2b2e;
+  border-radius: 20px;
+  padding: 1px 7px;
+  flex-shrink: 0;
+}
+
+.wie-task-log {
+  background: none;
+  border: none;
+  color: #6ba4ff;
+  cursor: pointer;
+  font-size: 11.5px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.wie-task-log.on {
+  color: #cfe0ff;
+}
+
+.wie-task-panel {
+  background: #16171d;
+  border: 1px solid #262a36;
+  border-radius: 10px;
+  padding: 10px;
 }
 
 .wie-task-dot {

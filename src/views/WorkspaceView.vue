@@ -22,7 +22,9 @@ import {
 const router = useRouter();
 const route = useRoute();
 
-const date = ref(disciplineLogicalToday());
+// Переход из задачи открывает нужный день сразу: /today?date=2026-07-28&item=<id>
+const queryDate = typeof route.query.date === "string" ? route.query.date : "";
+const date = ref(/^\d{4}-\d{2}-\d{2}$/.test(queryDate) ? queryDate : disciplineLogicalToday());
 const day = ref(null);
 const loading = ref(true);
 const error = ref("");
@@ -96,7 +98,7 @@ async function handleGoogleCallback() {
 
 // pendingSelect — карточка, которую нужно выделить после загрузки другого дня
 // (например, при переходе из поиска).
-const pendingSelect = ref(null);
+const pendingSelect = ref(typeof route.query.item === "string" ? route.query.item : null);
 
 async function load({ keepSelection = true } = {}) {
   loading.value = true;
