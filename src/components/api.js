@@ -653,3 +653,166 @@ export async function setDisciplineRest(data) {
 export async function setDisciplineDayNote(data) {
   await authorizedFetch(`${D}/day-note`, { method: "PUT", body: JSON.stringify(data) });
 }
+
+// === Workspace (рабочий стол «Сегодня») ===
+
+const W = `${API_BASE_URL}/api/v1/workspace`;
+
+export function workspaceApiBase() {
+  return API_BASE_URL;
+}
+
+export function clientTimeZone() {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+  } catch {
+    return "";
+  }
+}
+
+async function workJson(response, fallback) {
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.error || fallback);
+  return data;
+}
+
+export async function fetchWorkDay(date) {
+  const response = await authorizedFetch(`${W}/day?date=${date}`);
+  return workJson(response, "не удалось загрузить день");
+}
+
+export async function saveWorkDay(data) {
+  await authorizedFetch(`${W}/day`, { method: "PUT", body: JSON.stringify(data) });
+}
+
+export async function fetchWorkDays(from, to) {
+  const response = await authorizedFetch(`${W}/days?from=${from}&to=${to}`);
+  return workJson(response, "не удалось загрузить период");
+}
+
+export async function createWorkItem(data) {
+  const response = await authorizedFetch(`${W}/items`, {
+    method: "POST",
+    body: JSON.stringify({ ...data, tz: clientTimeZone() }),
+  });
+  return workJson(response, "не удалось создать карточку");
+}
+
+export async function updateWorkItem(id, data) {
+  const response = await authorizedFetch(`${W}/items/${id}`, {
+    method: "PUT",
+    body: JSON.stringify({ ...data, tz: clientTimeZone() }),
+  });
+  if (!response.ok) throw new Error((await response.json().catch(() => ({}))).error || "не удалось сохранить");
+}
+
+export async function fetchWorkItem(id, date) {
+  const response = await authorizedFetch(`${W}/items/${id}?date=${date}`);
+  return workJson(response, "карточка не найдена");
+}
+
+export async function deleteWorkItem(id) {
+  await authorizedFetch(`${W}/items/${id}`, { method: "DELETE" });
+}
+
+export async function setWorkItemStatus(id, data) {
+  await authorizedFetch(`${W}/items/${id}/status`, { method: "POST", body: JSON.stringify(data) });
+}
+
+// mode: move | link | copy
+export async function placeWorkItem(id, data) {
+  const response = await authorizedFetch(`${W}/items/${id}/place`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+  return workJson(response, "не удалось перенести карточку");
+}
+
+export async function unplaceWorkItem(id, date) {
+  await authorizedFetch(`${W}/items/${id}/place?date=${date}`, { method: "DELETE" });
+}
+
+export async function reorderWorkItems(date, order) {
+  await authorizedFetch(`${W}/items/reorder`, {
+    method: "POST",
+    body: JSON.stringify({ date, order }),
+  });
+}
+
+export async function searchWorkItems(query) {
+  const response = await authorizedFetch(`${W}/search?q=${encodeURIComponent(query)}`);
+  return workJson(response, "поиск не удался");
+}
+
+export async function uploadWorkItemFile(id, file) {
+  const token = localStorage.getItem("token");
+  const form = new FormData();
+  form.append("file", file);
+  const response = await fetch(`${W}/items/${id}/files`, {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: form,
+  });
+  return workJson(response, "не удалось загрузить файл");
+}
+
+export async function deleteWorkItemFile(id) {
+  await authorizedFetch(`${W}/files/${id}`, { method: "DELETE" });
+}
+
+export function workFileUrl(id) {
+  return `${W}/files/${id}`;
+}
+
+export function workIcsUrl(id, date) {
+  return `${W}/items/${id}/ics?date=${date}`;
+}
+
+// --- Google Calendar ---
+
+export async function fetchGoogleStatus() {
+  const response = await authorizedFetch(`${W}/google/status`);
+  return workJson(response, "не удалось получить статус");
+}
+
+export async function fetchGoogleAuthUrl(redirectUri) {
+  const response = await authorizedFetch(
+    `${W}/google/auth-url?redirectUri=${encodeURIComponent(redirectUri)}`,
+  );
+  return workJson(response, "не удалось построить ссылку авторизации");
+}
+
+export async function exchangeGoogleCode(code, redirectUri) {
+  const response = await authorizedFetch(`${W}/google/exchange`, {
+    method: "POST",
+    body: JSON.stringify({ code, redirectUri }),
+  });
+  return workJson(response, "не удалось подключить Google");
+}
+
+export async function disconnectGoogle() {
+  await authorizedFetch(`${W}/google`, { method: "DELETE" });
+}
+
+export async function setGoogleCalendar(calendarId) {
+  await authorizedFetch(`${W}/google/calendar`, {
+    method: "PUT",
+    body: JSON.stringify({ calendarId }),
+  });
+}
+
+export async function syncWorkItemToGoogle(id, date) {
+  const response = await authorizedFetch(
+    `${W}/items/${id}/sync?date=${date}&tz=${encodeURIComponent(clientTimeZone())}`,
+    { method: "POST" },
+  );
+  if (!response.ok) throw new Error((await response.json().catch(() => ({}))).error || "синхронизация не удалась");
+}
+
+export async function syncWorkDayToGoogle(date) {
+  const response = await authorizedFetch(`${W}/google/sync-day`, {
+    method: "POST",
+    body: JSON.stringify({ date, tz: clientTimeZone() }),
+  });
+  return workJson(response, "синхронизация не удалась");
+}

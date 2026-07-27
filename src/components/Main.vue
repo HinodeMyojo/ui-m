@@ -794,6 +794,7 @@ function closeTimeStats() {
         <v-icon icon="mdi-chevron-right" size="large" class="month-nav-icon" @click="handleNextMonth" />
       </div>
       <div class="header-right">
+        <button class="add-task-btn" @click="router.push('/today')">Сегодня</button>
         <button class="add-task-btn" @click="router.push('/learning-skills')">Навыки</button>
         <button class="add-task-btn" @click="openNyamaModal">Вкусняхи</button>
         <button class="add-task-btn" @click="openAddModal">

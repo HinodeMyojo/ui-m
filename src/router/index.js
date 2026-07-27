@@ -80,6 +80,11 @@ const router = createRouter({
       name: "Discipline",
       component: () => import("../views/DisciplineView.vue"),
     },
+    {
+      path: "/today",
+      name: "Workspace",
+      component: () => import("../views/WorkspaceView.vue"),
+    },
   ],
 });
 

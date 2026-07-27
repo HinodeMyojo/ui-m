@@ -1,0 +1,988 @@
+<script setup>
+import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from "vue";
+import { useRouter, useRoute } from "vue-router";
+import MarkdownField from "@/components/workspace/MarkdownField.vue";
+import WorkItemEditor from "@/components/workspace/WorkItemEditor.vue";
+import CarryModal from "@/components/workspace/CarryModal.vue";
+import GooglePanel from "@/components/workspace/GooglePanel.vue";
+import SearchModal from "@/components/workspace/SearchModal.vue";
+import DisciplineChecklist from "@/components/discipline/DisciplineChecklist.vue";
+import {
+  fetchWorkDay,
+  saveWorkDay,
+  createWorkItem,
+  setWorkItemStatus,
+  reorderWorkItems,
+  exchangeGoogleCode,
+  syncWorkDayToGoogle,
+  fetchDisciplineMonth,
+  disciplineLogicalToday,
+} from "@/components/api.js";
+
+const router = useRouter();
+const route = useRoute();
+
+const date = ref(disciplineLogicalToday());
+const day = ref(null);
+const loading = ref(true);
+const error = ref("");
+const selectedId = ref(null);
+const carryOpen = ref(false);
+const googleOpen = ref(false);
+const searchOpen = ref(false);
+const noteOpen = ref(false);
+const disciplineOpen = ref(false);
+const disciplineMonth = ref(null);
+const filter = ref("all");
+const isNarrow = ref(window.innerWidth < 900);
+const mobileEditor = ref(false);
+const dragId = ref(null);
+
+const STATUS_META = {
+  todo: { label: "План", color: "#5b616e" },
+  doing: { label: "В работе", color: "#ffd666" },
+  paused: { label: "Пауза", color: "#4aa8ff" },
+  done: { label: "Готово", color: "#63c94f" },
+  dropped: { label: "Отменено", color: "#e5484d" },
+};
+
+const FILTERS = [
+  { key: "all", label: "Все" },
+  { key: "open", label: "Открытые" },
+  { key: "doing", label: "В работе" },
+  { key: "done", label: "Готовые" },
+];
+
+let dayNoteTimer = null;
+
+function onResize() {
+  isNarrow.value = window.innerWidth < 900;
+}
+
+onMounted(async () => {
+  window.addEventListener("resize", onResize);
+  window.addEventListener("keydown", onHotkey);
+  await handleGoogleCallback();
+  await load();
+});
+
+onBeforeUnmount(() => {
+  window.removeEventListener("resize", onResize);
+  window.removeEventListener("keydown", onHotkey);
+  clearTimeout(dayNoteTimer);
+});
+
+function onHotkey(e) {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+    e.preventDefault();
+    searchOpen.value = true;
+  }
+}
+
+// Google возвращает нас сюда с ?code=… — сразу меняем его на токены.
+async function handleGoogleCallback() {
+  const code = route.query.code;
+  if (!code) return;
+  const redirectUri = localStorage.getItem("googleRedirectUri") || `${window.location.origin}/today`;
+  try {
+    await exchangeGoogleCode(code, redirectUri);
+  } catch (e) {
+    error.value = e.message || "не удалось подключить Google";
+  } finally {
+    localStorage.removeItem("googleRedirectUri");
+    router.replace({ path: "/today" });
+  }
+}
+
+// pendingSelect — карточка, которую нужно выделить после загрузки другого дня
+// (например, при переходе из поиска).
+const pendingSelect = ref(null);
+
+async function load({ keepSelection = true } = {}) {
+  loading.value = true;
+  error.value = "";
+  try {
+    const previous = pendingSelect.value || selectedId.value;
+    const forced = !!pendingSelect.value;
+    pendingSelect.value = null;
+    day.value = await fetchWorkDay(date.value);
+    const stillHere = day.value.items.some((i) => i.id === previous);
+    selectedId.value =
+      (forced || keepSelection) && stillHere ? previous : day.value.items[0]?.id || null;
+  } catch (e) {
+    error.value = e.message || "не удалось загрузить день";
+    day.value = null;
+  } finally {
+    loading.value = false;
+  }
+}
+
+watch(date, () => {
+  selectedId.value = null;
+  mobileEditor.value = false;
+  load({ keepSelection: false });
+  if (disciplineOpen.value) loadDiscipline();
+});
+
+const items = computed(() => day.value?.items || []);
+
+const visibleItems = computed(() => {
+  const list = items.value;
+  if (filter.value === "open") return list.filter((i) => i.status !== "done" && i.status !== "dropped");
+  if (filter.value === "doing") return list.filter((i) => i.status === "doing");
+  if (filter.value === "done") return list.filter((i) => i.status === "done");
+  return list;
+});
+
+const selected = computed(() => items.value.find((i) => i.id === selectedId.value) || null);
+const totals = computed(() => day.value?.totals || {});
+const carryCount = computed(() =>
+  (day.value?.carry || []).reduce((sum, d) => sum + d.items.length, 0),
+);
+
+const dayTitle = computed(() => {
+  const d = new Date(date.value + "T12:00:00");
+  return d.toLocaleDateString("ru-RU", { weekday: "long", day: "numeric", month: "long" });
+});
+
+const isToday = computed(() => date.value === disciplineLogicalToday());
+
+function shiftDate(delta) {
+  const d = new Date(date.value + "T12:00:00");
+  d.setDate(d.getDate() + delta);
+  date.value = d.toISOString().slice(0, 10);
+}
+
+function goToday() {
+  date.value = disciplineLogicalToday();
+}
+
+// --- Карточки ---
+
+async function addItem() {
+  try {
+    const { id } = await createWorkItem({ date: date.value, title: "" });
+    await load({ keepSelection: false });
+    selectedId.value = id;
+    if (isNarrow.value) mobileEditor.value = true;
+    await nextTick();
+    document.querySelector(".wie-title")?.focus();
+  } catch (e) {
+    error.value = e.message;
+  }
+}
+
+function selectItem(item) {
+  selectedId.value = item.id;
+  if (isNarrow.value) mobileEditor.value = true;
+}
+
+// Клик по кружку статуса гоняет карточку по кругу «план → в работе → готово».
+async function cycleStatus(item, event) {
+  event.stopPropagation();
+  const order = ["todo", "doing", "done"];
+  const next = order[(order.indexOf(item.status) + 1) % order.length] || "todo";
+  try {
+    await setWorkItemStatus(item.id, { status: next, closeTasks: false });
+    await load();
+  } catch (e) {
+    error.value = e.message;
+  }
+}
+
+function onDragStart(item) {
+  dragId.value = item.id;
+}
+
+async function onDrop(target) {
+  if (!dragId.value || dragId.value === target.id) return;
+  const order = items.value.map((i) => i.id);
+  const from = order.indexOf(dragId.value);
+  const to = order.indexOf(target.id);
+  if (from < 0 || to < 0) return;
+  order.splice(to, 0, ...order.splice(from, 1));
+  dragId.value = null;
+  try {
+    await reorderWorkItems(date.value, order);
+    await load();
+  } catch (e) {
+    error.value = e.message;
+  }
+}
+
+// --- Заметка дня ---
+
+const dayNote = computed({
+  get: () => day.value?.note || "",
+  set: (value) => {
+    if (day.value) day.value.note = value;
+    scheduleDaySave();
+  },
+});
+
+const dayFocus = computed({
+  get: () => day.value?.focus || "",
+  set: (value) => {
+    if (day.value) day.value.focus = value;
+    scheduleDaySave();
+  },
+});
+
+const dayCapacity = computed({
+  get: () => day.value?.capacityHours || 0,
+  set: (value) => {
+    if (day.value) day.value.capacityHours = Number(value) || 0;
+    scheduleDaySave();
+  },
+});
+
+function scheduleDaySave() {
+  clearTimeout(dayNoteTimer);
+  dayNoteTimer = setTimeout(async () => {
+    try {
+      await saveWorkDay({
+        date: date.value,
+        note: day.value?.note || "",
+        focus: day.value?.focus || "",
+        capacityHours: day.value?.capacityHours || 0,
+      });
+    } catch (e) {
+      error.value = e.message;
+    }
+  }, 700);
+}
+
+// --- Дисциплина ---
+
+async function toggleDiscipline() {
+  disciplineOpen.value = !disciplineOpen.value;
+  if (disciplineOpen.value && !disciplineMonth.value) await loadDiscipline();
+}
+
+async function loadDiscipline() {
+  try {
+    const [y, m] = date.value.split("-");
+    disciplineMonth.value = await fetchDisciplineMonth(parseInt(m, 10), parseInt(y, 10));
+  } catch (e) {
+    disciplineMonth.value = null;
+  }
+}
+
+// --- Прочее ---
+
+async function syncAll() {
+  try {
+    const result = await syncWorkDayToGoogle(date.value);
+    error.value = "";
+    await load();
+    alert(`Отправлено в Google Calendar: ${result.synced}`);
+  } catch (e) {
+    error.value = e.message;
+  }
+}
+
+function openFromSearch({ date: foundDate, itemId }) {
+  searchOpen.value = false;
+  pendingSelect.value = itemId;
+  if (foundDate !== date.value) {
+    date.value = foundDate; // watch(date) сам перезагрузит и подхватит pendingSelect
+  } else {
+    load();
+  }
+  if (isNarrow.value) mobileEditor.value = true;
+}
+
+function humanMinutes(minutes) {
+  if (!minutes) return "0 ч";
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  if (h && m) return `${h} ч ${m} м`;
+  if (h) return `${h} ч`;
+  return `${m} м`;
+}
+
+function itemDeadline(item) {
+  if (!item.deadline) return "";
+  const d = new Date(item.deadline);
+  if (!item.deadlineHasTime) return "до конца дня";
+  return d.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
+}
+
+function isOverdue(item) {
+  if (!item.deadline || item.status === "done" || item.status === "dropped") return false;
+  return new Date(item.deadline) < new Date();
+}
+
+function slotLabel(item) {
+  if (item.plannedStartMin < 0) return "";
+  const fmt = (m) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+  return item.plannedEndMin > item.plannedStartMin
+    ? `${fmt(item.plannedStartMin)}–${fmt(item.plannedEndMin)}`
+    : fmt(item.plannedStartMin);
+}
+</script>
+
+<template>
+  <div class="ws">
+    <header class="ws-head">
+      <div class="ws-nav">
+        <button class="ws-icon" title="Предыдущий день" @click="shiftDate(-1)">‹</button>
+        <div class="ws-date">
+          <h1>{{ dayTitle }}</h1>
+          <input type="date" v-model="date" class="ws-date-input" />
+        </div>
+        <button class="ws-icon" title="Следующий день" @click="shiftDate(1)">›</button>
+        <button v-if="!isToday" class="ws-btn ghost" @click="goToday">Сегодня</button>
+      </div>
+
+      <div class="ws-actions">
+        <button class="ws-btn" @click="searchOpen = true" title="Ctrl+K">🔍 Поиск</button>
+        <button class="ws-btn" :class="{ hot: carryCount }" @click="carryOpen = true">
+          ↩ Из прошлых дней<span v-if="carryCount"> · {{ carryCount }}</span>
+        </button>
+        <button class="ws-btn" @click="toggleDiscipline">🎯 Дисциплина</button>
+        <button class="ws-btn" @click="googleOpen = true">
+          📅 Google<span v-if="day?.google?.connected" class="ws-dot-ok"></span>
+        </button>
+        <button class="ws-btn primary" @click="addItem">+ Задача</button>
+        <button class="ws-btn ghost" @click="router.push('/')">На главную</button>
+      </div>
+    </header>
+
+    <div v-if="error" class="ws-error">{{ error }}</div>
+
+    <section class="ws-strip">
+      <input v-model="dayFocus" class="ws-focus" placeholder="🎯 Главная цель дня…" />
+      <div class="ws-stats">
+        <span class="ws-stat"><b>{{ totals.done || 0 }}</b>/{{ totals.total || 0 }} задач</span>
+        <span class="ws-stat">план <b>{{ humanMinutes(totals.estimateMinutes) }}</b></span>
+        <span class="ws-stat">факт <b>{{ humanMinutes(totals.spentMinutes) }}</b></span>
+        <span v-if="totals.overdueCount" class="ws-stat bad">просрочено {{ totals.overdueCount }}</span>
+        <label class="ws-cap">
+          ёмкость
+          <input v-model="dayCapacity" type="number" min="0" step="0.5" class="ws-cap-input" /> ч
+        </label>
+      </div>
+    </section>
+
+    <div
+      v-if="dayCapacity > 0"
+      class="ws-load"
+      :title="`Запланировано ${humanMinutes(totals.estimateMinutes)} из ${dayCapacity} ч`"
+    >
+      <div
+        class="ws-load-fill"
+        :class="{ over: totals.estimateMinutes > dayCapacity * 60 }"
+        :style="{ width: Math.min(100, ((totals.estimateMinutes || 0) / (dayCapacity * 60)) * 100) + '%' }"
+      ></div>
+    </div>
+
+    <section v-if="disciplineOpen" class="ws-discipline">
+      <DisciplineChecklist
+        v-if="disciplineMonth"
+        :month="disciplineMonth"
+        :date="date"
+        @changed="loadDiscipline"
+      />
+      <div v-else class="ws-empty">Плана дисциплины на этот месяц пока нет</div>
+    </section>
+
+    <section class="ws-daynote">
+      <button class="ws-daynote-toggle" @click="noteOpen = !noteOpen">
+        {{ noteOpen ? "▾" : "▸" }} Холст дня
+        <span v-if="!noteOpen && dayNote" class="ws-dim">— есть записи</span>
+      </button>
+      <MarkdownField
+        v-if="noteOpen"
+        v-model="dayNote"
+        :min-height="160"
+        placeholder="Общие мысли по дню, что вообще происходит, куда двигаемся…"
+      />
+    </section>
+
+    <div class="ws-body" :class="{ narrow: isNarrow }">
+      <aside class="ws-list" v-show="!isNarrow || !mobileEditor">
+        <div class="ws-filters">
+          <button
+            v-for="f in FILTERS"
+            :key="f.key"
+            class="ws-filter"
+            :class="{ on: filter === f.key }"
+            @click="filter = f.key"
+          >
+            {{ f.label }}
+          </button>
+        </div>
+
+        <div v-if="loading" class="ws-empty">Загружаю…</div>
+        <div v-else-if="!visibleItems.length" class="ws-empty">
+          <p>Пока пусто.</p>
+          <button class="ws-btn primary" @click="addItem">Создать первую задачу</button>
+          <button v-if="carryCount" class="ws-btn" @click="carryOpen = true">
+            Забрать {{ carryCount }} из прошлых дней
+          </button>
+        </div>
+
+        <article
+          v-for="item in visibleItems"
+          :key="item.id"
+          class="ws-card"
+          :class="{ on: item.id === selectedId, done: item.status === 'done', dropped: item.status === 'dropped' }"
+          :style="{ borderLeftColor: item.color || '#1767fd' }"
+          draggable="true"
+          @dragstart="onDragStart(item)"
+          @dragover.prevent
+          @drop="onDrop(item)"
+          @click="selectItem(item)"
+        >
+          <button
+            class="ws-card-status"
+            :style="{ borderColor: STATUS_META[item.status]?.color, background: item.status === 'done' ? STATUS_META.done.color : 'transparent' }"
+            :title="STATUS_META[item.status]?.label"
+            @click="cycleStatus(item, $event)"
+          >
+            <span v-if="item.status === 'done'">✓</span>
+            <span v-else-if="item.status === 'doing'">▶</span>
+            <span v-else-if="item.status === 'paused'">‖</span>
+            <span v-else-if="item.status === 'dropped'">✕</span>
+          </button>
+
+          <div class="ws-card-main">
+            <div class="ws-card-title">
+              <span v-if="item.emoji" class="ws-card-emoji">{{ item.emoji }}</span>
+              {{ item.title }}
+              <span v-if="item.priority" class="ws-card-prio">{{ "!".repeat(item.priority) }}</span>
+            </div>
+
+            <div class="ws-card-meta">
+              <span v-if="slotLabel(item)" class="ws-meta-chip">🕐 {{ slotLabel(item) }}</span>
+              <span v-if="item.deadline" class="ws-meta-chip" :class="{ bad: isOverdue(item) }">
+                ⏳ {{ itemDeadline(item) }}
+              </span>
+              <span v-if="item.estimateMinutes" class="ws-meta-chip">
+                {{ humanMinutes(item.estimateMinutes) }}
+              </span>
+              <span v-if="item.checks?.length" class="ws-meta-chip">
+                ☑ {{ item.checks.filter((c) => c.done).length }}/{{ item.checks.length }}
+              </span>
+              <span v-if="item.tasks?.length" class="ws-meta-chip">🔗 {{ item.tasks.length }}</span>
+              <span v-if="item.links?.length" class="ws-meta-chip">🌐 {{ item.links.length }}</span>
+              <span v-if="item.notes?.length" class="ws-meta-chip">🗒 {{ item.notes.length }}</span>
+              <span v-if="item.files?.length" class="ws-meta-chip">📎 {{ item.files.length }}</span>
+              <span v-if="item.googleEventId" class="ws-meta-chip cal">📅</span>
+              <span v-if="item.otherDates?.length" class="ws-meta-chip link" title="Карточка есть и в других днях">
+                ⧉ {{ item.otherDates.length }}
+              </span>
+            </div>
+
+            <div v-if="item.tags?.length" class="ws-card-tags">
+              <span v-for="t in item.tags" :key="t.id" class="ws-tag" :style="{ borderColor: t.color }">
+                {{ t.name }}
+              </span>
+            </div>
+          </div>
+        </article>
+
+        <button v-if="visibleItems.length" class="ws-add-inline" @click="addItem">+ ещё задача</button>
+        <button v-if="day?.google?.connected && items.length" class="ws-add-inline" @click="syncAll">
+          📅 Синхронизировать день с Google
+        </button>
+      </aside>
+
+      <main class="ws-editor" v-show="!isNarrow || mobileEditor">
+        <WorkItemEditor
+          v-if="selected"
+          :key="selected.id"
+          :item="selected"
+          :date="date"
+          :skills="day?.skills || []"
+          :activities="day?.activities || []"
+          :all-tags="day?.tags || []"
+          :google="day?.google || {}"
+          :compact="isNarrow"
+          @changed="load"
+          @deleted="() => { mobileEditor = false; load({ keepSelection: false }); }"
+          @close="mobileEditor = false"
+        />
+        <div v-else class="ws-editor-empty">
+          <p>Выберите карточку слева или создайте новую.</p>
+          <button class="ws-btn primary" @click="addItem">+ Задача</button>
+        </div>
+      </main>
+    </div>
+
+    <CarryModal
+      v-if="carryOpen"
+      :carry="day?.carry || []"
+      :date="date"
+      @close="carryOpen = false"
+      @done="() => { carryOpen = false; load({ keepSelection: false }); }"
+    />
+    <GooglePanel
+      v-if="googleOpen"
+      :status="day?.google || {}"
+      :date="date"
+      @close="googleOpen = false"
+      @changed="load"
+    />
+    <SearchModal v-if="searchOpen" @close="searchOpen = false" @open="openFromSearch" />
+  </div>
+</template>
+
+<style scoped>
+.ws {
+  min-height: 100vh;
+  width: 100%;
+  background: #18191f;
+  color: #e8eaf2;
+  padding: 14px clamp(10px, 2.5vw, 32px) 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ws-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.ws-nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ws-date h1 {
+  margin: 0;
+  font-size: 20px;
+  text-transform: capitalize;
+  line-height: 1.2;
+}
+
+.ws-date-input {
+  background: transparent;
+  border: none;
+  color: #7a7f8e;
+  font-size: 11.5px;
+  padding: 0;
+  cursor: pointer;
+  outline: none;
+}
+
+.ws-icon {
+  background: #22242d;
+  border: 1px solid #2f3340;
+  color: #cfd3e0;
+  border-radius: 8px;
+  width: 34px;
+  height: 34px;
+  cursor: pointer;
+  font-size: 17px;
+  line-height: 1;
+}
+
+.ws-icon:hover {
+  border-color: #6e4aff;
+}
+
+.ws-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.ws-btn {
+  background: #22242d;
+  border: 1px solid #2f3340;
+  color: #cfd3e0;
+  border-radius: 8px;
+  padding: 7px 13px;
+  cursor: pointer;
+  font-size: 13px;
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.ws-btn:hover {
+  border-color: #6e4aff;
+}
+
+.ws-btn.primary {
+  background: #1767fd;
+  border-color: #1767fd;
+  color: #fff;
+}
+
+.ws-btn.ghost {
+  background: transparent;
+  color: #8f95a6;
+}
+
+.ws-btn.hot {
+  border-color: #ffd666;
+  color: #ffd666;
+}
+
+.ws-dot-ok {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #63c94f;
+}
+
+.ws-error {
+  background: #2a181a;
+  border: 1px solid #6b2b2e;
+  color: #ff9ba0;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 13px;
+}
+
+.ws-strip {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  background: #1b1d24;
+  border: 1px solid #262a36;
+  border-radius: 12px;
+  padding: 10px 14px;
+}
+
+.ws-focus {
+  flex: 1;
+  min-width: 200px;
+  background: transparent;
+  border: none;
+  color: #e8eaf2;
+  font-size: 15px;
+  outline: none;
+}
+
+.ws-stats {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.ws-stat {
+  color: #8f95a6;
+  font-size: 12.5px;
+}
+
+.ws-stat b {
+  color: #e8eaf2;
+}
+
+.ws-stat.bad {
+  color: #e5484d;
+}
+
+.ws-cap {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: #8f95a6;
+  font-size: 12px;
+}
+
+.ws-cap-input {
+  width: 54px;
+  background: #16171d;
+  border: 1px solid #2f3340;
+  border-radius: 6px;
+  color: #e8eaf2;
+  padding: 4px 6px;
+  font-size: 12px;
+  outline: none;
+}
+
+.ws-load {
+  height: 5px;
+  background: #22242d;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.ws-load-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #1767fd, #6e4aff);
+}
+
+.ws-load-fill.over {
+  background: linear-gradient(90deg, #e5484d, #ff8a3d);
+}
+
+.ws-discipline {
+  background: #1b1d24;
+  border: 1px solid #262a36;
+  border-radius: 12px;
+  padding: 8px;
+}
+
+.ws-daynote {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ws-daynote-toggle {
+  background: none;
+  border: none;
+  color: #b7bccb;
+  cursor: pointer;
+  font-size: 13px;
+  text-align: left;
+  padding: 0;
+}
+
+.ws-dim {
+  color: #6e7382;
+  font-size: 11.5px;
+}
+
+.ws-body {
+  display: grid;
+  grid-template-columns: minmax(280px, 380px) 1fr;
+  gap: 12px;
+  align-items: start;
+  flex: 1;
+  min-height: 0;
+}
+
+.ws-body.narrow {
+  grid-template-columns: 1fr;
+}
+
+.ws-list {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  max-height: calc(100vh - 150px);
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.ws-filters {
+  display: flex;
+  gap: 4px;
+  position: sticky;
+  top: 0;
+  background: #18191f;
+  padding-bottom: 5px;
+  z-index: 2;
+}
+
+.ws-filter {
+  background: transparent;
+  border: 1px solid #2f3340;
+  color: #8f95a6;
+  border-radius: 20px;
+  padding: 4px 11px;
+  cursor: pointer;
+  font-size: 11.5px;
+  min-height: 30px;
+}
+
+.ws-filter.on {
+  background: #1767fd22;
+  border-color: #1767fd;
+  color: #cfe0ff;
+}
+
+.ws-card {
+  display: flex;
+  gap: 9px;
+  background: #1b1d24;
+  border: 1px solid #262a36;
+  border-left: 3px solid #1767fd;
+  border-radius: 10px;
+  padding: 10px 11px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.ws-card:hover {
+  background: #1f222b;
+}
+
+.ws-card.on {
+  border-color: #1767fd;
+  background: #1c2030;
+}
+
+.ws-card.done .ws-card-title,
+.ws-card.dropped .ws-card-title {
+  color: #6e7382;
+  text-decoration: line-through;
+}
+
+.ws-card-status {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid #5b616e;
+  background: transparent;
+  color: #101219;
+  cursor: pointer;
+  font-size: 11px;
+  flex-shrink: 0;
+  margin-top: 1px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+.ws-card-main {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+  flex: 1;
+}
+
+.ws-card-title {
+  color: #e8eaf2;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.ws-card-emoji {
+  margin-right: 4px;
+}
+
+.ws-card-prio {
+  color: #e5484d;
+  font-weight: 700;
+  margin-left: 5px;
+  font-size: 12px;
+}
+
+.ws-card-meta {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+
+.ws-meta-chip {
+  font-size: 10.5px;
+  color: #8f95a6;
+  background: #16171d;
+  border: 1px solid #262a36;
+  border-radius: 20px;
+  padding: 1px 7px;
+}
+
+.ws-meta-chip.bad {
+  color: #ff9ba0;
+  border-color: #6b2b2e;
+}
+
+.ws-meta-chip.cal {
+  border-color: #1767fd66;
+}
+
+.ws-meta-chip.link {
+  color: #a98bff;
+  border-color: #6e4aff55;
+}
+
+.ws-card-tags {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.ws-tag {
+  font-size: 10.5px;
+  color: #cfd3e0;
+  border: 1px solid #6e4aff;
+  border-radius: 20px;
+  padding: 1px 8px;
+}
+
+.ws-add-inline {
+  background: transparent;
+  border: 1px dashed #3a3f52;
+  color: #8f95a6;
+  border-radius: 10px;
+  padding: 9px;
+  cursor: pointer;
+  font-size: 12.5px;
+}
+
+.ws-add-inline:hover {
+  border-color: #6e4aff;
+  color: #cfd3e0;
+}
+
+.ws-editor {
+  background: #16171d;
+  border: 1px solid #262a36;
+  border-radius: 12px;
+  max-height: calc(100vh - 150px);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.ws-editor-empty {
+  padding: 60px 20px;
+  text-align: center;
+  color: #7a7f8e;
+  font-size: 13px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.ws-empty {
+  color: #7a7f8e;
+  text-align: center;
+  padding: 22px 10px;
+  font-size: 13px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+@media (max-width: 900px) {
+  .ws {
+    padding: 10px 10px 30px;
+  }
+  .ws-head {
+    gap: 8px;
+  }
+  .ws-date h1 {
+    font-size: 17px;
+  }
+  .ws-actions {
+    width: 100%;
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    padding-bottom: 2px;
+  }
+  .ws-actions .ws-btn {
+    flex-shrink: 0;
+  }
+  .ws-list,
+  .ws-editor {
+    max-height: none;
+  }
+  .ws-editor {
+    min-height: calc(100vh - 120px);
+  }
+}
+</style>
