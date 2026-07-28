@@ -391,45 +391,48 @@
                     </div>
                   </template>
 
+                  <!-- Плашка типа записи: статус, блокер, решение, документ.
+                       Живёт вне .message-content — там флекс-строка, и плашка
+                       отжимала бы текст сообщения в узкую колонку. -->
+                  <div
+                    v-if="entryMeta(message)"
+                    class="message-kind"
+                    :class="{ resolved: message.kind === 'blocker' && message.resolved }"
+                    :style="{ borderLeftColor: entryMeta(message).color }"
+                  >
+                    <span class="message-kind-label" :style="{ color: entryMeta(message).color }">
+                      {{ entryMeta(message).icon }} {{ entryMeta(message).label }}
+                    </span>
+                    <span
+                      v-if="statusOf(message)"
+                      class="message-kind-status"
+                      :style="{ borderColor: statusOf(message).color, color: statusOf(message).color }"
+                    >
+                      {{ statusOf(message).name }}
+                    </span>
+                    <span v-if="subtaskNameOf(message)" class="message-kind-sub">
+                      · {{ subtaskNameOf(message) }}
+                    </span>
+                    <span v-if="message.workItemId" class="message-kind-src" title="Записано из ежедневника">📓</span>
+                    <button
+                      v-if="message.kind === 'blocker'"
+                      class="message-kind-btn"
+                      @click="toggleChatBlocker(message)"
+                    >
+                      {{ message.resolved ? "вернуть" : "снять" }}
+                    </button>
+                  </div>
+                  <a
+                    v-if="message.url"
+                    :href="message.url"
+                    target="_blank"
+                    rel="noopener"
+                    class="message-kind-url"
+                  >
+                    {{ message.url }}
+                  </a>
+
                   <div class="message-content">
-                    <!-- Плашка типа записи: статус, блокер, решение, документ -->
-                    <div
-                      v-if="entryMeta(message)"
-                      class="message-kind"
-                      :class="{ resolved: message.kind === 'blocker' && message.resolved }"
-                      :style="{ borderLeftColor: entryMeta(message).color }"
-                    >
-                      <span class="message-kind-label" :style="{ color: entryMeta(message).color }">
-                        {{ entryMeta(message).icon }} {{ entryMeta(message).label }}
-                      </span>
-                      <span
-                        v-if="statusOf(message)"
-                        class="message-kind-status"
-                        :style="{ borderColor: statusOf(message).color, color: statusOf(message).color }"
-                      >
-                        {{ statusOf(message).name }}
-                      </span>
-                      <span v-if="subtaskNameOf(message)" class="message-kind-sub">
-                        · {{ subtaskNameOf(message) }}
-                      </span>
-                      <span v-if="message.workItemId" class="message-kind-src" title="Записано из ежедневника">📓</span>
-                      <button
-                        v-if="message.kind === 'blocker'"
-                        class="message-kind-btn"
-                        @click="toggleChatBlocker(message)"
-                      >
-                        {{ message.resolved ? "вернуть" : "снять" }}
-                      </button>
-                    </div>
-                    <a
-                      v-if="message.url"
-                      :href="message.url"
-                      target="_blank"
-                      rel="noopener"
-                      class="message-kind-url"
-                    >
-                      {{ message.url }}
-                    </a>
                     <div class="message-text" v-if="!isEditing(message.id)">
                       {{ message.text }}
                     </div>
@@ -1601,7 +1604,8 @@ function getFileIcon(type) {
   flex-wrap: wrap;
   border-left: 3px solid #5b616e;
   padding: 2px 0 2px 8px;
-  margin-bottom: 5px;
+  /* .chat-inner-message даёт gap 10px — подтягиваем плашку к своему тексту */
+  margin-bottom: -5px;
 }
 
 .message-kind.resolved {
@@ -1652,7 +1656,7 @@ function getFileIcon(type) {
   display: block;
   color: #6ba4ff;
   font-size: 12px;
-  margin-bottom: 4px;
+  margin-bottom: -5px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
