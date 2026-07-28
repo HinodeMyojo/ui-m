@@ -417,10 +417,40 @@
                     <button
                       v-if="message.kind === 'blocker'"
                       class="message-kind-btn"
-                      @click="toggleChatBlocker(message)"
+                      @click="startResolveBlocker(message)"
                     >
                       {{ message.resolved ? "вернуть" : "снять" }}
                     </button>
+                  </div>
+
+                  <!-- Причина снятия — по желанию, можно снять и без неё -->
+                  <div v-if="resolvingMessageId === message.id" class="message-resolve">
+                    <textarea
+                      v-model="resolveNote"
+                      class="message-resolve-input"
+                      rows="2"
+                      placeholder="Как решилось? (необязательно)"
+                      @keydown.ctrl.enter.prevent="applyResolveBlocker(message, true, resolveNote)"
+                      @keydown.esc="resolvingMessageId = null"
+                    ></textarea>
+                    <div class="message-resolve-actions">
+                      <button class="message-resolve-btn" @click="resolvingMessageId = null">
+                        Отмена
+                      </button>
+                      <button
+                        class="message-resolve-btn primary"
+                        @click="applyResolveBlocker(message, true, resolveNote)"
+                      >
+                        Снять блокер
+                      </button>
+                    </div>
+                  </div>
+
+                  <div
+                    v-if="message.kind === 'blocker' && message.resolved && message.resolveNote"
+                    class="message-resolve-note"
+                  >
+                    ✓ {{ message.resolveNote }}
                   </div>
                   <a
                     v-if="message.url"
@@ -778,10 +808,26 @@ function subtaskNameOf(message) {
   return logNodeOf(message.subtaskId)?.title || "";
 }
 
-async function toggleChatBlocker(message) {
+// Снятие блокера в чате: сначала предлагаем написать, чем он закончился.
+const resolvingMessageId = ref(null);
+const resolveNote = ref("");
+
+function startResolveBlocker(message) {
+  if (message.resolved) {
+    applyResolveBlocker(message, false, "");
+    return;
+  }
+  resolvingMessageId.value = message.id;
+  resolveNote.value = "";
+}
+
+async function applyResolveBlocker(message, resolved, note) {
   try {
-    await resolveTaskLogEntry(message.id, !message.resolved);
-    message.resolved = !message.resolved;
+    await resolveTaskLogEntry(message.id, resolved, note);
+    message.resolved = resolved;
+    message.resolveNote = resolved ? note : "";
+    resolvingMessageId.value = null;
+    resolveNote.value = "";
     await loadLogBoard();
   } catch (e) {
     console.error(e);
@@ -1650,6 +1696,63 @@ function getFileIcon(type) {
 .message-kind-btn:hover {
   border-color: #63c94f;
   color: #63c94f;
+}
+
+.message-resolve {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 4px 0;
+  padding-left: 11px;
+}
+
+.message-resolve-input {
+  background: rgba(37, 33, 57, 0.5);
+  border: 1px solid #2f3340;
+  border-radius: 8px;
+  color: #e8eaf2;
+  padding: 8px 10px;
+  font-size: 13px;
+  font-family: inherit;
+  resize: vertical;
+  outline: none;
+}
+
+.message-resolve-input:focus {
+  border-color: #63c94f;
+}
+
+.message-resolve-actions {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.message-resolve-btn {
+  background: #22242d;
+  border: 1px solid #2f3340;
+  color: #cfd3e0;
+  border-radius: 8px;
+  padding: 6px 12px;
+  cursor: pointer;
+  font-size: 12.5px;
+}
+
+.message-resolve-btn.primary {
+  background: #2f6d2a;
+  border-color: #3d8a36;
+  color: #fff;
+}
+
+.message-resolve-note {
+  color: #9fd39a;
+  font-size: 12.5px;
+  line-height: 1.5;
+  border-left: 2px solid #3d6b39;
+  padding-left: 9px;
+  margin: 2px 0 4px 11px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .message-kind-url {

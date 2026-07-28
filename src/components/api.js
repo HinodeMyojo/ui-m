@@ -884,10 +884,11 @@ export async function deleteTaskLogEntry(id) {
   await authorizedFetch(`${TL}/entries/${id}`, { method: "DELETE" });
 }
 
-export async function resolveTaskLogEntry(id, resolved) {
+// note — необязательная причина снятия блокера
+export async function resolveTaskLogEntry(id, resolved, note = "") {
   await authorizedFetch(`${TL}/entries/${id}/resolve`, {
     method: "POST",
-    body: JSON.stringify({ resolved }),
+    body: JSON.stringify({ resolved, note }),
   });
 }
 

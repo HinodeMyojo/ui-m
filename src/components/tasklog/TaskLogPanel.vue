@@ -42,6 +42,8 @@ const editingId = ref(null);
 const editText = ref("");
 const statusEditorOpen = ref(false);
 const filter = ref("all");
+const resolvingId = ref(null);
+const resolveNote = ref("");
 
 const kindMeta = (kind) => KINDS.find((k) => k.key === kind) || KINDS[4];
 
@@ -160,9 +162,21 @@ async function quickStatus(status) {
   }
 }
 
-async function toggleBlocker(entry) {
+// Снятие блокера — через форму с необязательной причиной; возврат — сразу.
+function startResolve(entry) {
+  if (entry.resolved) {
+    applyResolve(entry, false, "");
+    return;
+  }
+  resolvingId.value = entry.id;
+  resolveNote.value = "";
+}
+
+async function applyResolve(entry, resolved, note) {
   try {
-    await resolveTaskLogEntry(entry.id, !entry.resolved);
+    await resolveTaskLogEntry(entry.id, resolved, note);
+    resolvingId.value = null;
+    resolveNote.value = "";
     await load();
     emit("changed");
   } catch (e) {
@@ -307,7 +321,7 @@ defineExpose({ reload: load });
             v-if="entry.kind === 'blocker'"
             class="tlp-mini"
             :class="{ ok: !entry.resolved }"
-            @click="toggleBlocker(entry)"
+            @click="startResolve(entry)"
           >
             {{ entry.resolved ? "вернуть" : "снять" }}
           </button>
@@ -327,10 +341,30 @@ defineExpose({ reload: load });
           <a v-if="entry.url" :href="entry.url" target="_blank" rel="noopener" class="tlp-entry-url">
             {{ entry.url }}
           </a>
-          <div v-if="entry.kind === 'blocker' && entry.resolved && entry.resolvedAt" class="tlp-dim">
-            снят {{ new Date(entry.resolvedAt).toLocaleDateString("ru-RU") }}
+          <div v-if="entry.kind === 'blocker' && entry.resolved && entry.resolvedAt" class="tlp-resolved">
+            <span class="tlp-dim">✓ снят {{ new Date(entry.resolvedAt).toLocaleDateString("ru-RU") }}</span>
+            <span v-if="entry.resolveNote" class="tlp-resolved-note">{{ entry.resolveNote }}</span>
           </div>
         </template>
+
+        <!-- Снятие блокера: причину можно написать, а можно и не писать -->
+        <div v-if="resolvingId === entry.id" class="tlp-resolve-form">
+          <textarea
+            v-model="resolveNote"
+            class="tlp-input tlp-area"
+            rows="2"
+            placeholder="Как решилось? (необязательно)"
+            autofocus
+            @keydown.ctrl.enter.prevent="applyResolve(entry, true, resolveNote)"
+            @keydown.esc="resolvingId = null"
+          ></textarea>
+          <div class="tlp-form-actions">
+            <button class="tlp-btn" @click="resolvingId = null">Отмена</button>
+            <button class="tlp-btn primary" @click="applyResolve(entry, true, resolveNote)">
+              Снять блокер
+            </button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -595,6 +629,32 @@ defineExpose({ reload: load });
   color: #dfe3ee;
   font-size: 13px;
   line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.tlp-resolve-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 6px;
+  padding-top: 7px;
+  border-top: 1px dashed #2f3340;
+}
+
+.tlp-resolved {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 2px;
+}
+
+.tlp-resolved-note {
+  color: #9fd39a;
+  font-size: 12.5px;
+  line-height: 1.5;
+  border-left: 2px solid #3d6b39;
+  padding-left: 8px;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
