@@ -737,7 +737,7 @@ const totalSpent = computed(
         </div>
         <div v-if="!form.tasks.length" class="wie-empty">ничего не прикреплено</div>
         <div v-for="(t, i) in form.tasks" :key="t.id" class="wie-task-wrap">
-          <div class="wie-task">
+          <div class="wie-task" :class="{ blocked: t.openBlockers > 0 }">
             <span class="wie-task-dot" :style="{ background: t.color || '#1767fd' }"></span>
             <span class="wie-task-title" :class="{ done: t.done }">{{ t.title }}</span>
             <span v-if="t.parentTitle" class="wie-task-parent">← {{ t.parentTitle }}</span>
@@ -1255,13 +1255,41 @@ select.wie-input {
   flex-shrink: 0;
 }
 
+/* Открытый блокер видно сразу: залитый бейдж и красная полоса у строки */
 .wie-task-blockers {
   font-size: 10.5px;
-  color: #ff9ba0;
-  border: 1px solid #6b2b2e;
+  font-weight: 700;
+  color: #fff;
+  background: #e5484d;
+  border: 1px solid #ff6b6f;
   border-radius: 20px;
-  padding: 1px 7px;
+  padding: 1px 8px;
   flex-shrink: 0;
+  animation: wie-blocker-pulse 2s ease-out infinite;
+}
+
+@keyframes wie-blocker-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(229, 72, 77, 0.5);
+  }
+  70% {
+    box-shadow: 0 0 0 7px rgba(229, 72, 77, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(229, 72, 77, 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wie-task-blockers {
+    animation: none;
+  }
+}
+
+.wie-task.blocked {
+  border-color: #6b2b2e;
+  border-left: 3px solid #e5484d;
+  background: linear-gradient(90deg, rgba(229, 72, 77, 0.14), #16171d 55%);
 }
 
 .wie-task-log {

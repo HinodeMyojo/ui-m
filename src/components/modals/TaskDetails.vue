@@ -136,7 +136,7 @@
               draggable="true"
               @dragstart="startDrag($event, subtask)"
               @click="clickSubtask(subtask)"
-              :class="['subtask', { selected: isSelected(subtask) }]"
+              :class="['subtask', { selected: isSelected(subtask), blocked: blockersOf(subtask.id) > 0 }]"
             >
               <div class="subtask-boba">
                 <input
@@ -172,8 +172,8 @@
                     >
                       {{ logNodeOf(subtask.id).statusName }}
                     </span>
-                    <span v-if="logNodeOf(subtask.id)?.openBlockers" class="subtask-blockers">
-                      🚧 {{ logNodeOf(subtask.id).openBlockers }}
+                    <span v-if="blockersOf(subtask.id)" class="subtask-blockers">
+                      🚧 {{ blockersOf(subtask.id) }} {{ blockerLabel(blockersOf(subtask.id)) }}
                     </span>
                     <button
                       v-if="logNodeOf(subtask.id)?.lastWorkDate"
@@ -197,7 +197,7 @@
                 {{ selectedSubtask ? selectedSubtask.title : "задачи целиком" }}
               </span>
               <span v-if="logBoard?.task?.openBlockers" class="subtask-blockers">
-                🚧 {{ logBoard.task.openBlockers }}
+                🚧 {{ logBoard.task.openBlockers }} {{ blockerLabel(logBoard.task.openBlockers) }}
               </span>
             </button>
             <div v-if="logPanelOpen" class="subtask-log-body">
@@ -747,6 +747,18 @@ function logNodeOf(id) {
   if (!logBoard.value) return null;
   if (logBoard.value.task?.id === id) return logBoard.value.task;
   return logBoard.value.subtasks?.find((n) => n.id === id) || null;
+}
+
+function blockersOf(id) {
+  return logNodeOf(id)?.openBlockers || 0;
+}
+
+function blockerLabel(count) {
+  const last = count % 10;
+  const teen = count % 100 >= 11 && count % 100 <= 14;
+  if (!teen && last === 1) return "блокер";
+  if (!teen && last >= 2 && last <= 4) return "блокера";
+  return "блокеров";
 }
 
 function entryMeta(message) {
@@ -1482,13 +1494,54 @@ function getFileIcon(type) {
   white-space: nowrap;
 }
 
+/* Блокер должен бросаться в глаза: залитый бейдж + пульс */
 .subtask-blockers {
-  font-size: 10px;
-  color: #ff9ba0;
-  border: 1px solid #6b2b2e;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #fff;
+  background: #e5484d;
+  border: 1px solid #ff6b6f;
   border-radius: 20px;
-  padding: 1px 7px;
+  padding: 2px 9px;
   white-space: nowrap;
+  box-shadow: 0 0 0 0 rgba(229, 72, 77, 0.55);
+  animation: blocker-pulse 2s ease-out infinite;
+}
+
+@keyframes blocker-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(229, 72, 77, 0.5);
+  }
+  70% {
+    box-shadow: 0 0 0 7px rgba(229, 72, 77, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(229, 72, 77, 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .subtask-blockers {
+    animation: none;
+  }
+}
+
+/* Вся строка подзадачи с открытым блокером — красная полоса и подсветка */
+.subtask.blocked .subtask-boba {
+  background: linear-gradient(90deg, rgba(229, 72, 77, 0.16), rgba(229, 72, 77, 0.03) 60%, transparent);
+  box-shadow: inset 3px 0 0 0 #e5484d;
+  padding-left: 10px;
+}
+
+.subtask.blocked .subtask-boba h3 {
+  color: #ffd9da;
+}
+
+.subtask.blocked.selected .subtask-boba {
+  background: linear-gradient(90deg, rgba(229, 72, 77, 0.28), rgba(229, 72, 77, 0.08) 60%, transparent);
 }
 
 .subtask-diary {

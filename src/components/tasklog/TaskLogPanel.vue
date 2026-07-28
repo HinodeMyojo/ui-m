@@ -283,7 +283,10 @@ defineExpose({ reload: load });
         v-for="entry in group.items"
         :key="entry.id"
         class="tlp-entry"
-        :class="{ resolved: entry.kind === 'blocker' && entry.resolved }"
+        :class="{
+          resolved: entry.kind === 'blocker' && entry.resolved,
+          'open-blocker': entry.kind === 'blocker' && !entry.resolved,
+        }"
         :style="{ borderLeftColor: entry.kind === 'status' && entry.statusColor ? entry.statusColor : kindMeta(entry.kind).color }"
       >
         <div class="tlp-entry-head">
@@ -363,10 +366,12 @@ defineExpose({ reload: load });
 
 .tlp-blockers {
   font-size: 11px;
-  color: #ff9ba0;
-  border: 1px solid #6b2b2e;
+  font-weight: 700;
+  color: #fff;
+  background: #e5484d;
+  border: 1px solid #ff6b6f;
   border-radius: 20px;
-  padding: 1px 8px;
+  padding: 1px 9px;
   flex-shrink: 0;
 }
 
@@ -531,6 +536,13 @@ defineExpose({ reload: load });
 
 .tlp-entry.resolved {
   opacity: 0.55;
+}
+
+/* Незакрытый блокер — самая заметная запись в ленте */
+.tlp-entry.open-blocker {
+  background: linear-gradient(90deg, rgba(229, 72, 77, 0.16), #16171d 60%);
+  border-color: #6b2b2e;
+  border-left-width: 4px;
 }
 
 .tlp-entry-head {
