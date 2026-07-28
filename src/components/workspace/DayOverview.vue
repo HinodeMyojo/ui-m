@@ -28,9 +28,11 @@ const GROUPS = [
   { key: "dropped", title: "Отменено" },
 ];
 
+// Колонки статусов держим на месте, даже когда пустые — так доска не прыгает
+// при переносе карточек. Скрываем только «Отменено», если там пусто.
 const groups = computed(() =>
   GROUPS.map((g) => ({ ...g, items: props.items.filter((i) => i.status === g.key) })).filter(
-    (g) => g.items.length,
+    (g) => g.key !== "dropped" || g.items.length,
   ),
 );
 
@@ -108,14 +110,15 @@ const blockersTotal = computed(() =>
       <button class="ovw-add" @click="emit('add')">+ Создать задачу</button>
     </div>
 
-    <section v-for="g in groups" :key="g.key" class="ovw-group">
-      <div class="ovw-group-head">
-        <span class="ovw-group-dot" :style="{ background: STATUS_META[g.key].color }"></span>
-        {{ g.title }}
-        <span class="ovw-group-count">{{ g.items.length }}</span>
-      </div>
+    <div v-if="items.length" class="ovw-board">
+      <section v-for="g in groups" :key="g.key" class="ovw-col">
+        <div class="ovw-col-head" :style="{ '--status': STATUS_META[g.key].color }">
+          <span class="ovw-col-dot"></span>
+          {{ g.title }}
+          <span class="ovw-col-count">{{ g.items.length }}</span>
+        </div>
 
-      <div class="ovw-grid">
+        <div v-if="!g.items.length" class="ovw-col-empty">пусто</div>
         <article
           v-for="item in g.items"
           :key="item.id"
@@ -175,8 +178,8 @@ const blockersTotal = computed(() =>
             <span v-if="item.tasks?.length" class="ovw-chip">🔗 {{ item.tasks.length }}</span>
           </div>
         </article>
-      </div>
-    </section>
+      </section>
+    </div>
   </div>
 </template>
 
@@ -243,7 +246,25 @@ const blockersTotal = computed(() =>
   font-size: 13px;
 }
 
-.ovw-group-head {
+/* Доска: статусы — колонками по горизонтали, карточки идут вниз под ними */
+.ovw-board {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(260px, 1fr);
+  gap: 14px;
+  align-items: start;
+  overflow-x: auto;
+  padding-bottom: 8px;
+}
+
+.ovw-col {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.ovw-col-head {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -252,26 +273,37 @@ const blockersTotal = computed(() =>
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  margin-bottom: 11px;
+  padding: 7px 11px;
+  background: color-mix(in srgb, var(--status) 12%, #1b1d24);
+  border: 1px solid color-mix(in srgb, var(--status) 32%, #262a36);
+  border-radius: 10px;
+  position: sticky;
+  top: 0;
+  z-index: 2;
 }
 
-.ovw-group-dot {
+.ovw-col-dot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
+  background: var(--status);
+  flex-shrink: 0;
 }
 
-.ovw-group-count {
-  color: #5f6472;
+.ovw-col-count {
+  margin-left: auto;
+  color: #8f95a6;
   font-weight: 400;
   letter-spacing: 0;
 }
 
-.ovw-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 12px;
-  align-items: start;
+.ovw-col-empty {
+  color: #4f5461;
+  font-size: 12px;
+  text-align: center;
+  padding: 18px 0;
+  border: 1px dashed #262a36;
+  border-radius: 12px;
 }
 
 .ovw-card {
@@ -410,9 +442,15 @@ const blockersTotal = computed(() =>
   border-color: #6b2b2e;
 }
 
-@media (max-width: 620px) {
-  .ovw-grid {
-    grid-template-columns: 1fr;
+/* На узком экране колонки листаются свайпом с прилипанием */
+@media (max-width: 760px) {
+  .ovw-board {
+    grid-auto-columns: 82vw;
+    scroll-snap-type: x mandatory;
+    gap: 10px;
+  }
+  .ovw-col {
+    scroll-snap-align: start;
   }
   .ovw-day {
     padding: 13px 15px;

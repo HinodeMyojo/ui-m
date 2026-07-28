@@ -337,6 +337,19 @@ function isOverdue(item) {
   return new Date(item.deadline) < new Date();
 }
 
+// Блокеры живут на связанных задачах, но мешают именно этой карточке —
+// поэтому поднимаем их на неё.
+function blockersOf(item) {
+  return (item.tasks || []).reduce((sum, t) => sum + (t.openBlockers || 0), 0);
+}
+
+function blockersHint(item) {
+  return (item.tasks || [])
+    .filter((t) => t.openBlockers > 0)
+    .map((t) => `${t.title} — ${t.openBlockers}`)
+    .join("\n");
+}
+
 function slotLabel(item) {
   if (item.plannedStartMin < 0) return "";
   const fmt = (m) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
@@ -479,8 +492,13 @@ function slotLabel(item) {
           v-for="item in visibleItems"
           :key="item.id"
           class="ws-card"
-          :class="{ on: item.id === selectedId, done: item.status === 'done', dropped: item.status === 'dropped' }"
-          :style="{ borderLeftColor: item.color || '#1767fd' }"
+          :class="{
+            on: item.id === selectedId,
+            done: item.status === 'done',
+            dropped: item.status === 'dropped',
+            blocked: blockersOf(item) > 0,
+          }"
+          :style="{ borderLeftColor: blockersOf(item) ? '#e5484d' : item.color || '#1767fd' }"
           draggable="true"
           @dragstart="onDragStart(item)"
           @dragover.prevent
@@ -507,6 +525,13 @@ function slotLabel(item) {
             </div>
 
             <div class="ws-card-meta">
+              <span
+                v-if="blockersOf(item)"
+                class="ws-meta-chip blocker"
+                :title="blockersHint(item)"
+              >
+                🚧 {{ blockersOf(item) }}
+              </span>
               <span v-if="slotLabel(item)" class="ws-meta-chip">🕐 {{ slotLabel(item) }}</span>
               <span v-if="item.deadline" class="ws-meta-chip" :class="{ bad: isOverdue(item) }">
                 ⏳ {{ itemDeadline(item) }}
@@ -979,6 +1004,28 @@ function slotLabel(item) {
 .ws-meta-chip.bad {
   color: #ff9ba0;
   border-color: #6b2b2e;
+}
+
+/* Блокер связанной задачи виден прямо на карточке дня */
+.ws-meta-chip.blocker {
+  color: #fff;
+  font-weight: 700;
+  background: #e5484d;
+  border-color: #ff6b6f;
+}
+
+.ws-card.blocked {
+  background: linear-gradient(90deg, rgba(229, 72, 77, 0.15), #1b1d24 60%);
+  border-color: #4a2225;
+}
+
+.ws-card.blocked:hover {
+  background: linear-gradient(90deg, rgba(229, 72, 77, 0.22), #1f222b 60%);
+}
+
+.ws-card.blocked.on {
+  background: linear-gradient(90deg, rgba(229, 72, 77, 0.26), #1c2030 60%);
+  border-color: #e5484d;
 }
 
 .ws-meta-chip.cal {
