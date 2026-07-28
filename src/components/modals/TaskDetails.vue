@@ -441,16 +441,18 @@
                         class="message-resolve-btn primary"
                         @click="applyResolveBlocker(message, true, resolveNote)"
                       >
-                        Снять блокер
+                        {{ message.resolved ? "Сохранить причину" : "Снять блокер" }}
                       </button>
                     </div>
                   </div>
 
-                  <div
-                    v-if="message.kind === 'blocker' && message.resolved && message.resolveNote"
-                    class="message-resolve-note"
-                  >
-                    ✓ {{ message.resolveNote }}
+                  <div v-if="message.kind === 'blocker' && message.resolved" class="message-resolved">
+                    <button class="message-resolve-add" @click="startResolveNoteEdit(message)">
+                      {{ message.resolveNote ? "✎ причина" : "+ причина снятия" }}
+                    </button>
+                    <div v-if="message.resolveNote" class="message-resolve-note">
+                      ✓ {{ message.resolveNote }}
+                    </div>
                   </div>
                   <a
                     v-if="message.url"
@@ -819,6 +821,12 @@ function startResolveBlocker(message) {
   }
   resolvingMessageId.value = message.id;
   resolveNote.value = "";
+}
+
+// Причину можно вписать и позже — блокер остаётся снятым.
+function startResolveNoteEdit(message) {
+  resolvingMessageId.value = message.id;
+  resolveNote.value = message.resolveNote || "";
 }
 
 async function applyResolveBlocker(message, resolved, note) {
@@ -1744,13 +1752,33 @@ function getFileIcon(type) {
   color: #fff;
 }
 
+.message-resolved {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 2px 0 4px 11px;
+}
+
+.message-resolve-add {
+  align-self: flex-start;
+  background: none;
+  border: none;
+  color: #6e7382;
+  cursor: pointer;
+  font-size: 11px;
+  padding: 0;
+}
+
+.message-resolve-add:hover {
+  color: #9fd39a;
+}
+
 .message-resolve-note {
   color: #9fd39a;
   font-size: 12.5px;
   line-height: 1.5;
   border-left: 2px solid #3d6b39;
   padding-left: 9px;
-  margin: 2px 0 4px 11px;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }

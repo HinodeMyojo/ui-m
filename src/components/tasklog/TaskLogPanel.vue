@@ -172,6 +172,12 @@ function startResolve(entry) {
   resolveNote.value = "";
 }
 
+// Причину можно дописать и потом — блокер при этом остаётся снятым.
+function startNoteEdit(entry) {
+  resolvingId.value = entry.id;
+  resolveNote.value = entry.resolveNote || "";
+}
+
 async function applyResolve(entry, resolved, note) {
   try {
     await resolveTaskLogEntry(entry.id, resolved, note);
@@ -341,8 +347,16 @@ defineExpose({ reload: load });
           <a v-if="entry.url" :href="entry.url" target="_blank" rel="noopener" class="tlp-entry-url">
             {{ entry.url }}
           </a>
-          <div v-if="entry.kind === 'blocker' && entry.resolved && entry.resolvedAt" class="tlp-resolved">
-            <span class="tlp-dim">✓ снят {{ new Date(entry.resolvedAt).toLocaleDateString("ru-RU") }}</span>
+          <div v-if="entry.kind === 'blocker' && entry.resolved" class="tlp-resolved">
+            <div class="tlp-resolved-head">
+              <span class="tlp-dim">
+                ✓ снят<template v-if="entry.resolvedAt">
+                  {{ new Date(entry.resolvedAt).toLocaleDateString("ru-RU") }}</template>
+              </span>
+              <button class="tlp-mini" @click="startNoteEdit(entry)">
+                {{ entry.resolveNote ? "✎ причина" : "+ причина" }}
+              </button>
+            </div>
             <span v-if="entry.resolveNote" class="tlp-resolved-note">{{ entry.resolveNote }}</span>
           </div>
         </template>
@@ -361,7 +375,7 @@ defineExpose({ reload: load });
           <div class="tlp-form-actions">
             <button class="tlp-btn" @click="resolvingId = null">Отмена</button>
             <button class="tlp-btn primary" @click="applyResolve(entry, true, resolveNote)">
-              Снять блокер
+              {{ entry.resolved ? "Сохранить причину" : "Снять блокер" }}
             </button>
           </div>
         </div>
@@ -645,8 +659,14 @@ defineExpose({ reload: load });
 .tlp-resolved {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
   margin-top: 2px;
+}
+
+.tlp-resolved-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .tlp-resolved-note {
