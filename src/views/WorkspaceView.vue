@@ -3,6 +3,8 @@ import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from "vue"
 import { useRouter, useRoute } from "vue-router";
 import MarkdownField from "@/components/workspace/MarkdownField.vue";
 import WorkItemEditor from "@/components/workspace/WorkItemEditor.vue";
+import WorkItemView from "@/components/workspace/WorkItemView.vue";
+import DayOverview from "@/components/workspace/DayOverview.vue";
 import CarryModal from "@/components/workspace/CarryModal.vue";
 import GooglePanel from "@/components/workspace/GooglePanel.vue";
 import SearchModal from "@/components/workspace/SearchModal.vue";
@@ -36,6 +38,26 @@ const noteOpen = ref(false);
 const disciplineOpen = ref(false);
 const disciplineMonth = ref(null);
 const filter = ref("all");
+
+// Режимы страницы: рабочий (только заполненное), правка, общий (все задачи разом).
+const VIEW_MODES = [
+  { key: "work", label: "Рабочий", hint: "только то, что заполнено" },
+  { key: "edit", label: "Правка", hint: "все поля и настройки карточки" },
+  { key: "all", label: "Общий", hint: "все задачи дня перед глазами" },
+];
+const viewMode = ref(localStorage.getItem("workspaceViewMode") || "work");
+
+function setViewMode(key) {
+  viewMode.value = key;
+  localStorage.setItem("workspaceViewMode", key);
+}
+
+// Из общего вида карточка открывается в рабочем.
+function openFromOverview(itemId) {
+  selectedId.value = itemId;
+  setViewMode("work");
+  if (isNarrow.value) mobileEditor.value = true;
+}
 const isNarrow = ref(window.innerWidth < 900);
 const mobileEditor = ref(false);
 const dragId = ref(null);
@@ -337,6 +359,19 @@ function slotLabel(item) {
         <button v-if="!isToday" class="ws-btn ghost" @click="goToday">Сегодня</button>
       </div>
 
+      <div class="ws-modes">
+        <button
+          v-for="m in VIEW_MODES"
+          :key="m.key"
+          class="ws-mode"
+          :class="{ on: viewMode === m.key }"
+          :title="m.hint"
+          @click="setViewMode(m.key)"
+        >
+          {{ m.label }}
+        </button>
+      </div>
+
       <div class="ws-actions">
         <button class="ws-btn" @click="searchOpen = true" title="Ctrl+K">🔍 Поиск</button>
         <button class="ws-btn" :class="{ hot: carryCount }" @click="carryOpen = true">
@@ -354,7 +389,13 @@ function slotLabel(item) {
     <div v-if="error" class="ws-error">{{ error }}</div>
 
     <section class="ws-strip">
-      <input v-model="dayFocus" class="ws-focus" placeholder="🎯 Главная цель дня…" />
+      <!-- В общем виде цель дня показывает сам DayOverview, не дублируем -->
+      <input
+        v-if="viewMode !== 'all'"
+        v-model="dayFocus"
+        class="ws-focus"
+        placeholder="🎯 Главная цель дня…"
+      />
       <div class="ws-stats">
         <span class="ws-stat"><b>{{ totals.done || 0 }}</b>/{{ totals.total || 0 }} задач</span>
         <span class="ws-stat">план <b>{{ humanMinutes(totals.estimateMinutes) }}</b></span>
@@ -389,7 +430,7 @@ function slotLabel(item) {
       <div v-else class="ws-empty">Плана дисциплины на этот месяц пока нет</div>
     </section>
 
-    <section class="ws-daynote">
+    <section v-if="viewMode !== 'all'" class="ws-daynote">
       <button class="ws-daynote-toggle" @click="noteOpen = !noteOpen">
         {{ noteOpen ? "▾" : "▸" }} Холст дня
         <span v-if="!noteOpen && dayNote" class="ws-dim">— есть записи</span>
@@ -402,7 +443,16 @@ function slotLabel(item) {
       />
     </section>
 
-    <div class="ws-body" :class="{ narrow: isNarrow }">
+    <DayOverview
+      v-if="viewMode === 'all'"
+      :items="items"
+      :note="day?.note || ''"
+      :focus="day?.focus || ''"
+      @open="openFromOverview"
+      @add="addItem"
+    />
+
+    <div v-else class="ws-body" :class="{ narrow: isNarrow }">
       <aside class="ws-list" v-show="!isNarrow || !mobileEditor">
         <div class="ws-filters">
           <button
@@ -492,9 +542,19 @@ function slotLabel(item) {
       </aside>
 
       <main class="ws-editor" v-show="!isNarrow || mobileEditor">
+        <WorkItemView
+          v-if="selected && viewMode === 'work'"
+          :key="'view-' + selected.id"
+          :item="selected"
+          :date="date"
+          :compact="isNarrow"
+          @changed="load"
+          @edit="setViewMode('edit')"
+          @close="mobileEditor = false"
+        />
         <WorkItemEditor
-          v-if="selected"
-          :key="selected.id"
+          v-else-if="selected"
+          :key="'edit-' + selected.id"
           :item="selected"
           :date="date"
           :skills="day?.skills || []"
@@ -588,6 +648,37 @@ function slotLabel(item) {
 
 .ws-icon:hover {
   border-color: #6e4aff;
+}
+
+.ws-modes {
+  display: flex;
+  gap: 2px;
+  background: #16171d;
+  border: 1px solid #2a2d38;
+  border-radius: 10px;
+  padding: 3px;
+}
+
+.ws-mode {
+  background: transparent;
+  border: none;
+  color: #8f95a6;
+  border-radius: 7px;
+  padding: 6px 15px;
+  cursor: pointer;
+  font-size: 12.5px;
+  min-height: 32px;
+  transition: background 0.15s, color 0.15s;
+}
+
+.ws-mode:hover {
+  color: #cfd3e0;
+}
+
+.ws-mode.on {
+  background: #1767fd;
+  color: #fff;
+  font-weight: 600;
 }
 
 .ws-actions {
@@ -969,6 +1060,12 @@ function slotLabel(item) {
   }
   .ws-date h1 {
     font-size: 17px;
+  }
+  .ws-modes {
+    width: 100%;
+  }
+  .ws-mode {
+    flex: 1;
   }
   .ws-actions {
     width: 100%;
