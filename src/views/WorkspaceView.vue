@@ -507,7 +507,11 @@ function slotLabel(item) {
         >
           <button
             class="ws-card-status"
-            :style="{ borderColor: STATUS_META[item.status]?.color, background: item.status === 'done' ? STATUS_META.done.color : 'transparent' }"
+            :style="{
+              borderColor: STATUS_META[item.status]?.color,
+              background: item.status === 'done' ? STATUS_META.done.color : 'transparent',
+              color: item.status === 'done' ? '#101219' : STATUS_META[item.status]?.color,
+            }"
             :title="STATUS_META[item.status]?.label"
             @click="cycleStatus(item, $event)"
           >
@@ -942,21 +946,29 @@ function slotLabel(item) {
   text-decoration: line-through;
 }
 
+/* Цвет глифа задаётся инлайном: на прозрачном кружке — цвет статуса,
+   на залитом «готово» — тёмный. */
 .ws-card-status {
   width: 22px;
   height: 22px;
   border-radius: 50%;
   border: 2px solid #5b616e;
   background: transparent;
-  color: #101219;
   cursor: pointer;
-  font-size: 11px;
+  font-size: 12px;
+  font-weight: 700;
   flex-shrink: 0;
   margin-top: 1px;
   display: flex;
   align-items: center;
   justify-content: center;
   line-height: 1;
+  padding: 0;
+  transition: transform 0.12s;
+}
+
+.ws-card-status:hover {
+  transform: scale(1.12);
 }
 
 .ws-card-main {
