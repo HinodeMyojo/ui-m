@@ -23,13 +23,16 @@ import {
   uploadPrepOptionFile,
   deletePrepOptionFile,
   fetchCountries,
+  createParticipant,
 } from "@/components/api.js";
 
 const props = defineProps({
   trip: { type: Object, required: true },
 });
+const emit = defineEmits(["changed"]);
 
 const router = useRouter();
+const newPersonName = ref("");
 
 const prep = ref(null);
 const loading = ref(true);
@@ -131,6 +134,24 @@ const sortedForCompare = computed(() => {
 
 const participants = computed(() => props.trip.participants || []);
 
+// Участников заводим прямо здесь: без них не разделить билеты по людям,
+// а гонять за этим в бюджет — лишний шаг.
+async function addPerson() {
+  const name = newPersonName.value.trim();
+  if (!name) return;
+  try {
+    await createParticipant(props.trip.id, {
+      name,
+      isMe: participants.value.length === 0,
+    });
+    newPersonName.value = "";
+    emit("changed");
+    await load();
+  } catch (e) {
+    error.value = e.message || "не удалось добавить участника";
+  }
+}
+
 function toggleOptionParticipant(id) {
   const list = optionForm.value.participantIds || (optionForm.value.participantIds = []);
   const index = list.indexOf(id);
@@ -217,16 +238,35 @@ async function saveOption() {
     return;
   }
   try {
-    if (optionEditing.value === "new") {
-      await createPrepOption(optionGroup.value.id, optionForm.value);
+    const isNew = optionEditing.value === "new";
+    const group = optionGroup.value;
+    let createdId = null;
+
+    if (isNew) {
+      createdId = (await createPrepOption(group.id, optionForm.value)).id;
     } else {
       await updatePrepOption(optionEditing.value, optionForm.value);
     }
     optionEditing.value = null;
     await load();
+
+    // Перелёт без плеч бесполезен: сразу зовём заполнить первое,
+    // иначе форму приходится искать самому.
+    if (isNew && group.kind === "flight" && createdId) {
+      const created = findOption(createdId);
+      if (created) openSegment(created, null);
+    }
   } catch (e) {
     error.value = e.message || "не удалось сохранить вариант";
   }
+}
+
+function findOption(id) {
+  for (const group of prep.value?.groups || []) {
+    const found = group.options.find((o) => o.id === id);
+    if (found) return found;
+  }
+  return null;
 }
 
 async function removeOption(option) {
@@ -347,8 +387,8 @@ onMounted(load);
       </div>
 
       <!-- Сколько выходит на каждого: билеты личные, жильё делится -->
-      <div v-if="prep.byParticipant?.length" class="prep-people">
-        <div v-for="p in prep.byParticipant" :key="p.participantId" class="prep-person">
+      <div class="prep-people">
+        <div v-for="p in prep.byParticipant || []" :key="p.participantId" class="prep-person">
           <span class="prep-person__dot" :style="{ background: p.color || '#1767fd' }"></span>
           <div class="prep-person__body">
             <b>{{ p.name }}</b>
@@ -356,7 +396,23 @@ onMounted(load);
           </div>
           <b class="prep-person__total">{{ rub(p.totalRub) }} ₽</b>
         </div>
+
+        <div class="prep-person prep-person--add">
+          <i class="mdi mdi-account-plus"></i>
+          <input
+            v-model="newPersonName"
+            class="prep-input prep-input--inline"
+            type="text"
+            :placeholder="participants.length ? 'ещё кто-то' : 'кто едет?'"
+            @keydown.enter="addPerson"
+          />
+        </div>
       </div>
+
+      <p v-if="!participants.length" class="prep-hint" style="margin: -6px 0 14px">
+        Добавь, кто едет, — тогда билеты и страховки можно будет оформить на каждого
+        отдельно, а жильё поделится поровну.
+      </p>
 
       <div v-if="!prep.groups.length" class="prep-empty">
         <p>Этапов пока нет.</p>
@@ -442,6 +498,22 @@ onMounted(load);
             </div>
 
             <!-- Плечи перелёта: реальная длительность и пересадки -->
+            <!-- У перелёта без плеч маршрут неизвестен: ни времени, ни пересадок.
+                 Поэтому зовём заполнить прямо в карточке, а не прячем в кнопке. -->
+            <button
+              v-if="group.kind === 'flight' && !option.segments.length"
+              class="prep-route-empty"
+              @click="openSegment(option, null)"
+            >
+              <i class="mdi mdi-airplane-takeoff"></i>
+              <span>
+                <b>Маршрут не задан</b>
+                Добавь плечи перелёта — время в пути, пересадки, визы и терминалы
+                посчитаются сами
+              </span>
+              <i class="mdi mdi-plus"></i>
+            </button>
+
             <div v-if="option.segments.length" class="prep-segments">
               <div class="prep-segments__total">
                 <b>{{ option.stopsCount === 0 ? "прямой" : `пересадок: ${option.stopsCount}` }}</b>
@@ -551,7 +623,12 @@ onMounted(load);
               <button v-if="option.status === 'selected'" class="prep-choose" @click="select(option, true)">
                 <i class="mdi mdi-cart-check"></i> Куплен
               </button>
-              <button v-if="option.kind !== 'flight'" class="prep-mini" @click="openSegment(option, null)">
+              <!-- Плечи есть смысл заводить у перелётов и переездов между городами -->
+              <button
+                v-if="['flight', 'other'].includes(group.kind)"
+                class="prep-mini"
+                @click="openSegment(option, null)"
+              >
                 <i class="mdi mdi-airplane"></i> плечо
               </button>
               <button class="prep-mini" @click="pickFile(option.id)"><i class="mdi mdi-upload"></i></button>
@@ -735,6 +812,13 @@ onMounted(load);
           Ссылка
           <input v-model="optionForm.url" class="prep-input" type="text" placeholder="https://" />
         </label>
+
+        <p v-if="optionGroup?.kind === 'flight'" class="prep-note">
+          <i class="mdi mdi-information-outline"></i>
+          Здесь только цена и общее. Сам маршрут — плечи, пересадки, визы
+          и терминалы — добавляется следующим шагом, форма откроется сразу
+          после сохранения.
+        </p>
 
         <!-- Два поля суммы: рубли без пересчёта, местная валюта — с пересчётом -->
         <div class="prep-row">
@@ -1637,6 +1721,77 @@ onMounted(load);
 .prep-person__total {
   margin-left: 10px;
   font-size: 15px;
+}
+
+.prep-person--add {
+  gap: 7px;
+  border-style: dashed;
+}
+
+.prep-person--add i {
+  color: #6e7688;
+}
+
+.prep-input--inline {
+  width: 130px;
+  padding: 5px 8px;
+  border-color: transparent;
+  background: transparent;
+}
+
+.prep-input--inline:focus {
+  border-color: #1767fd;
+}
+
+/* Пустой маршрут перелёта — самое важное место карточки, поэтому крупно. */
+.prep-route-empty {
+  display: flex;
+  gap: 11px;
+  align-items: center;
+  width: 100%;
+  padding: 12px 14px;
+  margin-top: 9px;
+  font-size: 12px;
+  color: #b9c0cf;
+  text-align: left;
+  background: rgba(23, 103, 253, 0.07);
+  border: 1px dashed rgba(23, 103, 253, 0.4);
+  border-radius: 11px;
+  cursor: pointer;
+}
+
+.prep-route-empty:hover {
+  background: rgba(23, 103, 253, 0.13);
+}
+
+.prep-route-empty > i:first-child {
+  font-size: 21px;
+  color: #1767fd;
+}
+
+.prep-route-empty span {
+  flex: 1;
+}
+
+.prep-route-empty b {
+  display: block;
+  font-size: 13px;
+  color: #eaeef7;
+}
+
+.prep-note {
+  display: flex;
+  gap: 7px;
+  padding: 9px 11px;
+  margin-top: 12px;
+  font-size: 11px;
+  color: #8b93a7;
+  background: rgba(23, 103, 253, 0.08);
+  border-radius: 9px;
+}
+
+.prep-note i {
+  color: #1767fd;
 }
 
 .prep-tag--who {

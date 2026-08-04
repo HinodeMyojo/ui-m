@@ -750,7 +750,7 @@ onBeforeUnmount(() => clearInterval(pulseTimer));
     <p v-if="error" class="tv-error" @click="error = ''">{{ error }}</p>
     <div v-if="loading" class="tv-empty">Загружаю…</div>
 
-    <TripPrepTab v-else-if="trip && view === 'prep'" :trip="trip" />
+    <TripPrepTab v-else-if="trip && view === 'prep'" :trip="trip" @changed="reload" />
     <TripBudgetTab v-else-if="trip && view === 'budget'" :trip="trip" @changed="reload" />
     <TripShareTab v-else-if="trip && view === 'share'" :trip="trip" @changed="reload" />
 
