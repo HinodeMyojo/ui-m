@@ -902,3 +902,592 @@ export async function setTaskLogStatus(data) {
     throw new Error((await response.json().catch(() => ({}))).error || "не удалось сменить статус");
   }
 }
+
+// === Путешествия (страны, вишлист, поиск мест) ===
+// Спецификация модуля: back-m/docs/travel-module.md
+
+const TR = `${API_BASE_URL}/api/v1/travel`;
+
+export function travelApiBase() {
+  return API_BASE_URL;
+}
+
+// --- Справочники ---
+
+export async function fetchPlaceCategories() {
+  const response = await authorizedFetch(`${TR}/categories/places`);
+  return workJson(response, "не удалось загрузить типы точек");
+}
+
+export async function createPlaceCategory(data) {
+  const response = await authorizedFetch(`${TR}/categories/places`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+  return workJson(response, "не удалось создать тип точки");
+}
+
+export async function updatePlaceCategory(id, data) {
+  const response = await authorizedFetch(`${TR}/categories/places/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+  if (!response.ok) throw new Error("не удалось сохранить тип точки");
+}
+
+export async function deletePlaceCategory(id) {
+  await authorizedFetch(`${TR}/categories/places/${id}`, { method: "DELETE" });
+}
+
+export async function fetchExpenseCategories() {
+  const response = await authorizedFetch(`${TR}/categories/expenses`);
+  return workJson(response, "не удалось загрузить категории расходов");
+}
+
+export async function createExpenseCategory(data) {
+  const response = await authorizedFetch(`${TR}/categories/expenses`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+  return workJson(response, "не удалось создать категорию");
+}
+
+export async function updateExpenseCategory(id, data) {
+  const response = await authorizedFetch(`${TR}/categories/expenses/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+  if (!response.ok) throw new Error("не удалось сохранить категорию");
+}
+
+export async function deleteExpenseCategory(id) {
+  await authorizedFetch(`${TR}/categories/expenses/${id}`, { method: "DELETE" });
+}
+
+// --- Страны ---
+
+export async function fetchCountries(includeArchived = false) {
+  const response = await authorizedFetch(`${TR}/countries?archived=${includeArchived}`);
+  return workJson(response, "не удалось загрузить страны");
+}
+
+export async function fetchCountry(id) {
+  const response = await authorizedFetch(`${TR}/countries/${id}`);
+  return workJson(response, "не удалось загрузить страну");
+}
+
+export async function suggestCountries(query) {
+  const response = await authorizedFetch(`${TR}/countries/suggest?q=${encodeURIComponent(query || "")}`);
+  return workJson(response, "не удалось загрузить подсказки");
+}
+
+// Создание идёт в сеть за границами страны — может занять пару секунд.
+export async function createCountry(data) {
+  const response = await authorizedFetch(`${TR}/countries`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+  return workJson(response, "не удалось создать страну");
+}
+
+export async function updateCountry(id, data) {
+  const response = await authorizedFetch(`${TR}/countries/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+  if (!response.ok) throw new Error("не удалось сохранить страну");
+}
+
+export async function deleteCountry(id) {
+  await authorizedFetch(`${TR}/countries/${id}`, { method: "DELETE" });
+}
+
+// --- Вишлист ---
+
+export async function fetchWishes(countryId) {
+  const response = await authorizedFetch(`${TR}/countries/${countryId}/wishes`);
+  return workJson(response, "не удалось загрузить вишлист");
+}
+
+export async function fetchWish(id) {
+  const response = await authorizedFetch(`${TR}/wishes/${id}`);
+  return workJson(response, "не удалось загрузить место");
+}
+
+export async function createWish(data) {
+  const response = await authorizedFetch(`${TR}/wishes`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+  return workJson(response, "не удалось добавить место");
+}
+
+export async function updateWish(id, data) {
+  const response = await authorizedFetch(`${TR}/wishes/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+  if (!response.ok) throw new Error("не удалось сохранить место");
+}
+
+export async function deleteWish(id) {
+  await authorizedFetch(`${TR}/wishes/${id}`, { method: "DELETE" });
+}
+
+export async function reorderWishes(ids) {
+  await authorizedFetch(`${TR}/wishes/reorder`, {
+    method: "POST",
+    body: JSON.stringify({ ids }),
+  });
+}
+
+// --- Файлы страны ---
+
+export async function fetchCountryFiles(countryId) {
+  const response = await authorizedFetch(`${TR}/countries/${countryId}/files`);
+  return workJson(response, "не удалось загрузить файлы");
+}
+
+export async function uploadCountryFile(countryId, file, title = "") {
+  const form = new FormData();
+  form.append("file", file);
+  if (title) form.append("title", title);
+  const token = localStorage.getItem("token");
+  const response = await fetch(`${TR}/countries/${countryId}/files`, {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: form,
+  });
+  return workJson(response, "не удалось загрузить файл");
+}
+
+export async function deleteTravelFile(id) {
+  await authorizedFetch(`${TR}/files/${id}`, { method: "DELETE" });
+}
+
+export function travelFileUrl(id) {
+  return `${TR}/files/${id}`;
+}
+
+// --- Поиск мест ---
+
+export async function searchPlaces(query, countryId = "", limit = 10) {
+  const params = new URLSearchParams({ q: query, limit: String(limit) });
+  if (countryId) params.set("countryId", countryId);
+  const response = await authorizedFetch(`${TR}/search?${params}`);
+  return workJson(response, "поиск не сработал");
+}
+
+// Разбирает ссылку из Google Maps в точку с координатами.
+export async function resolveMapLink(url) {
+  const response = await authorizedFetch(`${TR}/resolve-link`, {
+    method: "POST",
+    body: JSON.stringify({ url }),
+  });
+  return workJson(response, "не удалось разобрать ссылку");
+}
+
+export async function reverseGeocode(lat, lng) {
+  const response = await authorizedFetch(`${TR}/reverse?lat=${lat}&lng=${lng}`);
+  return workJson(response, "не удалось определить место");
+}
+
+export async function findPlacePhoto(title) {
+  const response = await authorizedFetch(`${TR}/photo?title=${encodeURIComponent(title)}`);
+  return workJson(response, "не удалось найти фото");
+}
+
+// --- Настройки и курсы ---
+
+export async function fetchTravelSettings() {
+  const response = await authorizedFetch(`${TR}/settings`);
+  return workJson(response, "не удалось загрузить настройки");
+}
+
+export async function saveTravelSettings(data) {
+  const response = await authorizedFetch(`${TR}/settings`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+  if (!response.ok) throw new Error("не удалось сохранить настройки");
+}
+
+export async function fetchTravelRates(refresh = false) {
+  const response = await authorizedFetch(`${TR}/rates?refresh=${refresh}`);
+  return workJson(response, "не удалось загрузить курсы");
+}
+
+// === Поездки (дни, варианты, шаги, точки, переезды) ===
+
+const TP = `${API_BASE_URL}/api/v1/trips`;
+
+export async function fetchTrips(countryId = "", includeArchived = false) {
+  const params = new URLSearchParams({ archived: String(includeArchived) });
+  if (countryId) params.set("countryId", countryId);
+  const response = await authorizedFetch(`${TP}?${params}`);
+  return workJson(response, "не удалось загрузить поездки");
+}
+
+// Отдаёт поездку целиком — она же используется как офлайн-выгрузка.
+export async function fetchTrip(id) {
+  const response = await authorizedFetch(`${TP}/${id}`);
+  return workJson(response, "не удалось загрузить поездку");
+}
+
+export async function createTrip(data) {
+  const response = await authorizedFetch(TP, { method: "POST", body: JSON.stringify(data) });
+  return workJson(response, "не удалось создать поездку");
+}
+
+export async function updateTrip(id, data) {
+  const response = await authorizedFetch(`${TP}/${id}`, { method: "PUT", body: JSON.stringify(data) });
+  if (!response.ok) throw new Error("не удалось сохранить поездку");
+}
+
+export async function deleteTrip(id) {
+  await authorizedFetch(`${TP}/${id}`, { method: "DELETE" });
+}
+
+// --- Участники ---
+
+export async function createParticipant(tripId, data) {
+  const response = await authorizedFetch(`${TP}/${tripId}/participants`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+  return workJson(response, "не удалось добавить участника");
+}
+
+export async function updateParticipant(id, data) {
+  await authorizedFetch(`${TP}/participants/${id}`, { method: "PUT", body: JSON.stringify(data) });
+}
+
+export async function deleteParticipant(id) {
+  await authorizedFetch(`${TP}/participants/${id}`, { method: "DELETE" });
+}
+
+// --- Дни ---
+
+export async function addTripDay(tripId) {
+  const response = await authorizedFetch(`${TP}/${tripId}/days`, { method: "POST" });
+  return workJson(response, "не удалось добавить день");
+}
+
+export async function updateTripDay(id, data) {
+  await authorizedFetch(`${TP}/days/${id}`, { method: "PUT", body: JSON.stringify(data) });
+}
+
+// shift=true подтягивает следующие дни на освободившееся место
+export async function deleteTripDay(id, shift = true) {
+  await authorizedFetch(`${TP}/days/${id}?shift=${shift}`, { method: "DELETE" });
+}
+
+// Перенос дня: сделать день 4 днём 7
+export async function moveTripDay(id, targetIndex) {
+  await authorizedFetch(`${TP}/days/${id}/move`, {
+    method: "POST",
+    body: JSON.stringify({ targetIndex }),
+  });
+}
+
+// Копия дня внутри страны: targetTripId пустой — в ту же поездку
+export async function copyTripDay(id, targetTripId = null, targetIndex = null) {
+  const response = await authorizedFetch(`${TP}/days/${id}/copy`, {
+    method: "POST",
+    body: JSON.stringify({ targetTripId, targetIndex }),
+  });
+  return workJson(response, "не удалось скопировать день");
+}
+
+// --- Варианты дня ---
+
+export async function createDayVariant(dayId, data) {
+  const response = await authorizedFetch(`${TP}/days/${dayId}/variants`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+  return workJson(response, "не удалось создать вариант");
+}
+
+export async function updateDayVariant(id, data) {
+  await authorizedFetch(`${TP}/variants/${id}`, { method: "PUT", body: JSON.stringify(data) });
+}
+
+export async function deleteDayVariant(id) {
+  const response = await authorizedFetch(`${TP}/variants/${id}`, { method: "DELETE" });
+  if (!response.ok) {
+    throw new Error((await response.json().catch(() => ({}))).error || "не удалось удалить вариант");
+  }
+}
+
+// --- Шаги ---
+
+export async function createStep(variantId, data = {}) {
+  const response = await authorizedFetch(`${TP}/variants/${variantId}/steps`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+  return workJson(response, "не удалось создать шаг");
+}
+
+export async function updateStep(id, data) {
+  await authorizedFetch(`${TP}/steps/${id}`, { method: "PUT", body: JSON.stringify(data) });
+}
+
+export async function deleteStep(id) {
+  await authorizedFetch(`${TP}/steps/${id}`, { method: "DELETE" });
+}
+
+export async function reorderSteps(ids) {
+  await authorizedFetch(`${TP}/steps/reorder`, { method: "POST", body: JSON.stringify({ ids }) });
+}
+
+// Отметить пройденную ветку развилки; pointId=null снимает отметку
+export async function chooseStepPoint(stepId, pointId) {
+  await authorizedFetch(`${TP}/steps/${stepId}/choose`, {
+    method: "POST",
+    body: JSON.stringify({ pointId }),
+  });
+}
+
+// --- Точки ---
+
+// Отдельным шагом в конец варианта — в data нужен variantId
+export async function createPoint(data) {
+  const response = await authorizedFetch(`${TP}/points`, { method: "POST", body: JSON.stringify(data) });
+  return workJson(response, "не удалось добавить точку");
+}
+
+// В существующий шаг — получается развилка «или/или»
+export async function createPointInStep(stepId, data) {
+  const response = await authorizedFetch(`${TP}/steps/${stepId}/points`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+  return workJson(response, "не удалось добавить альтернативу");
+}
+
+export async function updatePoint(id, data) {
+  const response = await authorizedFetch(`${TP}/points/${id}`, { method: "PUT", body: JSON.stringify(data) });
+  if (!response.ok) {
+    throw new Error((await response.json().catch(() => ({}))).error || "не удалось сохранить точку");
+  }
+}
+
+export async function deletePoint(id) {
+  await authorizedFetch(`${TP}/points/${id}`, { method: "DELETE" });
+}
+
+export async function movePoint(id, data) {
+  await authorizedFetch(`${TP}/points/${id}/move`, { method: "POST", body: JSON.stringify(data) });
+}
+
+// Взять место из вишлиста: точка станет ссылкой, правки идут в обе стороны
+export async function addWishToDay(data) {
+  const response = await authorizedFetch(`${TP}/points/from-wish`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+  return workJson(response, "не удалось добавить место");
+}
+
+export async function pointToWishlist(id) {
+  const response = await authorizedFetch(`${TP}/points/${id}/to-wishlist`, { method: "POST" });
+  return workJson(response, "не удалось поднять в вишлист");
+}
+
+// Убрать из маршрута, но оставить место в вишлисте
+export async function releasePointToWishlist(id) {
+  await authorizedFetch(`${TP}/points/${id}/release`, { method: "POST" });
+}
+
+// --- Подпункты и объекты поблизости ---
+
+export async function createSubPoint(pointId, data) {
+  const response = await authorizedFetch(`${TP}/points/${pointId}/subpoints`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+  return workJson(response, "не удалось добавить подпункт");
+}
+
+export async function updateSubPoint(id, data) {
+  await authorizedFetch(`${TP}/subpoints/${id}`, { method: "PUT", body: JSON.stringify(data) });
+}
+
+export async function deleteSubPoint(id) {
+  await authorizedFetch(`${TP}/subpoints/${id}`, { method: "DELETE" });
+}
+
+export async function createNearby(pointId, data) {
+  const response = await authorizedFetch(`${TP}/points/${pointId}/nearby`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+  return workJson(response, "не удалось добавить объект поблизости");
+}
+
+export async function updateNearby(id, data) {
+  await authorizedFetch(`${TP}/nearby/${id}`, { method: "PUT", body: JSON.stringify(data) });
+}
+
+export async function deleteNearby(id) {
+  await authorizedFetch(`${TP}/nearby/${id}`, { method: "DELETE" });
+}
+
+// --- Переезды ---
+
+// В data нужен stepId: переезд ведёт К этому шагу от предыдущего
+export async function createTransport(data) {
+  const response = await authorizedFetch(`${TP}/transports`, { method: "POST", body: JSON.stringify(data) });
+  return workJson(response, "не удалось добавить переезд");
+}
+
+export async function updateTransport(id, data) {
+  await authorizedFetch(`${TP}/transports/${id}`, { method: "PUT", body: JSON.stringify(data) });
+}
+
+export async function deleteTransport(id) {
+  await authorizedFetch(`${TP}/transports/${id}`, { method: "DELETE" });
+}
+
+// --- Файлы поездки и точек ---
+
+export async function uploadTripFile(tripId, file, title = "") {
+  const form = new FormData();
+  form.append("file", file);
+  if (title) form.append("title", title);
+  const token = localStorage.getItem("token");
+  const response = await fetch(`${TP}/${tripId}/files`, {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: form,
+  });
+  return workJson(response, "не удалось загрузить файл");
+}
+
+export async function uploadPointFile(pointId, file, title = "") {
+  const form = new FormData();
+  form.append("file", file);
+  if (title) form.append("title", title);
+  const token = localStorage.getItem("token");
+  const response = await fetch(`${TP}/points/${pointId}/files`, {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: form,
+  });
+  return workJson(response, "не удалось загрузить файл");
+}
+
+export async function deleteTripFile(id) {
+  await authorizedFetch(`${TP}/files/${id}`, { method: "DELETE" });
+}
+
+export async function deletePointFile(id) {
+  await authorizedFetch(`${TP}/point-files/${id}`, { method: "DELETE" });
+}
+
+// === Подготовка к поездке (этапы, сравнение вариантов, перелёты) ===
+
+// Сводка: этапы со всеми вариантами, итог и чего ещё не хватает
+export async function fetchTripPrep(tripId) {
+  const response = await authorizedFetch(`${TP}/${tripId}/prep`);
+  return workJson(response, "не удалось загрузить подготовку");
+}
+
+// Типовой набор этапов: виза, билеты, жильё, страховка
+export async function seedPrepGroups(tripId) {
+  await authorizedFetch(`${TP}/${tripId}/prep/seed`, { method: "POST" });
+}
+
+export async function createPrepGroup(tripId, data) {
+  const response = await authorizedFetch(`${TP}/${tripId}/prep/groups`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+  return workJson(response, "не удалось создать этап");
+}
+
+export async function updatePrepGroup(id, data) {
+  await authorizedFetch(`${TP}/prep/groups/${id}`, { method: "PUT", body: JSON.stringify(data) });
+}
+
+export async function deletePrepGroup(id) {
+  await authorizedFetch(`${TP}/prep/groups/${id}`, { method: "DELETE" });
+}
+
+export async function createPrepOption(groupId, data) {
+  const response = await authorizedFetch(`${TP}/prep/groups/${groupId}/options`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+  return workJson(response, "не удалось создать вариант");
+}
+
+export async function updatePrepOption(id, data) {
+  const response = await authorizedFetch(`${TP}/prep/options/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+  if (!response.ok) {
+    throw new Error((await response.json().catch(() => ({}))).error || "не удалось сохранить вариант");
+  }
+}
+
+export async function deletePrepOption(id) {
+  await authorizedFetch(`${TP}/prep/options/${id}`, { method: "DELETE" });
+}
+
+// Выбранный вариант отдаёт свою цену в бюджет этапа
+export async function selectPrepOption(id, purchased = false) {
+  await authorizedFetch(`${TP}/prep/options/${id}/select?purchased=${purchased}`, { method: "POST" });
+}
+
+// Время в плече локальное для своего аэропорта; длительность считает сервер
+export async function createPrepSegment(optionId, data) {
+  const response = await authorizedFetch(`${TP}/prep/options/${optionId}/segments`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+  return workJson(response, "не удалось добавить плечо");
+}
+
+export async function updatePrepSegment(id, data) {
+  const response = await authorizedFetch(`${TP}/prep/segments/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+  if (!response.ok) {
+    throw new Error((await response.json().catch(() => ({}))).error || "не удалось сохранить плечо");
+  }
+}
+
+export async function deletePrepSegment(id) {
+  await authorizedFetch(`${TP}/prep/segments/${id}`, { method: "DELETE" });
+}
+
+// Длинную пересадку можно превратить в мини-поездку со своей картой
+export async function createSideTrip(segmentId, data) {
+  const response = await authorizedFetch(`${TP}/prep/segments/${segmentId}/side-trip`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+  return workJson(response, "не удалось создать мини-поездку");
+}
+
+export async function uploadPrepOptionFile(optionId, file, title = "") {
+  const form = new FormData();
+  form.append("file", file);
+  if (title) form.append("title", title);
+  const token = localStorage.getItem("token");
+  const response = await fetch(`${TP}/prep/options/${optionId}/files`, {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: form,
+  });
+  return workJson(response, "не удалось загрузить файл");
+}
+
+export async function deletePrepOptionFile(id) {
+  await authorizedFetch(`${TP}/prep/files/${id}`, { method: "DELETE" });
+}

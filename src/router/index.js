@@ -85,6 +85,21 @@ const router = createRouter({
       name: "Workspace",
       component: () => import("../views/WorkspaceView.vue"),
     },
+    {
+      path: "/travel",
+      name: "TravelCountries",
+      component: () => import("../views/travel/TravelCountriesView.vue"),
+    },
+    {
+      path: "/travel/countries/:id",
+      name: "TravelCountry",
+      component: () => import("../views/travel/CountryView.vue"),
+    },
+    {
+      path: "/travel/trips/:id",
+      name: "Trip",
+      component: () => import("../views/travel/TripView.vue"),
+    },
   ],
 });
 

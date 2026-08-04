@@ -19,6 +19,7 @@
     "highlight.js": "^11.11.1",
     "html2pdf.js": "^0.14.0",
     "https-proxy-agent": "^7.0.6",
+    "leaflet": "^1.9.4",
     "marked": "^17.0.3",
     "marked-highlight": "^2.2.3",
     "pdfjs-dist": "^5.5.207",

@@ -1113,9 +1113,9 @@ function closeTimeStats() {
           <div class="icon">📝</div>
           <p class="text">Тестирование</p>
         </button>
-        <button class="nyamaaa nyamaaa-soon nyamaaa-unknown" disabled>
-          <div class="icon">❓</div>
-          <span class="nyama-badge">Неизвестно</span>
+        <button class="nyamaaa" @click="router.push('/travel')">
+          <div class="icon">✈️</div>
+          <p class="text">Путешествия</p>
         </button>
         <button class="nyamaaa nyamaaa-soon nyamaaa-unknown" disabled>
           <div class="icon">❓</div>
