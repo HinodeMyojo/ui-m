@@ -35,6 +35,7 @@ const settingsOpen = ref(false);
 const settingsForm = ref({
   mapEngine: "osm",
   googleApiKey: "",
+  googleServerKey: "",
   useGooglePlaces: false,
   wikipediaPhotos: true,
 });
@@ -45,6 +46,7 @@ async function openSettings() {
     settingsForm.value = {
       mapEngine: data.mapEngine || "osm",
       googleApiKey: data.googleApiKey || "",
+      googleServerKey: data.googleServerKey || "",
       useGooglePlaces: data.useGooglePlaces,
       wikipediaPhotos: data.wikipediaPhotos,
     };
@@ -56,14 +58,7 @@ async function openSettings() {
 
 async function saveSettings() {
   try {
-    await saveTravelSettings({
-      ...settingsForm.value,
-      // Ключ шлём всегда: он же используется браузером для отрисовки карты.
-      googleApiKey: settingsForm.value.googleApiKey,
-      // Карта Google без Places бессмысленна — поиск включаем вместе с ней.
-      useGooglePlaces:
-        settingsForm.value.mapEngine === "google" || settingsForm.value.useGooglePlaces,
-    });
+    await saveTravelSettings(settingsForm.value);
     settingsOpen.value = false;
     // Движок читается при монтировании карты — проще перезагрузить страницу.
     window.location.reload();
@@ -328,21 +323,47 @@ onMounted(load);
           </button>
         </div>
 
-        <label v-if="settingsForm.mapEngine === 'google'" class="tc-field">
-          Ключ Google Maps
-          <input
-            v-model="settingsForm.googleApiKey"
-            class="tc-input"
-            type="text"
-            placeholder="AIza…"
-          />
+        <template v-if="settingsForm.mapEngine === 'google'">
+          <label class="tc-field">
+            Ключ для браузера
+            <input
+              v-model="settingsForm.googleApiKey"
+              class="tc-input"
+              type="text"
+              placeholder="AIza…"
+            />
+          </label>
+          <p class="tc-empty__hint" style="text-align: left">
+            Им рисуется карта и работает поиск на ней. Включи в консоли Google
+            <b>Maps JavaScript API</b> и <b>Places API</b>, а ключ ограничь по адресу
+            сайта — он виден в исходниках страницы.
+          </p>
+        </template>
+
+        <label class="tc-toggle" style="margin-top: 14px">
+          <input v-model="settingsForm.useGooglePlaces" type="checkbox" />
+          <span>искать места через Google и на сервере</span>
         </label>
-        <p v-if="settingsForm.mapEngine === 'google'" class="tc-empty__hint" style="text-align: left">
-          В консоли Google включи <b>Maps JavaScript API</b> и <b>Places API</b>,
-          а ключ ограничь по адресу сайта — он виден в браузере.
+        <p class="tc-empty__hint" style="text-align: left">
+          Нужно, только если хочешь гугловский поиск в вишлисте и рейтинги мест.
+          Для самой карты это не требуется.
         </p>
 
-        <label class="tc-toggle" style="margin-top: 12px">
+        <label v-if="settingsForm.useGooglePlaces" class="tc-field">
+          Ключ для сервера
+          <input
+            v-model="settingsForm.googleServerKey"
+            class="tc-input"
+            type="text"
+            placeholder="AIza… (другой ключ)"
+          />
+        </label>
+        <p v-if="settingsForm.useGooglePlaces" class="tc-empty__hint" style="text-align: left">
+          Обязательно <b>второй</b> ключ: у серверных запросов нет адреса сайта,
+          и ключ с ограничением по нему их отвергнет. Этот ограничивай по IP сервера.
+        </p>
+
+        <label class="tc-toggle" style="margin-top: 14px">
           <input v-model="settingsForm.wikipediaPhotos" type="checkbox" />
           <span>подтягивать фото известных мест из Википедии</span>
         </label>
