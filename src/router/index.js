@@ -100,13 +100,29 @@ const router = createRouter({
       name: "Trip",
       component: () => import("../views/travel/TripView.vue"),
     },
+    {
+      // Режим «в поездке» для телефона: без :id открывает активную поездку.
+      path: "/travel/today/:id?",
+      name: "TripToday",
+      component: () => import("../views/travel/TripTodayView.vue"),
+    },
+    {
+      // Гостевой доступ по ссылке — вход в приложение не нужен.
+      path: "/travel/shared/:token",
+      name: "SharedTrip",
+      component: () => import("../views/travel/PublicTripView.vue"),
+      meta: { public: true },
+    },
   ],
 });
 
 // Navigation guard
 router.beforeEach((to, from, next) => {
   const isAuth = localStorage.getItem("token");
-  if (to.path !== "/login" && !isAuth) {
+  // Гостевые страницы открываются по ссылке, без входа в приложение.
+  if (to.meta?.public) {
+    next();
+  } else if (to.path !== "/login" && !isAuth) {
     next("/login");
   } else if (to.path === "/login" && isAuth) {
     next("/");

@@ -4,11 +4,13 @@
 // Структура дня: варианты (План А / План Б) → цепочка шагов → точки.
 // Шаг с несколькими точками — развилка «или/или»: пойти сюда ИЛИ туда.
 // Между шагами — переезды. Спецификация: docs/travel-module.md, раздел 4.
-import { ref, computed, onMounted, watch, nextTick } from "vue";
+import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import TravelMap from "@/components/travel/TravelMap.vue";
 import TripPointCard from "@/components/travel/TripPointCard.vue";
 import TripPrepTab from "@/components/travel/TripPrepTab.vue";
+import TripBudgetTab from "@/components/travel/TripBudgetTab.vue";
+import TripShareTab from "@/components/travel/TripShareTab.vue";
 import {
   fetchTrip,
   updateTrip,
@@ -39,6 +41,10 @@ import {
   searchPlaces,
   resolveMapLink,
   reverseGeocode,
+  fetchTripWeather,
+  fetchTripPulse,
+  tripCalendarUrl,
+  syncTripToGoogle,
 } from "@/components/api.js";
 
 const route = useRoute();
@@ -75,6 +81,12 @@ const copyTarget = ref("");
 const moveTarget = ref(1);
 const transportEditing = ref(null);
 const transportForm = ref(emptyTransport());
+
+// Погода по дням и пульс: кто сейчас правит и что ждёт ответа.
+const weather = ref([]);
+const pulse = ref(null);
+let pulseTimer = null;
+let typingUntil = 0;
 
 const TRANSPORT_KINDS = [
   { key: "walk", label: "Пешком", icon: "mdi-walk" },
@@ -294,6 +306,62 @@ async function load(keepDay = true) {
 
 async function reload() {
   await load(true);
+}
+
+const weatherOfDay = computed(() => {
+  const day = currentDay.value;
+  if (!day) return null;
+  return weather.value.find((w) => w.dayId === day.id) || null;
+});
+
+async function loadWeather(refresh = false) {
+  if (!trip.value?.startDate) return;
+  try {
+    weather.value = await fetchTripWeather(tripId, refresh);
+  } catch {
+    // Погода — приятное дополнение: молчим, если сеть не дала.
+  }
+}
+
+// Опрос раз в три секунды. Пока идёт правка, экран не дёргаем: договорились,
+// что обновление приходит после нескольких секунд тишины.
+function startPulse() {
+  pulseTimer = setInterval(async () => {
+    try {
+      const result = await fetchTripPulse(tripId, trip.value?.version || 0);
+      pulse.value = result;
+      const busy = editingSomething();
+      if (result.changed && !busy && Date.now() > typingUntil) {
+        await reload();
+      }
+    } catch {
+      // Сеть моргнула — попробуем на следующем тике.
+    }
+  }, 3000);
+}
+
+// Пока открыта любая форма, перерисовывать экран нельзя.
+function editingSomething() {
+  return Boolean(
+    transportEditing.value || searchOpen.value || wishPickerOpen.value || dayMenuOpen.value,
+  );
+}
+
+function touchTyping() {
+  typingUntil = Date.now() + 5000;
+}
+
+async function syncCalendar() {
+  try {
+    const result = await syncTripToGoogle(tripId);
+    error.value = `В календарь ушло событий: ${result.synced}`;
+  } catch (e) {
+    error.value = e.message || "не удалось синхронизировать";
+  }
+}
+
+function downloadIcs() {
+  window.open(tripCalendarUrl(tripId), "_blank", "noopener");
 }
 
 // --- Дни ---
@@ -597,7 +665,13 @@ watch(dayIndex, () => {
   openPointId.value = "";
 });
 
-onMounted(load);
+onMounted(async () => {
+  await load();
+  await loadWeather();
+  startPulse();
+});
+
+onBeforeUnmount(() => clearInterval(pulseTimer));
 </script>
 
 <template>
@@ -624,9 +698,29 @@ onMounted(load);
         <button :class="{ active: view === 'prep' }" @click="view = 'prep'">
           <i class="mdi mdi-clipboard-list"></i><span>Подготовка</span>
         </button>
+        <button :class="{ active: view === 'budget' }" @click="view = 'budget'">
+          <i class="mdi mdi-wallet"></i><span>Бюджет</span>
+        </button>
+        <button :class="{ active: view === 'share' }" @click="view = 'share'">
+          <i class="mdi mdi-account-multiple"></i><span>Доступ</span>
+          <em v-if="pulse?.pendingSuggestions" class="tv-tab-badge">{{ pulse.pendingSuggestions }}</em>
+        </button>
       </nav>
 
       <div class="tv-header__actions">
+        <!-- Кто сейчас в поездке кроме меня -->
+        <span v-for="g in pulse?.online || []" :key="g.id" class="tv-online" :title="g.name">
+          {{ g.name.slice(0, 1) }}
+        </span>
+        <button class="tv-ghost" title="В поездке — режим для телефона" @click="router.push(`/travel/today/${tripId}`)">
+          <i class="mdi mdi-cellphone"></i>
+        </button>
+        <button class="tv-ghost" title="Скачать календарь" @click="downloadIcs">
+          <i class="mdi mdi-calendar-export"></i>
+        </button>
+        <button class="tv-ghost" title="В Google Calendar" @click="syncCalendar">
+          <i class="mdi mdi-google"></i>
+        </button>
         <button
           v-if="view === 'map'"
           class="tv-ghost"
@@ -643,6 +737,8 @@ onMounted(load);
     <div v-if="loading" class="tv-empty">Загружаю…</div>
 
     <TripPrepTab v-else-if="trip && view === 'prep'" :trip="trip" />
+    <TripBudgetTab v-else-if="trip && view === 'budget'" :trip="trip" @changed="reload" />
+    <TripShareTab v-else-if="trip && view === 'share'" :trip="trip" @changed="reload" />
 
     <template v-else-if="trip">
       <!-- Лента дней -->
@@ -718,6 +814,16 @@ onMounted(load);
             <button class="tv-icon-btn" title="Действия с днём" @click="dayMenuOpen = !dayMenuOpen">
               <i class="mdi mdi-dots-vertical"></i>
             </button>
+          </div>
+
+          <!-- Погода дня: прогноз вблизи дат, климатическая норма — вдали -->
+          <div v-if="weatherOfDay?.label" class="tv-weather" :class="`tv-weather--${weatherOfDay.kind}`">
+            <i
+              class="mdi"
+              :class="weatherOfDay.kind === 'forecast' ? 'mdi-weather-partly-cloudy' : 'mdi-chart-bell-curve'"
+            ></i>
+            {{ weatherOfDay.label }}
+            <button title="Обновить" @click="loadWeather(true)"><i class="mdi mdi-refresh"></i></button>
           </div>
 
           <div v-if="dayMenuOpen" class="tv-day-menu">
@@ -1031,6 +1137,9 @@ onMounted(load);
 
 <style scoped>
 .trip-view {
+  /* #app центрирует детей флексом — растягиваемся явно на всю ширину. */
+  width: 100%;
+  align-self: stretch;
   display: flex;
   flex-direction: column;
   height: 100vh;
@@ -1096,6 +1205,52 @@ onMounted(load);
 .tv-view-tabs button.active {
   color: #fff;
   background: #1767fd;
+}
+
+.tv-tab-badge {
+  min-width: 17px;
+  padding: 1px 5px;
+  font-size: 10px;
+  font-style: normal;
+  color: #12141a;
+  text-align: center;
+  background: #ffd666;
+  border-radius: 9px;
+}
+
+.tv-online {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  font-size: 12px;
+  color: #12141a;
+  background: #86d68b;
+  border-radius: 50%;
+}
+
+.tv-weather {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+  padding: 7px 12px;
+  font-size: 12px;
+  color: #8b93a7;
+  border-bottom: 1px solid #232733;
+}
+
+.tv-weather--climate {
+  color: #a9843a;
+}
+
+.tv-weather button {
+  margin-left: auto;
+  padding: 2px 5px;
+  color: #6e7688;
+  background: transparent;
+  border: none;
+  cursor: pointer;
 }
 
 .tv-icon-btn {

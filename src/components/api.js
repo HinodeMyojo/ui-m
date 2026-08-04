@@ -1491,3 +1491,298 @@ export async function uploadPrepOptionFile(optionId, file, title = "") {
 export async function deletePrepOptionFile(id) {
   await authorizedFetch(`${TP}/prep/files/${id}`, { method: "DELETE" });
 }
+
+// === Бюджет поездки (квоты, реестр факта, взаиморасчёты) ===
+
+export async function fetchTripBudget(tripId) {
+  const response = await authorizedFetch(`${TP}/${tripId}/budget`);
+  return workJson(response, "не удалось загрузить бюджет");
+}
+
+// Общая квота по категории на всю поездку; 0 убирает категорию из плана
+export async function saveTripQuota(tripId, data) {
+  const response = await authorizedFetch(`${TP}/${tripId}/budget/quotas`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+  if (!response.ok) throw new Error("не удалось сохранить квоту");
+}
+
+// Ручное значение на день; plannedAmount=null снимает переопределение
+export async function saveTripDayQuota(dayId, data) {
+  const response = await authorizedFetch(`${TP}/days/${dayId}/quotas`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+  if (!response.ok) throw new Error("не удалось сохранить квоту дня");
+}
+
+export async function fetchTripExpenses(tripId) {
+  const response = await authorizedFetch(`${TP}/${tripId}/expenses`);
+  return workJson(response, "не удалось загрузить траты");
+}
+
+export async function createTripExpense(tripId, data) {
+  const response = await authorizedFetch(`${TP}/${tripId}/expenses`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+  return workJson(response, "не удалось записать трату");
+}
+
+export async function updateTripExpense(id, data) {
+  const response = await authorizedFetch(`${TP}/expenses/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+  if (!response.ok) throw new Error("не удалось сохранить трату");
+}
+
+export async function deleteTripExpense(id) {
+  await authorizedFetch(`${TP}/expenses/${id}`, { method: "DELETE" });
+}
+
+// Итог поездки уходит в основной бюджет одной транзакцией
+export async function closeTrip(tripId, data) {
+  const response = await authorizedFetch(`${TP}/${tripId}/close`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+  return workJson(response, "не удалось закрыть поездку");
+}
+
+// === Совместный доступ, погода, календарь, режим «в поездке» ===
+
+// --- Ссылки и роли (владелец) ---
+
+export async function fetchShareLinks(tripId) {
+  const response = await authorizedFetch(`${TP}/${tripId}/links`);
+  return workJson(response, "не удалось загрузить ссылки");
+}
+
+export async function createShareLink(tripId, data) {
+  const response = await authorizedFetch(`${TP}/${tripId}/links`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+  return workJson(response, "не удалось создать ссылку");
+}
+
+export async function updateShareLink(id, data) {
+  await authorizedFetch(`${TP}/links/${id}`, { method: "PUT", body: JSON.stringify(data) });
+}
+
+export async function revokeShareLink(id) {
+  await authorizedFetch(`${TP}/links/${id}/revoke`, { method: "POST" });
+}
+
+export async function deleteShareLink(id) {
+  await authorizedFetch(`${TP}/links/${id}`, { method: "DELETE" });
+}
+
+// --- Предложения ---
+
+export async function fetchSuggestions(tripId, status = "") {
+  const response = await authorizedFetch(`${TP}/${tripId}/suggestions?status=${status}`);
+  return workJson(response, "не удалось загрузить предложения");
+}
+
+export async function acceptSuggestion(id) {
+  const response = await authorizedFetch(`${TP}/suggestions/${id}/accept`, { method: "POST" });
+  if (!response.ok) {
+    throw new Error((await response.json().catch(() => ({}))).error || "не удалось принять");
+  }
+}
+
+export async function rejectSuggestion(id, reason = "") {
+  await authorizedFetch(`${TP}/suggestions/${id}/reject`, {
+    method: "POST",
+    body: JSON.stringify({ reason }),
+  });
+}
+
+// --- История и уведомления ---
+
+export async function fetchTripHistory(tripId) {
+  const response = await authorizedFetch(`${TP}/${tripId}/history`);
+  return workJson(response, "не удалось загрузить историю");
+}
+
+export async function revertHistory(id) {
+  const response = await authorizedFetch(`${TP}/history/${id}/revert`, { method: "POST" });
+  if (!response.ok) {
+    throw new Error((await response.json().catch(() => ({}))).error || "не удалось откатить");
+  }
+}
+
+export async function fetchTripNotifications(tripId, onlyUnread = false) {
+  const response = await authorizedFetch(`${TP}/${tripId}/notifications?unread=${onlyUnread}`);
+  return workJson(response, "не удалось загрузить уведомления");
+}
+
+export async function readTripNotifications(tripId) {
+  await authorizedFetch(`${TP}/${tripId}/notifications/read`, { method: "POST" });
+}
+
+// --- Пульс, комментарии, реакции, блокировки (владелец) ---
+
+export async function fetchTripPulse(tripId, since = 0) {
+  const response = await authorizedFetch(`${TP}/${tripId}/pulse?since=${since}`);
+  return workJson(response, "не удалось получить пульс");
+}
+
+export async function fetchTripComments(tripId) {
+  const response = await authorizedFetch(`${TP}/${tripId}/comments`);
+  return workJson(response, "не удалось загрузить комментарии");
+}
+
+export async function createTripComment(tripId, data) {
+  const response = await authorizedFetch(`${TP}/${tripId}/comments`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+  return workJson(response, "не удалось отправить комментарий");
+}
+
+export async function deleteTripComment(id, tripId) {
+  await authorizedFetch(`${TP}/comments/${id}?tripId=${tripId}`, { method: "DELETE" });
+}
+
+export async function fetchTripReactions(tripId) {
+  const response = await authorizedFetch(`${TP}/${tripId}/reactions`);
+  return workJson(response, "не удалось загрузить реакции");
+}
+
+export async function toggleTripReaction(tripId, data) {
+  await authorizedFetch(`${TP}/${tripId}/reactions`, { method: "POST", body: JSON.stringify(data) });
+}
+
+// Объект под правкой недоступен другим; вернёт 409, если уже занят
+export async function acquireTripLock(tripId, data) {
+  const response = await authorizedFetch(`${TP}/${tripId}/locks`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+  if (response.status === 409) {
+    throw new Error((await response.json().catch(() => ({}))).error || "объект занят");
+  }
+  return workJson(response, "не удалось занять объект");
+}
+
+export async function releaseTripLock(tripId, data) {
+  await authorizedFetch(`${TP}/${tripId}/locks/release`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+// --- Погода и календарь ---
+
+export async function fetchTripWeather(tripId, refresh = false) {
+  const response = await authorizedFetch(`${TP}/${tripId}/weather?refresh=${refresh}`);
+  return workJson(response, "не удалось загрузить погоду");
+}
+
+export function tripCalendarUrl(tripId) {
+  const token = localStorage.getItem("token");
+  return `${TP}/${tripId}/calendar.ics?token=${encodeURIComponent(token || "")}`;
+}
+
+export async function syncTripToGoogle(tripId) {
+  const response = await authorizedFetch(`${TP}/${tripId}/calendar/sync`, { method: "POST" });
+  return workJson(response, "не удалось синхронизировать календарь");
+}
+
+// --- Режим «в поездке» ---
+
+export async function fetchActiveTrip(date = "") {
+  const response = await authorizedFetch(`${TP}/active?date=${date}`);
+  return workJson(response, "не удалось определить текущую поездку");
+}
+
+export async function fetchTripToday(tripId, date = "") {
+  const response = await authorizedFetch(`${TP}/${tripId}/today?date=${date}`);
+  return workJson(response, "не удалось загрузить день");
+}
+
+// --- Гостевой контур: работает по токену ссылки, без входа ---
+
+const PUB = `${API_BASE_URL}/api/v1/public/trips`;
+
+function guestHeaders() {
+  const token = localStorage.getItem("travelGuestToken");
+  return token ? { "X-Guest-Token": token } : {};
+}
+
+async function guestFetch(url, options = {}) {
+  const response = await fetch(url, {
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...guestHeaders(),
+      ...options.headers,
+    },
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.error || "не получилось");
+  return data;
+}
+
+// Гость представляется один раз — имя видно рядом с его правками
+export async function joinSharedTrip(token, name) {
+  const data = await guestFetch(`${PUB}/${token}/join`, {
+    method: "POST",
+    body: JSON.stringify({ name, guestToken: localStorage.getItem("travelGuestToken") || "" }),
+  });
+  localStorage.setItem("travelGuestToken", data.guestToken);
+  return data;
+}
+
+export async function fetchSharedTrip(token) {
+  return guestFetch(`${PUB}/${token}`);
+}
+
+export async function fetchSharedPulse(token, since = 0) {
+  return guestFetch(`${PUB}/${token}/pulse?since=${since}`);
+}
+
+export async function sharedCreatePoint(token, data) {
+  return guestFetch(`${PUB}/${token}/points`, { method: "POST", body: JSON.stringify(data) });
+}
+
+// Чужую точку сервер переведёт в предложение — в ответе будет suggested: true
+export async function sharedUpdatePoint(token, id, data) {
+  return guestFetch(`${PUB}/${token}/points/${id}`, { method: "PUT", body: JSON.stringify(data) });
+}
+
+export async function sharedDeletePoint(token, id) {
+  return guestFetch(`${PUB}/${token}/points/${id}`, { method: "DELETE" });
+}
+
+export async function sharedAddWish(token, data) {
+  return guestFetch(`${PUB}/${token}/points/from-wish`, { method: "POST", body: JSON.stringify(data) });
+}
+
+export async function sharedCreateSuggestion(token, data) {
+  return guestFetch(`${PUB}/${token}/suggestions`, { method: "POST", body: JSON.stringify(data) });
+}
+
+export async function sharedCreateComment(token, data) {
+  return guestFetch(`${PUB}/${token}/comments`, { method: "POST", body: JSON.stringify(data) });
+}
+
+export async function sharedDeleteComment(token, id) {
+  return guestFetch(`${PUB}/${token}/comments/${id}`, { method: "DELETE" });
+}
+
+export async function sharedToggleReaction(token, data) {
+  return guestFetch(`${PUB}/${token}/reactions`, { method: "POST", body: JSON.stringify(data) });
+}
+
+export async function sharedAcquireLock(token, data) {
+  return guestFetch(`${PUB}/${token}/locks`, { method: "POST", body: JSON.stringify(data) });
+}
+
+export async function sharedReleaseLock(token, data) {
+  return guestFetch(`${PUB}/${token}/locks/release`, { method: "POST", body: JSON.stringify(data) });
+}

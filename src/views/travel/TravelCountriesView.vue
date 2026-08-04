@@ -296,6 +296,10 @@ onMounted(load);
 
 <style scoped>
 .travel-countries {
+  /* #app — флекс с центрированием, поэтому экран растягиваем явно,
+     иначе он схлопывается по ширине содержимого. */
+  width: 100%;
+  align-self: stretch;
   min-height: 100vh;
   padding: 24px 32px 64px;
   color: #eaeef7;

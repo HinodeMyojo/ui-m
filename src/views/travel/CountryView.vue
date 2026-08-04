@@ -933,6 +933,9 @@ onMounted(load);
 
 <style scoped>
 .country-view {
+  /* #app центрирует детей флексом — растягиваемся явно на всю ширину. */
+  width: 100%;
+  align-self: stretch;
   display: flex;
   flex-direction: column;
   height: 100vh;
