@@ -321,6 +321,22 @@ async function onMapClick(coords) {
   }
 }
 
+// Место найдено поиском прямо на карте — сразу открываем карточку,
+// чтобы дописать своё: время, цену, заметку.
+function onPlacePicked(place) {
+  openEditor({
+    ...emptyWish(),
+    title: place.title,
+    address: place.address,
+    lat: place.lat,
+    lng: place.lng,
+    provider: place.provider,
+    externalId: place.externalId,
+    rating: place.rating ?? null,
+    priceCurrency: country.value?.currency || "",
+  });
+}
+
 async function saveNewWish(payload) {
   try {
     await createWish({
@@ -532,11 +548,13 @@ onMounted(load);
           :markers="markers"
           :bbox="bbox"
           :center="[country?.centerLat || 0, country?.centerLng || 0]"
+          :country-code="country?.code || ''"
           :selected-id="selectedId"
           :picking="picking"
           @map-click="onMapClick"
           @marker-click="selectWish"
           @marker-drag="onMarkerDrag"
+          @place-picked="onPlacePicked"
         />
         <div class="cv-map-actions">
           <button class="cv-fab" :class="{ active: picking }" @click="picking = !picking">

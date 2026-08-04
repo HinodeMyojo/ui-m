@@ -79,7 +79,10 @@ const STATUSES = [
 ];
 
 function emptyGroup() {
-  return { title: "", kind: "other", note: "", fromDate: null, toDate: null, required: true };
+  return {
+    title: "", kind: "other", note: "", fromDate: null, toDate: null,
+    required: true, perPerson: false,
+  };
 }
 
 function emptyOption() {
@@ -90,15 +93,18 @@ function emptyOption() {
     rating: null, pros: "", cons: "", note: "",
     checkIn: null, checkOut: null, pricePerNight: null,
     stayType: "hotel", district: "", lat: null, lng: null, isAlsoPlace: false,
+    participantIds: [],
   };
 }
 
 function emptySegment() {
   return {
     kind: "flight", carrier: "", number: "",
-    fromCode: "", fromName: "", fromTz: "Europe/Moscow", departAt: "",
-    toCode: "", toName: "", toTz: "", arriveAt: "",
+    fromCode: "", fromName: "", fromTerminal: "", fromTz: "Europe/Moscow", departAt: "",
+    toCode: "", toName: "", toTerminal: "", toTz: "", arriveAt: "",
     baggage: "", note: "",
+    layoverVisaRequired: false, layoverVisaNote: "",
+    layoverAirportChange: false, layoverSelfTransfer: false, layoverNote: "",
   };
 }
 
@@ -113,6 +119,24 @@ function statusOf(key) {
 const compareGroup = computed(() =>
   prep.value?.groups.find((g) => g.id === compareGroupId.value) || null,
 );
+
+// Перелёты сравниваем по итогу вместе с мини-поездками: дешёвый билет
+// с сутками в Шанхае — это ещё и день в Шанхае.
+const sortedForCompare = computed(() => {
+  const group = compareGroup.value;
+  if (!group) return [];
+  const key = group.kind === "flight" ? "totalWithSideTripsRub" : "netRub";
+  return [...group.options].sort((a, b) => (a[key] || a.netRub) - (b[key] || b.netRub));
+});
+
+const participants = computed(() => props.trip.participants || []);
+
+function toggleOptionParticipant(id) {
+  const list = optionForm.value.participantIds || (optionForm.value.participantIds = []);
+  const index = list.indexOf(id);
+  if (index >= 0) list.splice(index, 1);
+  else list.push(id);
+}
 
 function hm(minutes) {
   if (!minutes) return "";
@@ -322,6 +346,18 @@ onMounted(load);
         </button>
       </div>
 
+      <!-- Сколько выходит на каждого: билеты личные, жильё делится -->
+      <div v-if="prep.byParticipant?.length" class="prep-people">
+        <div v-for="p in prep.byParticipant" :key="p.participantId" class="prep-person">
+          <span class="prep-person__dot" :style="{ background: p.color || '#1767fd' }"></span>
+          <div class="prep-person__body">
+            <b>{{ p.name }}</b>
+            <span>лично {{ rub(p.personalRub) }} ₽ · доля общего {{ rub(p.sharedRub) }} ₽</span>
+          </div>
+          <b class="prep-person__total">{{ rub(p.totalRub) }} ₽</b>
+        </div>
+      </div>
+
       <div v-if="!prep.groups.length" class="prep-empty">
         <p>Этапов пока нет.</p>
         <p class="prep-hint">
@@ -336,14 +372,20 @@ onMounted(load);
         <header class="prep-group__head" @click="expanded[group.id] = !expanded[group.id]">
           <i class="mdi prep-group__icon" :class="kindOf(group.kind).icon"></i>
           <div class="prep-group__title">
-            <h3>{{ group.title }}</h3>
+            <h3>
+              {{ group.title }}
+              <span v-if="group.perPerson" class="prep-tag">на каждого</span>
+            </h3>
             <span class="prep-group__meta">
               {{ group.options.length }} вариантов
               <template v-if="group.fromDate">· {{ group.fromDate }} — {{ group.toDate }}</template>
+              <template v-if="group.missingFor?.length">
+                · не выбрано для: {{ group.missingFor.join(", ") }}
+              </template>
             </span>
           </div>
           <div class="prep-group__total">
-            <template v-if="group.selectedOptionId">{{ rub(group.totalRub) }} ₽</template>
+            <template v-if="group.selectedOptionIds?.length">{{ rub(group.totalRub) }} ₽</template>
             <span v-else-if="group.incomplete" class="prep-group__warn">не выбрано</span>
             <span v-else class="prep-group__skip">не нужно</span>
           </div>
@@ -373,6 +415,10 @@ onMounted(load);
               </a>
               <span v-else class="prep-option__title">{{ option.title }}</span>
 
+              <span v-if="option.participantNames?.length" class="prep-tag prep-tag--who">
+                {{ option.participantNames.join(", ") }}
+              </span>
+
               <span v-if="option.rating" class="prep-option__rating">
                 <i v-for="n in option.rating" :key="n" class="mdi mdi-star"></i>
               </span>
@@ -398,11 +444,23 @@ onMounted(load);
             <!-- Плечи перелёта: реальная длительность и пересадки -->
             <div v-if="option.segments.length" class="prep-segments">
               <div class="prep-segments__total">
-                в пути {{ hm(option.totalTravelMin) }}
+                <b>{{ option.stopsCount === 0 ? "прямой" : `пересадок: ${option.stopsCount}` }}</b>
+                · дверь-в-дверь {{ hm(option.totalDoorToDoorMin) }}
+                · в воздухе {{ hm(option.totalTravelMin) }}
                 <template v-if="option.totalLayoverMin">
-                  · в пересадках {{ hm(option.totalLayoverMin) }}
+                  · ожидание {{ hm(option.totalLayoverMin) }}
                 </template>
+                <span v-if="option.needsTransitVisa" class="prep-flag prep-flag--danger">
+                  <i class="mdi mdi-passport"></i> нужна транзитная виза
+                </span>
+                <span v-if="option.hasAirportChange" class="prep-flag prep-flag--warn">
+                  <i class="mdi mdi-swap-horizontal"></i> смена аэропорта
+                </span>
+                <span v-if="option.hasSelfTransfer" class="prep-flag prep-flag--warn">
+                  <i class="mdi mdi-bag-checked"></i> багаж получать самому
+                </span>
               </div>
+
               <div v-for="segment in option.segments" :key="segment.id" class="prep-segment">
                 <div class="prep-segment__row" @click="openSegment(option, segment)">
                   <span class="prep-segment__route">
@@ -415,22 +473,54 @@ onMounted(load);
                   <span v-if="segment.tzShiftHours" class="prep-segment__tz">
                     {{ segment.tzShiftHours > 0 ? "+" : "" }}{{ segment.tzShiftHours }} ч
                   </span>
-                  <span class="prep-segment__carrier">{{ segment.carrier }} {{ segment.number }}</span>
+                  <span class="prep-segment__carrier">
+                    {{ segment.carrier }} {{ segment.number }}
+                    <template v-if="segment.fromTerminal || segment.toTerminal">
+                      · терминал {{ segment.fromTerminal || "?" }} → {{ segment.toTerminal || "?" }}
+                    </template>
+                  </span>
                 </div>
 
                 <div v-if="segment.layoverMin" class="prep-layover">
-                  <i class="mdi mdi-timer-sand"></i>
-                  пересадка {{ hm(segment.layoverMin) }} в {{ segment.toName || segment.toCode }}
-                  <button v-if="segment.sideTripId" class="prep-link" @click="router.push(`/travel/trips/${segment.sideTripId}`)">
-                    открыть «{{ segment.sideTripTitle }}»
-                  </button>
-                  <button
-                    v-else-if="segment.layoverMin >= 300"
-                    class="prep-link"
-                    @click="openSideTrip(segment)"
-                  >
-                    успеваю погулять — сделать мини-поездку
-                  </button>
+                  <div class="prep-layover__head">
+                    <i class="mdi mdi-timer-sand"></i>
+                    пересадка <b>{{ hm(segment.layoverMin) }}</b>
+                    в {{ segment.toName || segment.toCode }}
+                  </div>
+
+                  <div class="prep-layover__flags">
+                    <span v-if="segment.layoverVisaRequired" class="prep-flag prep-flag--danger">
+                      виза{{ segment.layoverVisaNote ? `: ${segment.layoverVisaNote}` : "" }}
+                    </span>
+                    <span v-if="segment.layoverAirportChange" class="prep-flag prep-flag--warn">
+                      другой аэропорт
+                    </span>
+                    <span v-if="segment.layoverSelfTransfer" class="prep-flag prep-flag--warn">
+                      багаж заново
+                    </span>
+                    <span v-if="segment.layoverNote" class="prep-layover__note">
+                      {{ segment.layoverNote }}
+                    </span>
+                  </div>
+
+                  <div class="prep-layover__actions">
+                    <template v-if="segment.sideTripId">
+                      <button class="prep-link" @click="router.push(`/travel/trips/${segment.sideTripId}`)">
+                        открыть «{{ segment.sideTripTitle }}»
+                      </button>
+                      <span v-if="segment.sideTripRub" class="prep-layover__cost">
+                        {{ rub(segment.sideTripRub) }} ₽
+                        <em v-if="!segment.sideTripCounted">не в общем бюджете</em>
+                      </span>
+                    </template>
+                    <button
+                      v-else-if="segment.layoverIsLong"
+                      class="prep-link"
+                      @click="openSideTrip(segment)"
+                    >
+                      успеваю погулять — сделать мини-поездку
+                    </button>
+                  </div>
                 </div>
               </div>
               <button class="prep-mini" @click="openSegment(option, null)">
@@ -488,14 +578,27 @@ onMounted(load);
             <thead>
               <tr>
                 <th>Вариант</th>
+                <th v-if="compareGroup.perPerson">Кому</th>
                 <th>Итог, ₽</th>
+                <th v-if="compareGroup.kind === 'flight'">С мини-поездкой</th>
                 <th>Цена</th>
                 <th>Кэшбэк</th>
                 <th>★</th>
-                <th v-if="compareGroup.kind === 'flight'">В пути</th>
-                <th v-if="compareGroup.kind === 'flight'">Пересадки</th>
-                <th v-if="compareGroup.kind === 'stay'">Ночей</th>
-                <th v-if="compareGroup.kind === 'stay'">За ночь</th>
+                <template v-if="compareGroup.kind === 'flight'">
+                  <th>Пересадок</th>
+                  <th>Дверь-в-дверь</th>
+                  <th>В воздухе</th>
+                  <th>Ожидание</th>
+                  <th>Дольше всего</th>
+                  <th>Виза</th>
+                  <th>Аэропорт</th>
+                  <th>Багаж</th>
+                </template>
+                <template v-if="compareGroup.kind === 'stay'">
+                  <th>Ночей</th>
+                  <th>За ночь</th>
+                  <th>Район</th>
+                </template>
                 <th>Плюсы</th>
                 <th>Минусы</th>
                 <th></th>
@@ -503,12 +606,21 @@ onMounted(load);
             </thead>
             <tbody>
               <tr
-                v-for="option in [...compareGroup.options].sort((a, b) => a.netRub - b.netRub)"
+                v-for="option in sortedForCompare"
                 :key="option.id"
                 :class="{ 'prep-table__selected': ['selected', 'purchased'].includes(option.status) }"
               >
                 <td>{{ option.title }}</td>
+                <td v-if="compareGroup.perPerson">
+                  {{ option.participantNames?.join(", ") || "все" }}
+                </td>
                 <td><b>{{ rub(option.netRub) }}</b></td>
+                <td v-if="compareGroup.kind === 'flight'">
+                  <b>{{ rub(option.totalWithSideTripsRub) }}</b>
+                  <em v-if="option.sideTripsCount" class="prep-table__hint">
+                    +{{ option.sideTripsCount }} поездк.
+                  </em>
+                </td>
                 <td>{{ option.priceAmount }} {{ option.priceCurrency }}</td>
                 <td>
                   <template v-if="option.cashbackPercent">{{ option.cashbackPercent }}%</template>
@@ -516,12 +628,30 @@ onMounted(load);
                   <template v-else>—</template>
                 </td>
                 <td>{{ option.rating || "—" }}</td>
-                <td v-if="compareGroup.kind === 'flight'">{{ hm(option.totalTravelMin) || "—" }}</td>
-                <td v-if="compareGroup.kind === 'flight'">{{ hm(option.totalLayoverMin) || "—" }}</td>
-                <td v-if="compareGroup.kind === 'stay'">{{ option.nights || "—" }}</td>
-                <td v-if="compareGroup.kind === 'stay'">
-                  {{ option.pricePerNight ? Math.round(option.pricePerNight) : "—" }}
-                </td>
+                <template v-if="compareGroup.kind === 'flight'">
+                  <td>{{ option.segments.length ? option.stopsCount : "—" }}</td>
+                  <td>{{ hm(option.totalDoorToDoorMin) || "—" }}</td>
+                  <td>{{ hm(option.totalTravelMin) || "—" }}</td>
+                  <td>{{ hm(option.totalLayoverMin) || "—" }}</td>
+                  <td>{{ hm(option.maxLayoverMin) || "—" }}</td>
+                  <td>
+                    <span v-if="option.needsTransitVisa" class="prep-flag prep-flag--danger">нужна</span>
+                    <template v-else>—</template>
+                  </td>
+                  <td>
+                    <span v-if="option.hasAirportChange" class="prep-flag prep-flag--warn">меняется</span>
+                    <template v-else>—</template>
+                  </td>
+                  <td>
+                    <span v-if="option.hasSelfTransfer" class="prep-flag prep-flag--warn">заново</span>
+                    <template v-else>насквозь</template>
+                  </td>
+                </template>
+                <template v-if="compareGroup.kind === 'stay'">
+                  <td>{{ option.nights || "—" }}</td>
+                  <td>{{ option.pricePerNight ? Math.round(option.pricePerNight) : "—" }}</td>
+                  <td>{{ option.district || "—" }}</td>
+                </template>
                 <td class="prep-table__text">{{ option.pros }}</td>
                 <td class="prep-table__text">{{ option.cons }}</td>
                 <td>
@@ -575,6 +705,11 @@ onMounted(load);
         <label class="prep-check">
           <input v-model="groupForm.required" type="checkbox" />
           обязательный — без выбора бюджет считается неполным
+        </label>
+        <label class="prep-check">
+          <input v-model="groupForm.perPerson" type="checkbox" />
+          у каждого свой — билет, страховка или симка берутся на человека,
+          и выбранных вариантов будет несколько
         </label>
         <label class="prep-field">
           Заметка
@@ -640,6 +775,23 @@ onMounted(load);
             Кэшбэк, сумма
             <input v-model.number="optionForm.cashbackAmount" class="prep-input" type="number" step="0.01" />
           </label>
+        </div>
+
+        <div v-if="participants.length" class="prep-field">
+          На кого
+          <div class="prep-who">
+            <button
+              v-for="p in participants"
+              :key="p.id"
+              :class="{ active: optionForm.participantIds?.includes(p.id) }"
+              @click="toggleOptionParticipant(p.id)"
+            >
+              {{ p.name }}
+            </button>
+          </div>
+          <p class="prep-hint">
+            Никого не выбрал — вариант считается общим и делится на всех поровну.
+          </p>
         </div>
 
         <label class="prep-field">
@@ -755,10 +907,16 @@ onMounted(load);
             <input v-model="segmentForm.fromTz" class="prep-input" type="text" placeholder="Europe/Moscow" />
           </label>
         </div>
-        <label class="prep-field">
-          Название аэропорта
-          <input v-model="segmentForm.fromName" class="prep-input" type="text" placeholder="Москва, Шереметьево" />
-        </label>
+        <div class="prep-row">
+          <label class="prep-field">
+            Название аэропорта
+            <input v-model="segmentForm.fromName" class="prep-input" type="text" placeholder="Москва, Шереметьево" />
+          </label>
+          <label class="prep-field">
+            Терминал
+            <input v-model="segmentForm.fromTerminal" class="prep-input" type="text" placeholder="C" />
+          </label>
+        </div>
         <label class="prep-field">
           Вылет, местное время
           <input v-model="segmentForm.departAt" class="prep-input" type="datetime-local" />
@@ -774,10 +932,16 @@ onMounted(load);
             <input v-model="segmentForm.toTz" class="prep-input" type="text" placeholder="Asia/Shanghai" />
           </label>
         </div>
-        <label class="prep-field">
-          Название аэропорта
-          <input v-model="segmentForm.toName" class="prep-input" type="text" placeholder="Шанхай, Пудун" />
-        </label>
+        <div class="prep-row">
+          <label class="prep-field">
+            Название аэропорта
+            <input v-model="segmentForm.toName" class="prep-input" type="text" placeholder="Шанхай, Пудун" />
+          </label>
+          <label class="prep-field">
+            Терминал
+            <input v-model="segmentForm.toTerminal" class="prep-input" type="text" placeholder="2" />
+          </label>
+        </div>
         <label class="prep-field">
           Прилёт, местное время
           <input v-model="segmentForm.arriveAt" class="prep-input" type="datetime-local" />
@@ -792,6 +956,36 @@ onMounted(load);
             Заметка
             <input v-model="segmentForm.note" class="prep-input" type="text" />
           </label>
+        </div>
+
+        <!-- Пересадка после этого плеча: часто именно она решает, годится ли вариант -->
+        <div class="prep-layover-form">
+          <div class="prep-layover-form__title">Пересадка после этого плеча</div>
+          <label class="prep-check">
+            <input v-model="segmentForm.layoverVisaRequired" type="checkbox" />
+            нужна транзитная виза
+          </label>
+          <input
+            v-if="segmentForm.layoverVisaRequired"
+            v-model="segmentForm.layoverVisaNote"
+            class="prep-input"
+            type="text"
+            placeholder="144-часовой безвиз при вылете в третью страну"
+          />
+          <label class="prep-check">
+            <input v-model="segmentForm.layoverAirportChange" type="checkbox" />
+            прилёт и вылет из разных аэропортов
+          </label>
+          <label class="prep-check">
+            <input v-model="segmentForm.layoverSelfTransfer" type="checkbox" />
+            багаж не летит насквозь — получать и сдавать заново
+          </label>
+          <input
+            v-model="segmentForm.layoverNote"
+            class="prep-input"
+            type="text"
+            placeholder="заметка про пересадку: где ждать, есть ли душ"
+          />
         </div>
 
         <div class="prep-modal__actions">
@@ -1401,6 +1595,175 @@ onMounted(load);
 
 .prep-stars button.active {
   color: #ffd666;
+}
+
+.prep-people {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.prep-person {
+  display: flex;
+  gap: 9px;
+  align-items: center;
+  padding: 10px 14px;
+  background: #1b1e27;
+  border: 1px solid #262b36;
+  border-radius: 11px;
+}
+
+.prep-person__dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.prep-person__body {
+  display: flex;
+  flex-direction: column;
+}
+
+.prep-person__body b {
+  font-size: 13px;
+}
+
+.prep-person__body span {
+  font-size: 11px;
+  color: #6e7688;
+}
+
+.prep-person__total {
+  margin-left: 10px;
+  font-size: 15px;
+}
+
+.prep-tag--who {
+  color: #86d68b;
+  background: rgba(34, 197, 94, 0.13);
+}
+
+.prep-flag {
+  padding: 2px 8px;
+  font-size: 11px;
+  white-space: nowrap;
+  border-radius: 999px;
+}
+
+.prep-flag--danger {
+  color: #ff9d9f;
+  background: rgba(229, 72, 77, 0.16);
+}
+
+.prep-flag--warn {
+  color: #ffd666;
+  background: rgba(255, 214, 102, 0.14);
+}
+
+.prep-segments__total {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  align-items: center;
+}
+
+.prep-layover {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 8px 6px 22px;
+  margin: 3px 0;
+  background: rgba(255, 214, 102, 0.05);
+  border-left: 2px dashed rgba(255, 214, 102, 0.4);
+  border-radius: 0 8px 8px 0;
+}
+
+.prep-layover__head {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  font-size: 11px;
+  color: #ffd666;
+}
+
+.prep-layover__flags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  align-items: center;
+}
+
+.prep-layover__note {
+  font-size: 11px;
+  color: #8b93a7;
+}
+
+.prep-layover__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.prep-layover__cost {
+  font-size: 11px;
+  color: #b9c0cf;
+}
+
+.prep-layover__cost em {
+  font-style: normal;
+  color: #6e7688;
+}
+
+.prep-layover-form {
+  padding: 12px 14px;
+  margin-top: 14px;
+  background: #12141a;
+  border: 1px solid #2c313d;
+  border-radius: 11px;
+}
+
+.prep-layover-form__title {
+  margin-bottom: 6px;
+  font-size: 11px;
+  color: #6e7688;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.prep-layover-form .prep-input {
+  margin-top: 6px;
+}
+
+.prep-who {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 5px;
+}
+
+.prep-who button {
+  padding: 6px 12px;
+  font-size: 12px;
+  color: #b9c0cf;
+  background: #12141a;
+  border: 1px solid #2c313d;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.prep-who button.active {
+  color: #fff;
+  background: #22c55e;
+  border-color: #22c55e;
+}
+
+.prep-table__hint {
+  margin-left: 4px;
+  font-size: 10px;
+  font-style: normal;
+  color: #6e7688;
 }
 
 .prep-table-wrap {

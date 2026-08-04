@@ -459,6 +459,20 @@ async function onMapClick(coords) {
   await addPoint(target, { title, address, lat: coords.lat, lng: coords.lng });
 }
 
+// Место найдено поиском на карте — кладём его в маршрут туда, куда
+// пользователь целился: отдельным шагом или альтернативой в развилку.
+async function onPlacePicked(place) {
+  const target = pickTarget.value || { mode: "variant" };
+  pickTarget.value = null;
+  picking.value = false;
+  await addPoint(target, {
+    title: place.title,
+    address: place.address,
+    lat: place.lat,
+    lng: place.lng,
+  });
+}
+
 // target: { mode: 'variant' } — новый шаг в конец; { mode: 'step', id } — альтернатива
 async function addPoint(target, payload) {
   try {
@@ -765,10 +779,12 @@ onBeforeUnmount(() => clearInterval(pulseTimer));
             :lines="lines"
             :bbox="mapBbox"
             :center="[trip.country?.centerLat || 0, trip.country?.centerLng || 0]"
+            :country-code="trip.country?.code || ''"
             :selected-id="selectedPointId"
             :picking="picking"
             @map-click="onMapClick"
             @marker-click="selectPoint"
+            @place-picked="onPlacePicked"
           />
 
           <div v-if="showAllDays" class="tv-day-filter">

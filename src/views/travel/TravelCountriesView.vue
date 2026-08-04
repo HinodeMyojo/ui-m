@@ -9,6 +9,8 @@ import {
   updateCountry,
   deleteCountry,
   suggestCountries,
+  fetchTravelSettings,
+  saveTravelSettings,
 } from "@/components/api.js";
 
 const router = useRouter();
@@ -27,6 +29,48 @@ const picked = ref(null);
 
 const editing = ref(null);
 const editForm = ref({ name: "", emoji: "", currency: "", coverImage: "", note: "" });
+
+// Настройки карты: движок и ключ Google.
+const settingsOpen = ref(false);
+const settingsForm = ref({
+  mapEngine: "osm",
+  googleApiKey: "",
+  useGooglePlaces: false,
+  wikipediaPhotos: true,
+});
+
+async function openSettings() {
+  try {
+    const data = await fetchTravelSettings();
+    settingsForm.value = {
+      mapEngine: data.mapEngine || "osm",
+      googleApiKey: data.googleApiKey || "",
+      useGooglePlaces: data.useGooglePlaces,
+      wikipediaPhotos: data.wikipediaPhotos,
+    };
+    settingsOpen.value = true;
+  } catch (e) {
+    error.value = e.message || "не удалось загрузить настройки";
+  }
+}
+
+async function saveSettings() {
+  try {
+    await saveTravelSettings({
+      ...settingsForm.value,
+      // Ключ шлём всегда: он же используется браузером для отрисовки карты.
+      googleApiKey: settingsForm.value.googleApiKey,
+      // Карта Google без Places бессмысленна — поиск включаем вместе с ней.
+      useGooglePlaces:
+        settingsForm.value.mapEngine === "google" || settingsForm.value.useGooglePlaces,
+    });
+    settingsOpen.value = false;
+    // Движок читается при монтировании карты — проще перезагрузить страницу.
+    window.location.reload();
+  } catch (e) {
+    error.value = e.message || "не удалось сохранить настройки";
+  }
+}
 
 const visible = computed(() =>
   countries.value.filter((c) => showArchived.value || !c.archived),
@@ -150,6 +194,9 @@ onMounted(load);
           <input v-model="showArchived" type="checkbox" />
           <span>архив</span>
         </label>
+        <button class="tc-back" title="Настройки карты" @click="openSettings">
+          <i class="mdi mdi-cog"></i>
+        </button>
         <button class="tc-primary" @click="openAdd">
           <i class="mdi mdi-plus"></i>
           <span>Страна</span>
@@ -255,6 +302,54 @@ onMounted(load);
           <button class="tc-primary" :disabled="adding" @click="submitAdd">
             {{ adding ? "Ищу границы…" : "Создать" }}
           </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Настройки карты -->
+    <div v-if="settingsOpen" class="tc-modal-backdrop" @click.self="settingsOpen = false">
+      <div class="tc-modal">
+        <h2>Карта</h2>
+
+        <div class="tc-engines">
+          <button
+            :class="{ active: settingsForm.mapEngine === 'google' }"
+            @click="settingsForm.mapEngine = 'google'"
+          >
+            <b>Google</b>
+            <span>привычный вид, спутник с подписями, поиск мест прямо на карте</span>
+          </button>
+          <button
+            :class="{ active: settingsForm.mapEngine === 'osm' }"
+            @click="settingsForm.mapEngine = 'osm'"
+          >
+            <b>OpenStreetMap</b>
+            <span>без ключа и без оплаты, но искать места придётся вручную</span>
+          </button>
+        </div>
+
+        <label v-if="settingsForm.mapEngine === 'google'" class="tc-field">
+          Ключ Google Maps
+          <input
+            v-model="settingsForm.googleApiKey"
+            class="tc-input"
+            type="text"
+            placeholder="AIza…"
+          />
+        </label>
+        <p v-if="settingsForm.mapEngine === 'google'" class="tc-empty__hint" style="text-align: left">
+          В консоли Google включи <b>Maps JavaScript API</b> и <b>Places API</b>,
+          а ключ ограничь по адресу сайта — он виден в браузере.
+        </p>
+
+        <label class="tc-toggle" style="margin-top: 12px">
+          <input v-model="settingsForm.wikipediaPhotos" type="checkbox" />
+          <span>подтягивать фото известных мест из Википедии</span>
+        </label>
+
+        <div class="tc-modal__actions">
+          <button class="tc-ghost" @click="settingsOpen = false">Отмена</button>
+          <button class="tc-primary" @click="saveSettings">Сохранить</button>
         </div>
       </div>
     </div>
@@ -588,6 +683,41 @@ onMounted(load);
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 12px;
+}
+
+.tc-engines {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin-bottom: 6px;
+}
+
+.tc-engines button {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 12px 14px;
+  text-align: left;
+  color: #b9c0cf;
+  background: #12141a;
+  border: 1px solid #2c313d;
+  border-radius: 11px;
+  cursor: pointer;
+}
+
+.tc-engines button b {
+  font-size: 14px;
+}
+
+.tc-engines button span {
+  font-size: 11px;
+  opacity: 0.75;
+}
+
+.tc-engines button.active {
+  color: #fff;
+  background: #1767fd;
+  border-color: #1767fd;
 }
 
 .tc-suggestions {
