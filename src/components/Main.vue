@@ -23,6 +23,7 @@ import TimeStatsModal from "@/components/elements/TimeStatsModal.vue";
 
 import SkillsMiniWidget from "./elements/SkillsMiniWidget.vue";
 import DisciplineTracker from "./discipline/DisciplineTracker.vue";
+import AgeCounter from "./elements/AgeCounter.vue";
 
 const DEFAULT_TASK_COLOR = "#25636A";
 const CONFETTI_DELAY_MS = 200;
@@ -784,6 +785,9 @@ function closeTimeStats() {
         <div class="salary-viewer">
           <SalaryViewer />
         </div>
+      </div>
+      <div class="header-age">
+        <AgeCounter />
       </div>
       <div class="header-center">
         <v-icon icon="mdi-chevron-left" size="large" class="month-nav-icon" @click="handlePrevMonth" />
@@ -1734,6 +1738,14 @@ function closeTimeStats() {
   /* background-color: #6e4aff; */
 }
 
+.header-age {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 16px;
+}
+
 .header-center {
   flex: 0.9;
   display: flex;
@@ -2445,6 +2457,11 @@ function closeTimeStats() {
 
   .header-left {
     display: none;
+  }
+
+  .header-age {
+    width: 100%;
+    padding: 0;
   }
 
   .header-center {
