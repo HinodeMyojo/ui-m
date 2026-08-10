@@ -8,6 +8,7 @@ import DayOverview from "@/components/workspace/DayOverview.vue";
 import CarryModal from "@/components/workspace/CarryModal.vue";
 import GooglePanel from "@/components/workspace/GooglePanel.vue";
 import SearchModal from "@/components/workspace/SearchModal.vue";
+import SportTodayCard from "@/components/workspace/SportTodayCard.vue";
 import DisciplineChecklist from "@/components/discipline/DisciplineChecklist.vue";
 import {
   fetchWorkDay,
@@ -36,6 +37,7 @@ const googleOpen = ref(false);
 const searchOpen = ref(false);
 const noteOpen = ref(false);
 const disciplineOpen = ref(false);
+const sportOpen = ref(false);
 const disciplineMonth = ref(null);
 const filter = ref("all");
 
@@ -391,6 +393,9 @@ function slotLabel(item) {
           ↩ Из прошлых дней<span v-if="carryCount"> · {{ carryCount }}</span>
         </button>
         <button class="ws-btn" @click="toggleDiscipline">🎯 Дисциплина</button>
+        <button class="ws-btn" :class="{ hot: sportOpen }" @click="sportOpen = !sportOpen">
+          🏋️ Спорт
+        </button>
         <button class="ws-btn" @click="googleOpen = true">
           📅 Google<span v-if="day?.google?.connected" class="ws-dot-ok"></span>
         </button>
@@ -441,6 +446,10 @@ function slotLabel(item) {
         @changed="loadDiscipline"
       />
       <div v-else class="ws-empty">Плана дисциплины на этот месяц пока нет</div>
+    </section>
+
+    <section v-if="sportOpen" class="ws-discipline">
+      <SportTodayCard :date="date" />
     </section>
 
     <section v-if="viewMode !== 'all'" class="ws-daynote">

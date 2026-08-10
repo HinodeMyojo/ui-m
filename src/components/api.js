@@ -1,8 +1,8 @@
 import router from "@/router";
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || `${window.location.protocol}//82.202.136.167:5005`;
+export const API_BASE_URL = import.meta.env.VITE_API_URL || `${window.location.protocol}//82.202.136.167:5005`;
 
-async function authorizedFetch(url, options = {}) {
+export async function authorizedFetch(url, options = {}) {
   const token = localStorage.getItem("token");
 
   // Создаем объект с заголовками, добавляя Authorization, если токен есть

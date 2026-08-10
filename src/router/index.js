@@ -86,6 +86,17 @@ const router = createRouter({
       component: () => import("../views/WorkspaceView.vue"),
     },
     {
+      path: "/sport",
+      name: "Sport",
+      component: () => import("../views/SportView.vue"),
+    },
+    {
+      // Мобильный ввод дня: фото, вес, галочки. Отдельная раскладка, не адаптив.
+      path: "/sport/today",
+      name: "SportToday",
+      component: () => import("../views/SportTodayView.vue"),
+    },
+    {
       path: "/travel",
       name: "TravelCountries",
       component: () => import("../views/travel/TravelCountriesView.vue"),
