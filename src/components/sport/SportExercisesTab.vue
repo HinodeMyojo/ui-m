@@ -16,6 +16,7 @@ import {
   updateSportExercise,
   deleteSportExercise,
   fetchSportExerciseHistory,
+  fetchSportMetrics,
   SPORT_MUSCLE_TITLES,
   SPORT_PR_LABELS,
   SPORT_SET_FIELDS,
@@ -32,6 +33,17 @@ const TYPES = [
   ["other", "прочее"],
 ];
 
+// Готовые доли веса тела. Значения приблизительные, но порядок величины
+// важнее точности: разница между 1.0 и 0.12 — это разница между 20 и 2.4 тонны.
+const BODY_FACTOR_PRESETS = [
+  { value: 1, label: "всё тело · 1.0" },
+  { value: 0.65, label: "отжимания · 0.65" },
+  { value: 0.55, label: "приседания · 0.55" },
+  { value: 0.15, label: "подъём ног · 0.15" },
+  { value: 0.12, label: "пресс · 0.12" },
+  { value: 0, label: "не считать · 0" },
+];
+
 const exercises = ref([]);
 const search = ref("");
 const groupFilter = ref("");
@@ -41,6 +53,7 @@ const busy = ref(false);
 
 const editing = ref(null);
 const history = ref(null);
+const lastWeight = ref(null);
 
 const filtered = computed(() =>
   exercises.value.filter((e) => {
@@ -54,6 +67,8 @@ async function load() {
   error.value = "";
   try {
     exercises.value = await fetchSportExercises(showArchived.value);
+    const metrics = await fetchSportMetrics();
+    lastWeight.value = metrics.find((m) => m.code === "weight")?.lastValue ?? null;
   } catch (e) {
     error.value = e.message || "не удалось загрузить упражнения";
   }
@@ -66,6 +81,7 @@ function openNew() {
     muscleGroups: [],
     equipment: "",
     unilateral: false,
+    bodyweightFactor: 1,
     emoji: "🏋️",
     note: "",
     fields: ["reps", "weight"],
@@ -74,8 +90,23 @@ function openNew() {
 }
 
 function openEdit(ex) {
-  editing.value = { ...ex, muscleGroups: [...ex.muscleGroups], fields: [...ex.fields] };
+  editing.value = {
+    ...ex,
+    muscleGroups: [...ex.muscleGroups],
+    fields: [...ex.fields],
+    // null на бэке означает «не задано» и считается как 1.0 — показываем так же.
+    bodyweightFactor: ex.bodyweightFactor ?? 1,
+  };
 }
+
+// Подсказка «сколько выйдет» на реальном весе: абстрактный коэффициент
+// понять сложнее, чем «15 повторов дадут столько-то килограммов».
+const bodyFactorHint = computed(() => {
+  const f = Number(editing.value?.bodyweightFactor);
+  if (!lastWeight.value || Number.isNaN(f)) return "";
+  const perRep = lastWeight.value * f;
+  return `При вашем весе ${lastWeight.value} кг это ${perRep.toFixed(1)} кг за повтор, ${(perRep * 15).toFixed(0)} кг за 15 повторов.`;
+});
 
 function toggleIn(list, value) {
   const i = list.indexOf(value);
@@ -96,6 +127,8 @@ async function save() {
     muscleGroups: editing.value.muscleGroups,
     equipment: editing.value.equipment,
     unilateral: editing.value.unilateral,
+    bodyweightFactor:
+      editing.value.type === "bodyweight" ? Number(editing.value.bodyweightFactor) : null,
     emoji: editing.value.emoji,
     note: editing.value.note || null,
     fields: editing.value.fields,
@@ -221,6 +254,9 @@ onMounted(load);
             · {{ ex.muscleGroups.map((g) => SPORT_MUSCLE_TITLES[g] || g).join(", ") }}
           </template>
           <template v-if="ex.unilateral"> · односторонее</template>
+          <template v-if="ex.type === 'bodyweight'">
+            · вес тела ×{{ ex.bodyweightFactor ?? 1 }}
+          </template>
         </div>
         <div class="sp-row" style="margin-top: 8px">
           <button class="sp-btn sp-btn-sm" @click="openHistory(ex)">История</button>
@@ -288,6 +324,36 @@ onMounted(load);
               >
                 {{ f.label }}
               </button>
+            </div>
+          </div>
+
+          <div v-if="editing.type === 'bodyweight'" class="sp-field">
+            <label>Доля веса тела в тоннаже</label>
+            <div class="sp-row" style="gap: 4px">
+              <button
+                v-for="p in BODY_FACTOR_PRESETS"
+                :key="p.value"
+                class="sp-chip"
+                :class="{ 'is-active': Number(editing.bodyweightFactor) === p.value }"
+                @click="editing.bodyweightFactor = p.value"
+              >
+                {{ p.label }}
+              </button>
+              <input
+                v-model="editing.bodyweightFactor"
+                class="sp-input"
+                style="width: 90px"
+                type="number"
+                step="0.05"
+                min="0"
+                max="1"
+              />
+            </div>
+            <div class="sp-muted">
+              Сколько своего веса вы реально поднимаете. Подтягивания — 1.0,
+              отжимания — около 0.65, скручивания — около 0.12.
+              Ноль означает «вес тела в тоннаж не считать».
+              {{ bodyFactorHint }}
             </div>
           </div>
 
