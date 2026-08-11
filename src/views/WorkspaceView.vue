@@ -9,6 +9,7 @@ import CarryModal from "@/components/workspace/CarryModal.vue";
 import GooglePanel from "@/components/workspace/GooglePanel.vue";
 import SearchModal from "@/components/workspace/SearchModal.vue";
 import SportTodayCard from "@/components/workspace/SportTodayCard.vue";
+import RoadmapWidget from "@/components/roadmap/RoadmapWidget.vue";
 import DisciplineChecklist from "@/components/discipline/DisciplineChecklist.vue";
 import {
   fetchWorkDay,
@@ -38,6 +39,7 @@ const searchOpen = ref(false);
 const noteOpen = ref(false);
 const disciplineOpen = ref(false);
 const sportOpen = ref(false);
+const roadmapOpen = ref(false);
 const disciplineMonth = ref(null);
 const filter = ref("all");
 
@@ -396,6 +398,9 @@ function slotLabel(item) {
         <button class="ws-btn" :class="{ hot: sportOpen }" @click="sportOpen = !sportOpen">
           🏋️ Спорт
         </button>
+        <button class="ws-btn" :class="{ hot: roadmapOpen }" @click="roadmapOpen = !roadmapOpen">
+          🗺️ Чтение
+        </button>
         <button class="ws-btn" @click="googleOpen = true">
           📅 Google<span v-if="day?.google?.connected" class="ws-dot-ok"></span>
         </button>
@@ -450,6 +455,11 @@ function slotLabel(item) {
 
     <section v-if="sportOpen" class="ws-discipline">
       <SportTodayCard :date="date" />
+    </section>
+
+    <!-- Чтение по roadmap'у — docs/roadmap-module.md -->
+    <section v-if="roadmapOpen" class="ws-discipline">
+      <RoadmapWidget />
     </section>
 
     <section v-if="viewMode !== 'all'" class="ws-daynote">

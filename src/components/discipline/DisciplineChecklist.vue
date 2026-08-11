@@ -5,6 +5,7 @@ import {
   setDisciplineRest,
   setDisciplineDayNote,
 } from "../api.js";
+import { fetchRoadmaps, fetchRoadmapFull } from "@/components/roadmapApi.js";
 
 const props = defineProps({
   month: { type: Object, required: true },
@@ -101,6 +102,79 @@ const skillRows = computed(() => {
     return rank(a) - rank(b) || a.skill.position - b.skill.position;
   });
 });
+
+// --- Связка с roadmap: у читательских активностей можно указать материал ---
+// docs/roadmap-module.md, раздел 5.5. Список тянем один раз и лениво: если
+// читательских активностей в плане нет, запросов тоже нет.
+
+const READING_RE = /книг|стать|чтен|читать|reading/i;
+const roadmapItems = ref([]);
+const roadmapDrafts = ref({}); // activityId -> { pages, hours }
+
+function isReading(activity) {
+  const text = [activity.title, activity.minDesc, activity.midDesc, activity.maxDesc]
+    .filter(Boolean)
+    .join(" ");
+  return READING_RE.test(text);
+}
+
+const hasReading = computed(() =>
+  skillRows.value.some((row) => row.leveled.some(isReading)),
+);
+
+async function loadRoadmapItems() {
+  if (roadmapItems.value.length || !hasReading.value) return;
+  try {
+    const list = await fetchRoadmaps();
+    const active = list.find((r) => r.isActive) || list[0];
+    if (!active) return;
+    const full = await fetchRoadmapFull(active.id);
+    const items = [];
+    for (const quarter of full.quarters) {
+      for (const item of quarter.items) {
+        if (item.status === "done" || item.status === "skipped") continue;
+        items.push({ id: item.id, label: `Q${quarter.number} · ${item.emoji || ""} ${item.title}`.trim() });
+      }
+    }
+    roadmapItems.value = items;
+  } catch {
+    roadmapItems.value = [];
+  }
+}
+
+watch(hasReading, loadRoadmapItems, { immediate: true });
+
+function roadmapDraft(activityId) {
+  if (!roadmapDrafts.value[activityId]) {
+    const entry = entryFor(activityId);
+    roadmapDrafts.value[activityId] = {
+      pages: entry?.roadmapPages ?? "",
+      hours: entry?.roadmapHours || "",
+    };
+  }
+  return roadmapDrafts.value[activityId];
+}
+
+// Отметка с материалом порождает сессию чтения в roadmap'е; смена материала
+// переносит её, «—» — убирает.
+function saveRoadmapLink(activity, itemId) {
+  const entry = entryFor(activity.id);
+  if (!entry) return;
+  const draft = roadmapDraft(activity.id);
+  const pages = parseInt(draft.pages, 10);
+  const hours = Number(String(draft.hours).replace(",", "."));
+  mutate(() =>
+    setDisciplineEntry({
+      date: props.date,
+      activityId: activity.id,
+      level: entry.level,
+      variant: entry.variant || null,
+      roadmapItemId: itemId || null,
+      roadmapPages: Number.isFinite(pages) ? pages : null,
+      roadmapHours: Number.isFinite(hours) && hours > 0 ? hours : 0,
+    }),
+  );
+}
 
 const busy = ref(false);
 async function mutate(fn) {
@@ -283,27 +357,49 @@ function saveNote() {
       </div>
       <div v-else-if="row.rested" class="dsc-hint">🌴 Сегодня отдых от навыка</div>
       <template v-else>
-        <div v-for="a in row.leveled" :key="a.id" class="dsc-activity" @click="cycleLevel(a)">
-          <span class="dsc-a-emoji">{{ a.emoji }}</span>
-          <span class="dsc-a-title" :class="{ 'dsc-a-done': entryFor(a.id) }">
-            <template v-if="replacementActive(a)">🩹 {{ a.replacementText }}</template>
-            <template v-else>{{ a.title }}</template>
-          </span>
-          <span class="dsc-a-levels">
-            <span v-for="l in activityLevels(a)" :key="l.key" class="dsc-lvl" :class="[
-              'dsc-lvl-' + l.key,
-              { 'dsc-lvl-active': (entryFor(a.id)?.level || '') === l.key ||
-                 LEVEL_ORDER.indexOf(entryFor(a.id)?.level || '') > LEVEL_ORDER.indexOf(l.key) },
-            ]" :title="l.desc" @click.stop="setLevel(a, l.key)">
-              {{ LEVEL_LABELS[l.key] }}
+        <template v-for="a in row.leveled" :key="a.id">
+          <div class="dsc-activity" @click="cycleLevel(a)">
+            <span class="dsc-a-emoji">{{ a.emoji }}</span>
+            <span class="dsc-a-title" :class="{ 'dsc-a-done': entryFor(a.id) }">
+              <template v-if="replacementActive(a)">🩹 {{ a.replacementText }}</template>
+              <template v-else>{{ a.title }}</template>
             </span>
-          </span>
-          <select v-if="parseVariants(a).length && entryFor(a.id)" class="dsc-variant" @click.stop
-            :value="entryFor(a.id)?.variant || parseVariants(a)[0]"
-            @change="setVariant(a, $event.target.value)">
-            <option v-for="v in parseVariants(a)" :key="v" :value="v">{{ v }}</option>
-          </select>
-        </div>
+            <span class="dsc-a-levels">
+              <span v-for="l in activityLevels(a)" :key="l.key" class="dsc-lvl" :class="[
+                'dsc-lvl-' + l.key,
+                { 'dsc-lvl-active': (entryFor(a.id)?.level || '') === l.key ||
+                   LEVEL_ORDER.indexOf(entryFor(a.id)?.level || '') > LEVEL_ORDER.indexOf(l.key) },
+              ]" :title="l.desc" @click.stop="setLevel(a, l.key)">
+                {{ LEVEL_LABELS[l.key] }}
+              </span>
+            </span>
+            <select v-if="parseVariants(a).length && entryFor(a.id)" class="dsc-variant" @click.stop
+              :value="entryFor(a.id)?.variant || parseVariants(a)[0]"
+              @change="setVariant(a, $event.target.value)">
+              <option v-for="v in parseVariants(a)" :key="v" :value="v">{{ v }}</option>
+            </select>
+          </div>
+
+          <!-- Какой материал читал: отметка становится сессией чтения в roadmap'е -->
+          <div v-if="entryFor(a.id) && isReading(a) && roadmapItems.length" class="dsc-roadmap"
+            @click.stop>
+            <select class="dsc-variant dsc-rm-select" :value="entryFor(a.id)?.roadmapItemId || ''"
+              @change="saveRoadmapLink(a, $event.target.value)">
+              <option value="">— материал —</option>
+              <option v-for="i in roadmapItems" :key="i.id" :value="i.id">{{ i.label }}</option>
+            </select>
+            <template v-if="entryFor(a.id)?.roadmapItemId">
+              <input class="dsc-rm-num" type="number" placeholder="стр."
+                :value="roadmapDraft(a.id).pages"
+                @input="roadmapDraft(a.id).pages = $event.target.value"
+                @change="saveRoadmapLink(a, entryFor(a.id).roadmapItemId)" />
+              <input class="dsc-rm-num" type="number" step="0.25" placeholder="ч"
+                :value="roadmapDraft(a.id).hours"
+                @input="roadmapDraft(a.id).hours = $event.target.value"
+                @change="saveRoadmapLink(a, entryFor(a.id).roadmapItemId)" />
+            </template>
+          </div>
+        </template>
 
         <div v-for="a in row.counters" :key="a.id" class="dsc-activity dsc-counter" @click="toggleCounter(a)">
           <span class="dsc-a-emoji">{{ a.emoji }}</span>
@@ -514,6 +610,28 @@ function saveNote() {
   background: #2a2060;
   border-color: #b37feb;
   color: #b37feb;
+}
+
+.dsc-roadmap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0 6px 22px;
+}
+
+.dsc-rm-select {
+  flex: 1;
+  min-width: 0;
+}
+
+.dsc-rm-num {
+  width: 56px;
+  background: #22242d;
+  color: #e8eaf2;
+  border: 1px solid #2a2d38;
+  border-radius: 6px;
+  padding: 3px 6px;
+  font-size: 11px;
 }
 
 .dsc-variant {

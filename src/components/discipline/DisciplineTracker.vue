@@ -4,6 +4,7 @@ import confetti from "canvas-confetti";
 import { useRouter } from "vue-router";
 import { fetchDisciplineMonth, disciplineLogicalToday } from "../api.js";
 import DisciplineChecklist from "./DisciplineChecklist.vue";
+import RoadmapWidget from "@/components/roadmap/RoadmapWidget.vue";
 
 const router = useRouter();
 
@@ -195,6 +196,10 @@ function weekdayName(dateStr) {
 
         <div class="dsc-today-label">Сегодня, {{ parseInt(today.slice(8)) }} число · {{ weekdayName(today) }}</div>
         <DisciplineChecklist :month="month" :date="today" @changed="load" />
+
+        <!-- Виджет активного roadmap'а — docs/roadmap-module.md. Живёт в этой же
+             правой колонке: чтение и дисциплина смотрятся вместе. -->
+        <RoadmapWidget />
       </template>
 
       <div v-else class="dsc-loading">Загрузка…</div>

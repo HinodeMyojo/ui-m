@@ -1,0 +1,737 @@
+/* Стили модуля «Roadmap» — docs/roadmap-module.md (back-m).
+   Глобальный файл по образцу sport.css: компонентов в разделе много, и держать
+   одинаковые карточки/кнопки в scoped-стилях каждого — верный способ развести
+   их внешний вид. Все классы с префиксом rm-. */
+
+.rm {
+  --rm-bg: #18191f;
+  --rm-card: #1e2027;
+  --rm-card-2: #22242d;
+  --rm-line: #2a2d38;
+  --rm-line-2: #2f3340;
+  --rm-text: #e8eaf2;
+  --rm-muted: #7a7f8e;
+  --rm-blue: #1767fd;
+  --rm-accent: #6e4aff;
+  --rm-ok: #63c94f;
+  --rm-warn: #ffd666;
+  --rm-bad: #e5484d;
+  --rm-info: #4aa8ff;
+
+  width: 100%;
+  min-height: 100vh;
+  background: var(--rm-bg);
+  color: var(--rm-text);
+  padding: 16px clamp(10px, 3vw, 40px) 80px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  box-sizing: border-box;
+}
+
+.rm-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.rm-header h1 {
+  margin: 0;
+  font-size: 22px;
+}
+
+.rm-sub {
+  color: var(--rm-muted);
+  font-size: 13px;
+}
+
+.rm-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.rm-spacer {
+  flex: 1;
+}
+
+.rm-tabs {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.rm-tab,
+.rm-btn {
+  background: var(--rm-card);
+  color: var(--rm-text);
+  border: 1px solid var(--rm-line);
+  border-radius: 8px;
+  padding: 7px 12px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.rm-tab:hover,
+.rm-btn:hover {
+  background: var(--rm-card-2);
+  border-color: var(--rm-line-2);
+}
+
+.rm-tab.is-active {
+  background: var(--rm-blue);
+  border-color: var(--rm-blue);
+}
+
+.rm-btn.is-primary {
+  background: var(--rm-blue);
+  border-color: var(--rm-blue);
+}
+
+.rm-btn.is-danger {
+  border-color: var(--rm-bad);
+  color: var(--rm-bad);
+}
+
+.rm-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.rm-btn.is-small {
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
+.rm-card {
+  background: var(--rm-card);
+  border: 1px solid var(--rm-line);
+  border-radius: 12px;
+  padding: 14px;
+}
+
+.rm-error {
+  background: rgba(229, 72, 77, 0.12);
+  border: 1px solid var(--rm-bad);
+  color: #ffb3b5;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 13px;
+}
+
+.rm-empty {
+  color: var(--rm-muted);
+  font-size: 13px;
+  padding: 12px 0;
+}
+
+.rm-input,
+.rm-select,
+.rm-textarea {
+  background: var(--rm-card-2);
+  color: var(--rm-text);
+  border: 1px solid var(--rm-line);
+  border-radius: 8px;
+  padding: 7px 10px;
+  font-size: 13px;
+  font-family: inherit;
+  box-sizing: border-box;
+}
+
+.rm-input:focus,
+.rm-select:focus,
+.rm-textarea:focus {
+  outline: none;
+  border-color: var(--rm-blue);
+}
+
+.rm-textarea {
+  width: 100%;
+  min-height: 120px;
+  resize: vertical;
+  line-height: 1.5;
+}
+
+.rm-num {
+  width: 84px;
+}
+
+.rm-label {
+  display: block;
+  color: var(--rm-muted);
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+
+/* --- Таймлайн кварталов --- */
+
+.rm-timeline {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+.rm-quarter {
+  background: var(--rm-card);
+  border: 1px solid var(--rm-line);
+  border-radius: 12px;
+  padding: 12px;
+  cursor: pointer;
+  text-align: left;
+  color: inherit;
+  font: inherit;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.rm-quarter:hover {
+  border-color: var(--rm-line-2);
+}
+
+.rm-quarter.is-selected {
+  border-color: var(--rm-blue);
+  background: var(--rm-card-2);
+}
+
+.rm-quarter.is-current::after {
+  content: "сейчас";
+  display: inline-block;
+  margin-left: 6px;
+  font-size: 10px;
+  color: var(--rm-blue);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.rm-quarter.is-closed {
+  border-color: var(--rm-ok);
+}
+
+.rm-quarter-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.rm-quarter-title {
+  font-size: 12px;
+  color: var(--rm-muted);
+  margin: 6px 0 8px;
+  min-height: 30px;
+  line-height: 1.3;
+}
+
+.rm-quarter-dates {
+  font-size: 11px;
+  color: var(--rm-muted);
+  margin-top: 6px;
+}
+
+/* --- Прогресс-бары --- */
+
+.rm-bar {
+  position: relative;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--rm-line);
+  overflow: hidden;
+}
+
+.rm-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--rm-blue);
+  transition: width 0.25s;
+}
+
+.rm-bar-fill.is-ok {
+  background: var(--rm-ok);
+}
+
+.rm-bar-fill.is-accent {
+  background: var(--rm-accent);
+}
+
+/* Метка ожидаемой позиции по времени: видно, отстаём или идём вперёд. */
+.rm-bar-mark {
+  position: absolute;
+  top: -2px;
+  width: 2px;
+  height: 12px;
+  background: var(--rm-warn);
+}
+
+.rm-behind {
+  font-size: 12px;
+}
+
+.rm-behind.is-late {
+  color: var(--rm-bad);
+}
+
+.rm-behind.is-ahead {
+  color: var(--rm-ok);
+}
+
+/* --- Основная раскладка: список + панель --- */
+
+.rm-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 380px;
+  gap: 14px;
+  align-items: start;
+}
+
+@media (max-width: 1100px) {
+  .rm-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.rm-group-title {
+  color: var(--rm-muted);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin: 14px 0 6px;
+}
+
+.rm-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.rm-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--rm-card);
+  border: 1px solid var(--rm-line);
+  border-radius: 10px;
+  padding: 9px 12px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.rm-item:hover {
+  border-color: var(--rm-line-2);
+  background: var(--rm-card-2);
+}
+
+.rm-item.is-selected {
+  border-color: var(--rm-blue);
+}
+
+.rm-item.is-dragging {
+  opacity: 0.4;
+}
+
+.rm-item.is-drop-target {
+  border-color: var(--rm-accent);
+}
+
+.rm-item.is-dim {
+  opacity: 0.55;
+}
+
+.rm-item-emoji {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.rm-item-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.rm-item-title {
+  font-size: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rm-item.is-done .rm-item-title,
+.rm-item.is-skipped .rm-item-title {
+  color: var(--rm-muted);
+}
+
+.rm-item.is-skipped .rm-item-title {
+  text-decoration: line-through;
+}
+
+.rm-item-meta {
+  font-size: 11px;
+  color: var(--rm-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rm-item-progress {
+  width: 120px;
+  flex-shrink: 0;
+}
+
+.rm-item-progress small {
+  display: block;
+  font-size: 10px;
+  color: var(--rm-muted);
+  margin-top: 3px;
+  text-align: right;
+}
+
+.rm-tier {
+  font-size: 10px;
+  border: 1px solid var(--rm-line-2);
+  border-radius: 999px;
+  padding: 1px 6px;
+  color: var(--rm-muted);
+  flex-shrink: 0;
+}
+
+.rm-tier.is-core {
+  border-color: var(--rm-blue);
+  color: #8ab4ff;
+}
+
+.rm-chip {
+  font-size: 11px;
+  border-radius: 999px;
+  padding: 2px 8px;
+  border: 1px solid var(--rm-line-2);
+  color: var(--rm-muted);
+}
+
+/* --- Панель деталей --- */
+
+.rm-panel {
+  position: sticky;
+  top: 12px;
+  background: var(--rm-card);
+  border: 1px solid var(--rm-line);
+  border-radius: 12px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: calc(100vh - 24px);
+  overflow-y: auto;
+}
+
+.rm-panel h2 {
+  margin: 0;
+  font-size: 17px;
+  line-height: 1.3;
+}
+
+.rm-panel-section {
+  border-top: 1px solid var(--rm-line);
+  padding-top: 12px;
+}
+
+.rm-panel-section h4 {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: var(--rm-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.rm-desc {
+  font-size: 13px;
+  line-height: 1.5;
+  color: #c7cbd8;
+}
+
+.rm-note-view {
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.rm-note-view :is(h1, h2, h3) {
+  font-size: 15px;
+  margin: 10px 0 6px;
+}
+
+.rm-note-view code {
+  background: var(--rm-card-2);
+  padding: 1px 4px;
+  border-radius: 4px;
+}
+
+.rm-sub-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  padding: 4px 0;
+}
+
+.rm-sub-item.is-done span {
+  color: var(--rm-muted);
+  text-decoration: line-through;
+}
+
+.rm-session {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 12px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--rm-line);
+}
+
+.rm-session-date {
+  color: var(--rm-muted);
+  width: 84px;
+  flex-shrink: 0;
+}
+
+.rm-session-src {
+  font-size: 10px;
+  color: var(--rm-muted);
+}
+
+/* --- Бенчмарки --- */
+
+.rm-benchmark {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 13px;
+  padding: 5px 0;
+  line-height: 1.4;
+}
+
+.rm-benchmark.is-done {
+  color: var(--rm-muted);
+}
+
+/* --- Источники --- */
+
+.rm-feeds {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 10px;
+}
+
+.rm-feed {
+  background: var(--rm-card);
+  border: 1px solid var(--rm-line);
+  border-radius: 10px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.rm-feed.is-subscribed {
+  border-color: var(--rm-ok);
+}
+
+.rm-feed a {
+  color: var(--rm-info);
+  font-size: 12px;
+  word-break: break-all;
+}
+
+/* --- Статистика --- */
+
+.rm-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 14px;
+}
+
+.rm-chart-box {
+  height: 260px;
+}
+
+.rm-kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+.rm-kpi {
+  background: var(--rm-card);
+  border: 1px solid var(--rm-line);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
+.rm-kpi strong {
+  display: block;
+  font-size: 20px;
+  margin-top: 2px;
+}
+
+.rm-kpi span {
+  font-size: 11px;
+  color: var(--rm-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.rm-heat {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+}
+
+.rm-heat-day {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  background: var(--rm-line);
+}
+
+/* --- Модалка --- */
+
+.rm-modal-back {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 60;
+  padding: 16px;
+}
+
+.rm-modal {
+  background: var(--rm-card);
+  border: 1px solid var(--rm-line-2);
+  border-radius: 14px;
+  padding: 16px;
+  width: min(620px, 100%);
+  max-height: 90vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.rm-form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+.rm-form-grid .rm-input,
+.rm-form-grid .rm-select {
+  width: 100%;
+}
+
+.rm-full {
+  grid-column: 1 / -1;
+}
+
+/* --- Виджет для главной и «Сегодня» --- */
+
+.rm-widget {
+  background: var(--rm-card);
+  border: 1px solid var(--rm-line);
+  border-radius: 12px;
+  padding: 12px;
+  color: var(--rm-text);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.rm-widget-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.rm-widget-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.rm-widget-item .rm-bar {
+  flex: 1;
+  height: 6px;
+}
+
+/* --- Мобильный режим /roadmap/today --- */
+
+.rmm {
+  padding: 10px 10px 90px;
+  gap: 10px;
+}
+
+.rmm-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.rmm-block {
+  padding: 12px;
+}
+
+.rmm-hero {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.rmm-hero-title {
+  font-size: 17px;
+  line-height: 1.3;
+}
+
+.rmm-hero-meta {
+  font-size: 12px;
+  color: var(--rm-muted);
+}
+
+.rmm-pages {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.rmm-pages .rm-input {
+  flex: 1;
+  font-size: 17px;
+  padding: 12px;
+}
+
+.rmm-quick {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+.rmm-quick .rm-btn {
+  padding: 14px 0;
+  font-size: 15px;
+}
+
+.rmm-list-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--rm-line);
+  font-size: 14px;
+}
+
+.rmm-list-item:last-child {
+  border-bottom: none;
+}

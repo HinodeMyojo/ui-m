@@ -118,6 +118,17 @@ const router = createRouter({
       component: () => import("../views/travel/TripTodayView.vue"),
     },
     {
+      path: "/roadmap",
+      name: "Roadmap",
+      component: () => import("../views/RoadmapView.vue"),
+    },
+    {
+      // Экран чтения для телефона: отдельная раскладка, не адаптив.
+      path: "/roadmap/today",
+      name: "RoadmapToday",
+      component: () => import("../views/RoadmapTodayView.vue"),
+    },
+    {
       // Гостевой доступ по ссылке — вход в приложение не нужен.
       path: "/travel/shared/:token",
       name: "SharedTrip",
