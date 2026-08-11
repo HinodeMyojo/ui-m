@@ -85,6 +85,14 @@ export function usePdfReadingSync(fileId, pdfDoc, pageCount, currentPage, goToPa
     }
 
     // Обложка — первая страница, отрендеренная тут же: на сервере pdf-движка нет.
+    // Ждём простоя: на толстой книге рендер обложки не должен отбирать время у
+    // первой страницы, которую человек сейчас читает.
+    function scheduleCover() {
+        const run = () => { ensureCover(); };
+        if (typeof requestIdleCallback === 'function') requestIdleCallback(run, { timeout: 5000 });
+        else setTimeout(run, 2000);
+    }
+
     async function ensureCover() {
         if (!fileId.value || !pdfDoc.value || details.value?.hasCover) return;
         try {
@@ -140,7 +148,7 @@ export function usePdfReadingSync(fileId, pdfDoc, pageCount, currentPage, goToPa
         if (!doc || !fileId.value) return;
         if (!details.value) await loadDetails();
         await restorePosition();
-        await ensureCover();
+        scheduleCover();
     });
 
     // Пролистнул страницу — это активность, и заодно повод сохраниться пораньше.

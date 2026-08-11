@@ -29,6 +29,11 @@ const props = defineProps({
     searchPageMatches: Number,
     annotations: { type: Array, default: () => [] },
     goToPage: { type: Function, default: null },
+    // Размер первой страницы документа: по нему строятся заглушки, пока до
+    // страницы не долистали. Спрашивать настоящий размер у каждой из тысячи
+    // страниц при открытии — самый дорогой способ ничего не показать.
+    defaultWidth: { type: Number, default: 612 },
+    defaultHeight: { type: Number, default: 792 },
 });
 
 const emit = defineEmits(['remove-annotation', 'edit-annotation-note', 'height-changed']);
@@ -36,8 +41,9 @@ const emit = defineEmits(['remove-annotation', 'edit-annotation-note', 'height-c
 const canvasEl = ref(null);
 const textLayerEl = ref(null);
 const rendered = ref(false);
-const pageWidth = ref(612);   // default A4 points
-const pageHeight = ref(792);
+const pageWidth = ref(props.defaultWidth);
+const pageHeight = ref(props.defaultHeight);
+let dimsLoaded = false;
 
 let renderTask = null;
 let textLayerInstance = null;
@@ -98,10 +104,11 @@ async function render() {
         const viewport = page.getViewport({ scale: props.zoomLevel });
 
         // Store natural page size (at scale=1)
-        if (pageWidth.value === 612) {
+        if (!dimsLoaded) {
             const vp1 = page.getViewport({ scale: 1 });
             pageWidth.value = vp1.width;
             pageHeight.value = vp1.height;
+            dimsLoaded = true;
         }
 
         if (renderTask) { renderTask.cancel(); renderTask = null; }
@@ -157,22 +164,23 @@ function scheduleRenderIfVisible() {
 
 // ── Natural page dimensions (get without rendering) ──────────────────────
 async function loadPageDimensions() {
-    if (!props.pdfDoc) return;
+    if (!props.pdfDoc || dimsLoaded) return;
     try {
         const page = await toRaw(props.pdfDoc).getPage(props.pageNum);
         const vp = page.getViewport({ scale: 1 });
         pageWidth.value = vp.width;
         pageHeight.value = vp.height;
+        dimsLoaded = true;
         emit('height-changed', Math.round(vp.height * props.zoomLevel));
     } catch { /* ignore */ }
 }
 
-onMounted(async () => {
-    await loadPageDimensions();
-
+onMounted(() => {
     const el = canvasEl.value?.closest('.pdf-page-wrapper');
     if (!el) return;
 
+    // rootMargin — рисуем страницу чуть заранее, чтобы при обычной прокрутке
+    // она уже была готова.
     observer = new IntersectionObserver((entries) => {
         for (const entry of entries) {
             isVisible = entry.isIntersecting;
@@ -180,9 +188,16 @@ onMounted(async () => {
                 render();
             }
         }
-    }, { threshold: 0.01 });
+    }, { threshold: 0.01, rootMargin: '400px 0px' });
 
     observer.observe(el);
+});
+
+// Заглушка подстраивается под первую страницу документа, пока не узнали свою.
+watch(() => [props.defaultWidth, props.defaultHeight], ([w, h]) => {
+    if (dimsLoaded) return;
+    pageWidth.value = w;
+    pageHeight.value = h;
 });
 
 // Re-render on zoom change (only if visible)
@@ -194,8 +209,9 @@ watch(() => props.zoomLevel, () => {
 // Re-render if pdfDoc changes
 watch(() => props.pdfDoc, async (doc) => {
     rendered.value = false;
+    dimsLoaded = false;
     if (doc) {
-        await loadPageDimensions();
+        if (isVisible) await loadPageDimensions();
         scheduleRenderIfVisible();
     }
 });

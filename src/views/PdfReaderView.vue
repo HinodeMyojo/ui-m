@@ -5,7 +5,10 @@
         <template v-if="!pdfDoc">
             <div v-if="isLoading" class="pdf-loading-overlay">
                 <span class="pdf-spin"></span>
-                Загружаем {{ fileName }}…
+                {{ streaming ? "Открываем" : "Загружаем" }} {{ fileName }}…
+                <!-- В потоковом режиме процент считается от подтянутых кусков,
+                     а не от «когда откроется», и только путает. -->
+                <template v-if="!streaming && loadProgress > 0">{{ Math.round(loadProgress * 100) }}%</template>
             </div>
             <PdfDropZone v-else :darkMode="darkMode" :isLoading="isLoading" :loadError="loadError"
                 @file-selected="onFileSelected" />
@@ -51,6 +54,7 @@
                     :style="nightMode ? { filter: `invert(1) hue-rotate(180deg) brightness(${nightBrightness / 100})` } : {}"
                     ref="viewportEl" @scroll="onScroll" @mouseup="onViewportMouseUp" @mousemove="onViewportMouseMove">
                     <PdfPageCanvas v-for="n in pageCount" :key="n" :pdfDoc="pdfDoc" :pageNum="n"
+                        :defaultWidth="defaultPageSize.width" :defaultHeight="defaultPageSize.height"
                         :zoomLevel="zoomLevel" :nightMode="nightMode" :searchQuery="searchQuery"
                         :searchPageMatches="searchMatches.filter(m => m.pageNum === n).length"
                         :annotations="annotationsForPage(n)"
@@ -157,7 +161,7 @@ import { usePdfBookmarks }      from './pdf-reader/composables/usePdfBookmarks.j
 import { usePdfTranslation }    from './pdf-reader/composables/usePdfTranslation.js';
 import { usePdfReadingSync }    from './pdf-reader/composables/usePdfReadingSync.js';
 import { addVocabCard }         from '@/components/api.js';
-import { downloadPdfAsFile, getPdfDetailsCached } from '@/api/pdfFiles.js';
+import { getPdfDownloadUrl, getPdfDetailsCached } from '@/api/pdfFiles.js';
 import { useRoute, useRouter }  from 'vue-router';
 import PdfDropZone              from './pdf-reader/components/PdfDropZone.vue';
 import PdfToolbar               from './pdf-reader/components/PdfToolbar.vue';
@@ -171,7 +175,7 @@ import PdfTranslationSettings   from './pdf-reader/components/PdfTranslationSett
 import './pdf-reader/pdf-reader.css';
 
 // ── Core state ────────────────────────────────────────────────────────────
-const { pdfDoc, pageCount, isLoading, loadError, fileName, loadFromFile, closeDocument } = usePdfLoader();
+const { pdfDoc, pageCount, isLoading, loadError, fileName, loadProgress, streaming, loadFromFile, loadFromUrl, closeDocument } = usePdfLoader();
 const { darkMode, nightMode, nightBrightness, isFullscreen, showSidebar, showThumbnails, toggleDark, toggleNight, setNightBrightness, toggleFullscreen, toggleSidebar, toggleThumbnails } = usePdfTheme();
 const { zoomLevel, setZoom, fitWidth, fitPage } = usePdfZoom();
 const { currentPage, pageRefs, canPrev, canNext, goToPage, prevPage, nextPage, onViewportScroll } = usePdfNavigation(pageCount);
@@ -198,6 +202,19 @@ const { apiKey, hoverMode, sourceLang, targetLang, isTranslating, translationErr
 
 const viewportEl = ref(null);
 const rootEl = ref(null);
+
+// Размер первой страницы: по нему рисуются заглушки всех остальных, пока до них
+// не долистали. Один getPage вместо тысячи при открытии книги.
+const defaultPageSize = ref({ width: 612, height: 792 });
+
+watch(pdfDoc, async (doc) => {
+    if (!doc) return;
+    try {
+        const page = await doc.getPage(1);
+        const viewport = page.getViewport({ scale: 1 });
+        defaultPageSize.value = { width: viewport.width, height: viewport.height };
+    } catch { /* останемся с A4 */ }
+});
 
 // ── Translation UI state ──────────────────────────────────────────────────
 const showTranslateSettings = ref(false);
@@ -586,8 +603,11 @@ async function openFromLibrary(id) {
     libraryFileId.value = id;
     try {
         const details = await getPdfDetailsCached(id);
-        const file = await downloadPdfAsFile(id, details?.filename);
-        await loadFromFile(file);
+        const token = localStorage.getItem('token');
+        await loadFromUrl(getPdfDownloadUrl(id), {
+            httpHeaders: token ? { Authorization: `Bearer ${token}` } : {},
+            filename: details?.title || details?.filename || '',
+        });
     } catch {
         libraryFileId.value = '';
     }
@@ -595,6 +615,13 @@ async function openFromLibrary(id) {
 
 // Файл из библиотеки открыт — помним id, чтобы позиция и закладки ушли на сервер.
 function onFileSelected(file, id) {
+    // Файл только что загрузили на сервер, а он уже открыт локально —
+    // перечитывать его по сети незачем, просто запоминаем id.
+    if (id && pdfDoc.value && fileName.value === file.name) {
+        libraryFileId.value = id;
+        router.replace({ path: '/pdfReader', query: { file: id } });
+        return;
+    }
     libraryFileId.value = id || '';
     if (id) router.replace({ path: '/pdfReader', query: { file: id } });
     loadFromFile(file);
