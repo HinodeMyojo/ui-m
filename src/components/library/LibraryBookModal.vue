@@ -1,7 +1,7 @@
 <script setup>
 import { ref, computed, onMounted } from "vue";
 import LibraryCover from "@/components/library/LibraryCover.vue";
-import { updatePdfFile, linkPdfRoadmapItem, deletePdfFile } from "@/api/pdfFiles.js";
+import { updatePdfFile, linkPdfRoadmapItem, deletePdfFile, replacePdfFile } from "@/api/pdfFiles.js";
 import { fetchRoadmaps, fetchRoadmapFull } from "@/components/roadmapApi.js";
 
 // Карточка книги: метаданные, полка, теги, привязка к пункту roadmap'а.
@@ -28,6 +28,25 @@ const roadmapItemId = ref(props.file.roadmapItemId || "");
 const roadmapItems = ref([]);
 const busy = ref(false);
 const error = ref("");
+const replaceInput = ref(null);
+
+// Файл на диске потерялся (например, контейнер пересоздали без тома под
+// uploads) — карточку не выбрасываем, а даём подложить файл обратно.
+async function onReplaceFile(event) {
+  const file = event.target.files?.[0];
+  event.target.value = "";
+  if (!file) return;
+  busy.value = true;
+  error.value = "";
+  try {
+    await replacePdfFile(props.file.id, file);
+    emit("saved");
+  } catch (e) {
+    error.value = e.message || "не удалось загрузить файл";
+  } finally {
+    busy.value = false;
+  }
+}
 
 // Список пунктов для привязки: только книги и статьи активного плана —
 // прикручивать PDF к сертификации смысла нет.
@@ -154,6 +173,15 @@ onMounted(loadRoadmapItems);
 
       <div v-if="error" class="lb-error">{{ error }}</div>
 
+      <div v-if="file.fileMissing" class="lb-error">
+        Файл книги пропал с диска. Прогресс, закладки и привязка к плану на месте —
+        подложите файл обратно, и всё продолжит работать.
+        <button class="lb-btn is-small" :disabled="busy" @click="replaceInput.click()">
+          📎 Загрузить файл
+        </button>
+      </div>
+      <input ref="replaceInput" type="file" accept=".pdf,application/pdf" hidden @change="onReplaceFile" />
+
       <div>
         <div class="lb-sub">
           {{ progressLabel }} · прочитано {{ Math.round((file.progress || 0) * 100) }}% ·
@@ -187,7 +215,10 @@ onMounted(loadRoadmapItems);
 
       <div class="lb-row">
         <button class="lb-btn is-primary" :disabled="busy" @click="save">Сохранить</button>
-        <button class="lb-btn" @click="emit('read')">📖 Читать</button>
+        <button v-if="!file.fileMissing" class="lb-btn" @click="emit('read')">📖 Читать</button>
+        <button v-else class="lb-btn" :disabled="busy" @click="replaceInput.click()">
+          📎 Загрузить файл заново
+        </button>
         <button class="lb-btn" @click="emit('close')">Отмена</button>
         <div class="lb-spacer" />
         <button class="lb-btn is-danger" :disabled="busy" @click="remove">Удалить</button>

@@ -186,6 +186,7 @@ async function onSaved() {
 }
 
 function statusBadge(file) {
+  if (file.fileMissing) return { text: "нет файла", cls: "is-missing" };
   if (file.finishedAt) return { text: "✓", cls: "is-done" };
   if (file.currentPage > 1) return { text: `${Math.round((file.progress || 0) * 100)}%`, cls: "" };
   return null;
@@ -340,7 +341,7 @@ onMounted(load);
             @dragstart="onBookDragStart(f)"
             @dragend="dragFileId = ''"
             @click="openBook(f)"
-            @dblclick="readBook(f)"
+            @dblclick="f.fileMissing ? openBook(f) : readBook(f)"
           >
             <LibraryCover :file="f">
               <span v-if="f.favorite" class="lb-badge is-left">⭐</span>

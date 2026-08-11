@@ -603,6 +603,14 @@ async function openFromLibrary(id) {
     libraryFileId.value = id;
     try {
         const details = await getPdfDetailsCached(id);
+        if (details?.fileMissing) {
+            // Карточка жива, файла нет: гнать пользователя в непонятную ошибку
+            // pdf.js не за чем — сразу говорим, что делать.
+            loadError.value = 'Файл этой книги пропал с диска. Откройте её в библиотеке '
+                + 'и загрузите файл заново — прогресс и закладки сохранятся.';
+            libraryFileId.value = '';
+            return;
+        }
         const token = localStorage.getItem('token');
         await loadFromUrl(getPdfDownloadUrl(id), {
             httpHeaders: token ? { Authorization: `Bearer ${token}` } : {},

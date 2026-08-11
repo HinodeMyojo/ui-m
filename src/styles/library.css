@@ -295,6 +295,10 @@
   color: var(--lb-ok);
 }
 
+.lb-badge.is-missing {
+  color: var(--lb-bad);
+}
+
 .lb-badge.is-linked {
   color: #8ab4ff;
 }

@@ -4,6 +4,21 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || `${window.location.protocol
 
 const PDF = `${API_BASE_URL}/api/v1/pdfs`;
 
+// Сервер объясняет, что пошло не так, в теле ответа — «API Error 500» вместо
+// «не удалось создать каталог /app/uploads/pdfs» помогает примерно никак.
+async function apiError(response) {
+  let message = "";
+  try {
+    const data = await response.json();
+    message = data.error || data.message || "";
+  } catch {
+    message = "";
+  }
+  const error = new Error(message || `Ошибка ${response.status}`);
+  error.status = response.status;
+  return error;
+}
+
 async function authorizedFetch(url, options = {}) {
   const token = localStorage.getItem("token");
   const response = await fetch(url, {
@@ -14,7 +29,7 @@ async function authorizedFetch(url, options = {}) {
     },
   });
   if (!response.ok) {
-    throw new Error(`API Error ${response.status}: ${response.statusText}`);
+    throw await apiError(response);
   }
   if (response.status === 204) return null;
   const text = await response.text();
@@ -76,8 +91,22 @@ export async function uploadPdfFile(file, categoryId) {
     headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
     body: formData,
   });
-  if (!response.ok) throw new Error(`Upload failed: ${response.statusText}`);
+  if (!response.ok) throw await apiError(response);
   return response.json();
+}
+
+// Перезалить файл в существующую карточку: прогресс, закладки и привязка к
+// плану останутся на месте.
+export async function replacePdfFile(id, file) {
+  const token = localStorage.getItem("token");
+  const formData = new FormData();
+  formData.append("file", file);
+  const response = await fetch(`${PDF}/${id}/file`, {
+    method: "PUT",
+    headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    body: formData,
+  });
+  if (!response.ok) throw await apiError(response);
 }
 
 export function getPdfDownloadUrl(id) {
@@ -105,7 +134,7 @@ export async function downloadPdfAsFile(id, filename) {
   const response = await fetch(getPdfDownloadUrl(id), {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
   });
-  if (!response.ok) throw new Error("не удалось скачать файл");
+  if (!response.ok) throw await apiError(response);
   const blob = await response.blob();
   return new File([blob], filename || "document.pdf", { type: "application/pdf" });
 }
