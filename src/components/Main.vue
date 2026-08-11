@@ -1126,8 +1126,12 @@ function closeTimeStats() {
           <p class="text">Спорт</p>
         </button>
         <button class="nyamaaa" @click="router.push('/roadmap')">
-          <div class="icon">📚</div>
+          <div class="icon">🗺️</div>
           <p class="text">Roadmap</p>
+        </button>
+        <button class="nyamaaa" @click="router.push('/library')">
+          <div class="icon">📚</div>
+          <p class="text">Библиотека</p>
         </button>
         <button class="nyamaaa nyamaaa-soon nyamaaa-unknown" disabled>
           <div class="icon">❓</div>

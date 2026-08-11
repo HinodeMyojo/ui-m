@@ -1,6 +1,8 @@
 <script setup>
-import { ref, computed, watch } from "vue";
+import { ref, computed, watch, onMounted } from "vue";
+import { useRouter } from "vue-router";
 import MarkdownView from "@/components/workspace/MarkdownView.vue";
+import { getPdfFiles, linkPdfRoadmapItem } from "@/api/pdfFiles.js";
 import {
   percent,
   formatHours,
@@ -26,6 +28,41 @@ const props = defineProps({
   item: { type: Object, required: true },
 });
 const emit = defineEmits(["changed", "edit"]);
+
+const router = useRouter();
+
+// Библиотека для привязки PDF — docs/pdf-library.md
+const libraryFiles = ref([]);
+const linkedFile = computed(() =>
+  libraryFiles.value.find((f) => f.id === props.item.pdfFileId) || null,
+);
+
+async function loadLibrary() {
+  try {
+    libraryFiles.value = await getPdfFiles();
+  } catch {
+    libraryFiles.value = [];
+  }
+}
+
+// Привязка живёт в поле пункта, но ставим её через библиотечную ручку: она
+// снимает файл с прошлого пункта и подтягивает объём и текущую страницу.
+// Отвязка идёт по уже прикреплённому файлу — селект к этому моменту пуст.
+function linkPdf(fileId) {
+  const targetFile = fileId || props.item.pdfFileId;
+  if (!targetFile) return;
+  return run(async () => {
+    await linkPdfRoadmapItem(targetFile, fileId ? props.item.id : null);
+    await loadLibrary();
+  });
+}
+
+function openReader() {
+  if (!props.item.pdfFileId) return;
+  router.push({ path: "/pdfReader", query: { file: props.item.pdfFileId } });
+}
+
+onMounted(loadLibrary);
 
 const pageDraft = ref("");
 const hoursDraft = ref("");
@@ -313,9 +350,28 @@ const SOURCE_LABELS = { manual: "вручную", discipline: "дисципли�
     <div class="rm-panel-section">
       <h4>Связи</h4>
       <div class="rm-row">
-        <router-link v-if="item.pdfFileId" class="rm-btn is-small" to="/pdfReader">
-          📖 Читать PDF
-        </router-link>
+        <select
+          class="rm-select"
+          style="flex: 1; min-width: 0"
+          :value="item.pdfFileId || ''"
+          :disabled="busy"
+          @change="linkPdf($event.target.value)"
+        >
+          <option value="">PDF не прикреплён</option>
+          <option v-for="f in libraryFiles" :key="f.id" :value="f.id">
+            {{ f.title }}<template v-if="f.pageCount"> ({{ f.pageCount }} стр.)</template>
+          </option>
+        </select>
+        <button v-if="item.pdfFileId" class="rm-btn is-small is-primary" @click="openReader">
+          📖 Читать
+        </button>
+      </div>
+      <p v-if="linkedFile" class="rm-sub" style="margin: 6px 0 0">
+        Остановились на странице {{ linkedFile.currentPage }}<template v-if="linkedFile.pageCount"> из
+        {{ linkedFile.pageCount }}</template> · {{ Math.round((linkedFile.hoursRead || 0) * 10) / 10 }} ч
+        в читалке. Чтение само двигает прогресс пункта.
+      </p>
+      <div class="rm-row" style="margin-top: 8px">
         <template v-if="item.type === 'project'">
           <span v-if="item.taskId" class="rm-sub">
             Задача заведена · прогресс {{ percent(item.taskProgress || 0) }}

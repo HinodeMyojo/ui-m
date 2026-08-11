@@ -1,13 +1,30 @@
 import { ref, watch } from 'vue';
+import { getPdfDetailsCached, setPdfAnnotations } from '@/api/pdfFiles.js';
 
-export function usePdfAnnotations(fileName) {
+// Выделения и заметки. У книги из библиотеки они живут на сервере
+// (docs/pdf-library.md), у файла с диска — в localStorage, как и раньше.
+
+const SAVE_DEBOUNCE_MS = 800;
+
+export function usePdfAnnotations(fileName, fileId) {
     const annotations = ref([]);
+    let saveTimer = null;
 
     function storageKey() {
         return `pdf-annotations-${fileName.value}`;
     }
 
-    function load() {
+    async function load() {
+        if (fileId?.value) {
+            try {
+                const details = await getPdfDetailsCached(fileId.value);
+                annotations.value = details?.annotations ?? [];
+                return;
+            } catch {
+                annotations.value = [];
+                return;
+            }
+        }
         if (!fileName.value) { annotations.value = []; return; }
         try {
             const raw = localStorage.getItem(storageKey());
@@ -16,13 +33,28 @@ export function usePdfAnnotations(fileName) {
     }
 
     function save() {
+        if (fileId?.value) {
+            // Сервер принимает массив целиком — просто откладываем отправку.
+            clearTimeout(saveTimer);
+            const id = fileId.value;
+            const payload = annotations.value.map(a => ({
+                id: String(a.id),
+                pageNum: a.pageNum,
+                color: a.color ?? '',
+                selectedText: a.selectedText ?? '',
+                note: a.note ?? '',
+                rects: a.rects ?? null,
+            }));
+            saveTimer = setTimeout(() => { setPdfAnnotations(id, payload).catch(() => {}); }, SAVE_DEBOUNCE_MS);
+            return;
+        }
         if (!fileName.value) return;
         try {
             localStorage.setItem(storageKey(), JSON.stringify(annotations.value));
         } catch { /* quota exceeded — ignore */ }
     }
 
-    watch(fileName, load, { immediate: true });
+    watch([fileName, () => fileId?.value], load, { immediate: true });
 
     function annotationsForPage(pageNum) {
         return annotations.value.filter(a => a.pageNum === pageNum);

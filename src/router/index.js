@@ -118,6 +118,11 @@ const router = createRouter({
       component: () => import("../views/travel/TripTodayView.vue"),
     },
     {
+      path: "/library",
+      name: "Library",
+      component: () => import("../views/LibraryView.vue"),
+    },
+    {
       path: "/roadmap",
       name: "Roadmap",
       component: () => import("../views/RoadmapView.vue"),

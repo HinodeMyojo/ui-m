@@ -30,6 +30,9 @@
                 <div class="pdf-library-header">
                     <h3>Сохранённые PDF</h3>
                     <div v-if="libraryLoading" class="pdf-spin-small"></div>
+                    <button class="pdf-dropzone-btn pdf-dropzone-btn-secondary"
+                        style="margin-left:auto;padding:4px 10px;font-size:12px"
+                        @click.stop="router.push('/library')">📚 Вся библиотека</button>
                 </div>
 
                 <div v-if="!savedFiles.length && !libraryLoading" class="pdf-library-empty">
@@ -40,8 +43,12 @@
                     <div v-for="f in savedFiles" :key="f.id" class="pdf-library-item" @click="openSaved(f)">
                         <div class="pdf-lib-icon">📕</div>
                         <div class="pdf-lib-info">
-                            <div class="pdf-lib-name">{{ f.filename }}</div>
+                            <div class="pdf-lib-name">{{ f.title || f.filename }}</div>
                             <div class="pdf-lib-meta">
+                                <template v-if="f.currentPage > 1">
+                                    стр. {{ f.currentPage }}<template v-if="f.pageCount">/{{ f.pageCount }}</template>
+                                    · {{ Math.round((f.progress || 0) * 100) }}% ·
+                                </template>
                                 {{ formatSize(f.size) }} · {{ formatDate(f.createdAt) }}
                             </div>
                         </div>
@@ -94,12 +101,14 @@ function onFileChange(e) {
 }
 
 async function handleFile(file) {
-    // Emit immediately so reader starts loading
+    // Показываем сразу, а на сервер кладём фоном: ждать загрузки, чтобы начать
+    // читать, незачем. Как только id известен — сообщаем его читалке, и она
+    // начинает хранить позицию на сервере.
     emit('file-selected', file);
-    // Upload to server in background
     try {
-        await uploadPdfFile(file);
+        const saved = await uploadPdfFile(file);
         await loadLibrary();
+        if (saved?.id) emit('file-selected', file, saved.id);
     } catch {
         // silent — file is already loaded locally
     }
@@ -116,7 +125,7 @@ async function openSaved(f) {
         if (!resp.ok) throw new Error("download failed");
         const blob = await resp.blob();
         const file = new File([blob], f.filename, { type: "application/pdf" });
-        emit('file-selected', file);
+        emit('file-selected', file, f.id);
     } catch {
         // fallback
     }

@@ -8,7 +8,7 @@
                 Загружаем {{ fileName }}…
             </div>
             <PdfDropZone v-else :darkMode="darkMode" :isLoading="isLoading" :loadError="loadError"
-                @file-selected="loadFromFile" />
+                @file-selected="onFileSelected" />
         </template>
 
         <!-- Full reader (after PDF loaded) -->
@@ -26,7 +26,7 @@
                 @night-brightness-down="setNightBrightness(nightBrightness - 10)"
                 @night-brightness-up="setNightBrightness(nightBrightness + 10)"
                 @toggle-fullscreen="toggleFullscreen" @toggle-sidebar="toggleSidebar"
-                @toggle-thumbnails="toggleThumbnails" @toggle-search="openSearch" @close-doc="closeDocument"
+                @toggle-thumbnails="toggleThumbnails" @toggle-search="openSearch" @close-doc="onCloseDoc"
                 @toggle-bookmark="toggleCurrentPage"
                 @toggle-hover-translate="hoverMode = !hoverMode"
                 @open-translate-settings="showTranslateSettings = true"
@@ -132,6 +132,10 @@
             <!-- Reading info badge -->
             <div class="pdf-reading-info">
                 {{ Math.round(readProgress * 100) }}% · {{ estimatedReadingTime }}
+                <template v-if="libraryFileId">
+                    · 📚 сохраняю позицию
+                    <template v-if="sessionSeconds >= 60"> · {{ Math.round(sessionSeconds / 60) }} мин</template>
+                </template>
             </div>
         </template>
 
@@ -151,7 +155,10 @@ import { usePdfThumbnails }     from './pdf-reader/composables/usePdfThumbnails.
 import { usePdfAnnotations }    from './pdf-reader/composables/usePdfAnnotations.js';
 import { usePdfBookmarks }      from './pdf-reader/composables/usePdfBookmarks.js';
 import { usePdfTranslation }    from './pdf-reader/composables/usePdfTranslation.js';
+import { usePdfReadingSync }    from './pdf-reader/composables/usePdfReadingSync.js';
 import { addVocabCard }         from '@/components/api.js';
+import { downloadPdfAsFile, getPdfDetailsCached } from '@/api/pdfFiles.js';
+import { useRoute, useRouter }  from 'vue-router';
 import PdfDropZone              from './pdf-reader/components/PdfDropZone.vue';
 import PdfToolbar               from './pdf-reader/components/PdfToolbar.vue';
 import PdfPageCanvas            from './pdf-reader/components/PdfPageCanvas.vue';
@@ -172,8 +179,17 @@ const { readProgress, estimatedReadingTime } = usePdfProgress(pageCount, current
 const { tocItems } = usePdfToc(pdfDoc);
 const { searchOpen, searchQuery, searchMatches, searchIdx, isSearching, openSearch, closeSearch, runSearch, nextMatch, prevMatch } = usePdfSearch(pdfDoc, pageCount, goToPage);
 const { thumbRefs, renderThumbnail, resetThumbnails } = usePdfThumbnails();
-const { annotations, annotationsForPage, addAnnotation, updateNote, removeAnnotation, exportAnnotations, importAnnotations } = usePdfAnnotations(fileName);
-const { bookmarks, isCurrentPageBookmarked, toggleCurrentPage, removeBookmark, updateLabel } = usePdfBookmarks(fileName, currentPage);
+// Книга из библиотеки: позиция, закладки и выделения живут на сервере,
+// а время в читалке уходит в план обучения — docs/pdf-library.md
+const route = useRoute();
+const router = useRouter();
+const libraryFileId = ref(typeof route.query.file === 'string' ? route.query.file : '');
+
+const { annotations, annotationsForPage, addAnnotation, updateNote, removeAnnotation, exportAnnotations, importAnnotations } = usePdfAnnotations(fileName, libraryFileId);
+const { bookmarks, isCurrentPageBookmarked, toggleCurrentPage, removeBookmark, updateLabel } = usePdfBookmarks(fileName, currentPage, libraryFileId);
+const { details: libraryDetails, sessionSeconds, flush: flushReading } = usePdfReadingSync(
+    libraryFileId, pdfDoc, pageCount, currentPage, goToPage,
+);
 const { apiKey, hoverMode, sourceLang, targetLang, isTranslating, translationError, lastTranslation,
         translate, checkApiKey, speakText, stopSpeech,
         analyzeText, analyzeResult, isAnalyzing, analyzeError,
@@ -564,9 +580,37 @@ function onDocumentMouseDown(e) {
     hideSelToolbar();
 }
 
+// Читалку открывают и ссылкой из библиотеки или плана: /pdfReader?file=<id>
+async function openFromLibrary(id) {
+    if (!id) return;
+    libraryFileId.value = id;
+    try {
+        const details = await getPdfDetailsCached(id);
+        const file = await downloadPdfAsFile(id, details?.filename);
+        await loadFromFile(file);
+    } catch {
+        libraryFileId.value = '';
+    }
+}
+
+// Файл из библиотеки открыт — помним id, чтобы позиция и закладки ушли на сервер.
+function onFileSelected(file, id) {
+    libraryFileId.value = id || '';
+    if (id) router.replace({ path: '/pdfReader', query: { file: id } });
+    loadFromFile(file);
+}
+
+function onCloseDoc() {
+    flushReading();
+    libraryFileId.value = '';
+    if (route.query.file) router.replace({ path: '/pdfReader' });
+    closeDocument();
+}
+
 onMounted(() => {
     window.addEventListener('keydown', onWindowKeydown);
     document.addEventListener('mousedown', onDocumentMouseDown);
+    if (libraryFileId.value) openFromLibrary(libraryFileId.value);
 });
 
 onBeforeUnmount(() => {

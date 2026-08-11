@@ -1,0 +1,438 @@
+/* Библиотека PDF — docs/pdf-library.md (back-m).
+   Глобальный файл по образцу sport.css/roadmap.css, все классы с префиксом lb-. */
+
+.lb {
+  --lb-bg: #18191f;
+  --lb-card: #1e2027;
+  --lb-card-2: #22242d;
+  --lb-line: #2a2d38;
+  --lb-line-2: #2f3340;
+  --lb-text: #e8eaf2;
+  --lb-muted: #7a7f8e;
+  --lb-blue: #1767fd;
+  --lb-accent: #6e4aff;
+  --lb-ok: #63c94f;
+  --lb-warn: #ffd666;
+  --lb-bad: #e5484d;
+
+  width: 100%;
+  min-height: 100vh;
+  background: var(--lb-bg);
+  color: var(--lb-text);
+  padding: 16px clamp(10px, 3vw, 40px) 80px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  box-sizing: border-box;
+}
+
+.lb-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.lb-header h1 {
+  margin: 0;
+  font-size: 22px;
+}
+
+.lb-sub {
+  color: var(--lb-muted);
+  font-size: 13px;
+}
+
+.lb-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.lb-spacer {
+  flex: 1;
+}
+
+.lb-btn {
+  background: var(--lb-card);
+  color: var(--lb-text);
+  border: 1px solid var(--lb-line);
+  border-radius: 8px;
+  padding: 7px 12px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.lb-btn:hover {
+  background: var(--lb-card-2);
+  border-color: var(--lb-line-2);
+}
+
+.lb-btn.is-active,
+.lb-btn.is-primary {
+  background: var(--lb-blue);
+  border-color: var(--lb-blue);
+}
+
+.lb-btn.is-danger {
+  border-color: var(--lb-bad);
+  color: var(--lb-bad);
+}
+
+.lb-btn.is-small {
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
+.lb-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.lb-input,
+.lb-select,
+.lb-textarea {
+  background: var(--lb-card-2);
+  color: var(--lb-text);
+  border: 1px solid var(--lb-line);
+  border-radius: 8px;
+  padding: 7px 10px;
+  font-size: 13px;
+  font-family: inherit;
+  box-sizing: border-box;
+}
+
+.lb-input:focus,
+.lb-select:focus,
+.lb-textarea:focus {
+  outline: none;
+  border-color: var(--lb-blue);
+}
+
+.lb-search {
+  min-width: 220px;
+  flex: 1;
+  max-width: 360px;
+}
+
+.lb-textarea {
+  width: 100%;
+  min-height: 90px;
+  resize: vertical;
+}
+
+.lb-label {
+  display: block;
+  color: var(--lb-muted);
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+
+.lb-error {
+  background: rgba(229, 72, 77, 0.12);
+  border: 1px solid var(--lb-bad);
+  color: #ffb3b5;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 13px;
+}
+
+.lb-empty {
+  color: var(--lb-muted);
+  font-size: 13px;
+  padding: 24px 0;
+  text-align: center;
+}
+
+/* --- Раскладка: полки слева, книги справа --- */
+
+.lb-body {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+@media (max-width: 900px) {
+  .lb-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.lb-shelf {
+  background: var(--lb-card);
+  border: 1px solid var(--lb-line);
+  border-radius: 12px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.lb-shelf-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 9px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  border: 1px solid transparent;
+  background: none;
+  color: inherit;
+  text-align: left;
+  width: 100%;
+}
+
+.lb-shelf-item:hover {
+  background: var(--lb-card-2);
+}
+
+.lb-shelf-item.is-active {
+  background: var(--lb-card-2);
+  border-color: var(--lb-blue);
+}
+
+.lb-shelf-item.is-drop {
+  border-color: var(--lb-accent);
+  border-style: dashed;
+}
+
+.lb-shelf-count {
+  color: var(--lb-muted);
+  font-size: 11px;
+}
+
+.lb-shelf-sep {
+  height: 1px;
+  background: var(--lb-line);
+  margin: 6px 2px;
+}
+
+/* --- Сетка книг --- */
+
+.lb-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 14px;
+}
+
+.lb-book {
+  background: var(--lb-card);
+  border: 1px solid var(--lb-line);
+  border-radius: 12px;
+  overflow: hidden;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  transition: border-color 0.15s, transform 0.15s;
+}
+
+.lb-book:hover {
+  border-color: var(--lb-line-2);
+  transform: translateY(-2px);
+}
+
+.lb-book.is-dragging {
+  opacity: 0.4;
+}
+
+.lb-cover {
+  position: relative;
+  aspect-ratio: 3 / 4;
+  background: linear-gradient(160deg, #262a36, #1b1d25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.lb-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.lb-cover-fallback {
+  padding: 10px;
+  text-align: center;
+  font-size: 12px;
+  line-height: 1.35;
+  color: #aab0c0;
+  max-height: 100%;
+  overflow: hidden;
+}
+
+.lb-cover-fallback span {
+  display: block;
+  font-size: 26px;
+  margin-bottom: 6px;
+}
+
+.lb-badge {
+  position: absolute;
+  top: 6px;
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(2px);
+}
+
+.lb-badge.is-left {
+  left: 6px;
+}
+
+.lb-badge.is-right {
+  right: 6px;
+}
+
+.lb-badge.is-done {
+  color: var(--lb-ok);
+}
+
+.lb-badge.is-linked {
+  color: #8ab4ff;
+}
+
+.lb-book-body {
+  padding: 8px 10px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.lb-book-title {
+  font-size: 13px;
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.lb-book-meta {
+  font-size: 11px;
+  color: var(--lb-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lb-bar {
+  height: 5px;
+  border-radius: 999px;
+  background: var(--lb-line);
+  overflow: hidden;
+  margin-top: 2px;
+}
+
+.lb-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--lb-blue);
+  transition: width 0.25s;
+}
+
+.lb-bar-fill.is-done {
+  background: var(--lb-ok);
+}
+
+.lb-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.lb-tag {
+  font-size: 10px;
+  color: var(--lb-muted);
+  border: 1px solid var(--lb-line-2);
+  border-radius: 999px;
+  padding: 1px 6px;
+}
+
+/* --- Полка «Продолжить чтение» --- */
+
+.lb-continue {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.lb-continue .lb-book {
+  min-width: 150px;
+  max-width: 150px;
+}
+
+/* --- Модалка --- */
+
+.lb-modal-back {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 60;
+  padding: 16px;
+}
+
+.lb-modal {
+  background: var(--lb-card);
+  border: 1px solid var(--lb-line-2);
+  border-radius: 14px;
+  padding: 16px;
+  width: min(720px, 100%);
+  max-height: 90vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.lb-modal-top {
+  display: grid;
+  grid-template-columns: 140px minmax(0, 1fr);
+  gap: 14px;
+}
+
+@media (max-width: 640px) {
+  .lb-modal-top {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.lb-form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 10px;
+}
+
+.lb-form-grid .lb-input,
+.lb-form-grid .lb-select {
+  width: 100%;
+}
+
+.lb-full {
+  grid-column: 1 / -1;
+}
+
+.lb-dropzone {
+  border: 1px dashed var(--lb-line-2);
+  border-radius: 12px;
+  padding: 18px;
+  text-align: center;
+  color: var(--lb-muted);
+  font-size: 13px;
+}
+
+.lb-dropzone.is-dragging {
+  border-color: var(--lb-blue);
+  color: var(--lb-text);
+}
