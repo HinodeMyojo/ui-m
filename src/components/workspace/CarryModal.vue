@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed } from "vue";
+import { ref, computed, watch } from "vue";
 import { placeWorkItem } from "@/components/api.js";
 
 const props = defineProps({
@@ -10,6 +10,40 @@ const emit = defineEmits(["close", "done"]);
 
 const chosen = ref(new Set());
 const mode = ref("move");
+// Дедлайн едет вместе с карточкой на столько же дней — время суток остаётся
+// прежним. Иначе перенесённая задача сразу висит просроченной со вчера, и её
+// приходится править руками по одной. Выбор запоминается между заходами.
+const shiftDeadline = ref(localStorage.getItem("carryShiftDeadline") !== "off");
+
+watch(shiftDeadline, (on) => {
+  localStorage.setItem("carryShiftDeadline", on ? "on" : "off");
+});
+
+// Сколько выбранных карточек реально получат новый дедлайн — чтобы подпись
+// не обещала того, чего не будет.
+const withDeadline = computed(() => {
+  let count = 0;
+  for (const day of props.carry) {
+    for (const item of day.items) {
+      if (chosen.value.has(item.id) && item.deadline) count++;
+    }
+  }
+  return count;
+});
+
+function shiftedDeadlineLabel(item, fromDate) {
+  if (!item.deadline) return "";
+  const deadline = new Date(item.deadline);
+  const days = Math.round(
+    (new Date(props.date + "T12:00:00") - new Date(fromDate + "T12:00:00")) / 86400000,
+  );
+  const moved = new Date(deadline);
+  moved.setDate(moved.getDate() + days);
+  const time = moved.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
+  return shiftDeadline.value
+    ? `дедлайн → сегодня ${time}`
+    : `дедлайн ${deadline.toLocaleDateString("ru-RU", { day: "numeric", month: "short" })} ${time}`;
+}
 const busy = ref(false);
 const error = ref("");
 
@@ -53,6 +87,9 @@ async function apply() {
           date: props.date,
           fromDate: day.date,
           mode: mode.value,
+          // Дедлайн двигается только при переносе: у копии и связи старый день
+          // никуда не делся, и трогать его срок неправильно.
+          shiftDeadline: shiftDeadline.value && mode.value === "move",
         });
       }
     }
@@ -86,6 +123,14 @@ async function apply() {
       </div>
       <div class="cm-hint">{{ MODES.find((m) => m.key === mode).hint }}</div>
 
+      <label v-if="mode === 'move'" class="cm-shift">
+        <input v-model="shiftDeadline" type="checkbox" />
+        <span>
+          Дедлайны — на сегодня, время оставить прежним
+          <template v-if="withDeadline"> · затронет {{ withDeadline }}</template>
+        </span>
+      </label>
+
       <div class="cm-body">
         <div v-if="!total" class="cm-note">Незакрытых карточек за прошлые дни нет 🎉</div>
 
@@ -103,6 +148,9 @@ async function apply() {
             <input type="checkbox" :checked="chosen.has(item.id)" @change="toggle(item.id)" />
             <span class="cm-emoji">{{ item.emoji || "•" }}</span>
             <span class="cm-title">{{ item.title }}</span>
+            <span v-if="item.deadline" class="cm-deadline" :class="{ moved: shiftDeadline && mode === 'move' }">
+              {{ shiftedDeadlineLabel(item, day.date) }}
+            </span>
             <span class="cm-status" :class="'st-' + item.status">
               {{ item.status === "doing" ? "в работе" : item.status === "paused" ? "пауза" : "не начата" }}
             </span>
@@ -167,6 +215,26 @@ async function apply() {
   color: #8f95a6;
   font-size: 18px;
   cursor: pointer;
+}
+
+.cm-shift {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #b9bfd0;
+  padding: 6px 2px 0;
+  cursor: pointer;
+}
+
+.cm-deadline {
+  font-size: 11px;
+  color: #7a7f8e;
+  white-space: nowrap;
+}
+
+.cm-deadline.moved {
+  color: #63c94f;
 }
 
 .cm-modes {

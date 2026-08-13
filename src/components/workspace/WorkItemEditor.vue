@@ -78,6 +78,7 @@ const fileInput = ref(null);
 const syncing = ref(false);
 const showDangerZone = ref(false);
 const moveDate = ref(props.date);
+const moveShiftDeadline = ref(true);
 
 let saveTimer = null;
 let skipNextSave = false;
@@ -282,6 +283,25 @@ function allDayDeadline() {
   const d = new Date(props.date + "T23:59:00");
   form.value.deadline = d.toISOString();
   form.value.deadlineHasTime = false;
+}
+
+// Сдвигает дедлайн на сегодня, сохраняя время суток. Именно прибавлением целых
+// суток: подстановка новой даты в разных часовых поясах уводила бы время.
+function deadlineToToday() {
+  if (!form.value.deadline) {
+    // Дедлайна нет вовсе — ставим конец сегодняшнего дня, это ожидаемее пустоты.
+    allDayDeadline();
+    return;
+  }
+  const deadline = new Date(form.value.deadline);
+  const startOfDeadlineDay = new Date(deadline.getFullYear(), deadline.getMonth(), deadline.getDate());
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const days = Math.round((startOfToday - startOfDeadlineDay) / 86400000);
+  if (days === 0) return;
+  deadline.setDate(deadline.getDate() + days);
+  form.value.deadline = deadline.toISOString();
+  scheduleSave();
 }
 
 function clearDeadline() {
@@ -558,7 +578,13 @@ async function moveTo(mode) {
   if (!moveDate.value) return;
   try {
     await save({ silent: true });
-    await placeWorkItem(props.item.id, { date: moveDate.value, fromDate: props.date, mode });
+    await placeWorkItem(props.item.id, {
+      date: moveDate.value,
+      fromDate: props.date,
+      mode,
+      // Дедлайн едет вместе с карточкой, время суток сохраняется.
+      shiftDeadline: mode === "move" && moveShiftDeadline.value,
+    });
     emit("changed", { keepSelection: mode !== "move" });
   } catch (e) {
     error.value = e.message;
@@ -662,6 +688,9 @@ const totalSpent = computed(
         <div class="wie-quick">
           <button v-for="p in DEADLINE_PRESETS" :key="p.key" class="wie-chip" @click="presetDeadline(p.hour)">
             {{ p.label }}
+          </button>
+          <button class="wie-chip" title="Дата — сегодня, время прежнее" @click="deadlineToToday">
+            на сегодня
           </button>
           <button class="wie-chip" @click="relativeDeadline(1)">+1 ч</button>
           <button class="wie-chip" @click="relativeDeadline(2)">+2 ч</button>
@@ -906,6 +935,9 @@ const totalSpent = computed(
         </div>
         <div class="wie-move">
           <input v-model="moveDate" type="date" class="wie-input" />
+          <label class="wie-dim" style="display: flex; align-items: center; gap: 4px">
+            <input v-model="moveShiftDeadline" type="checkbox" /> дедлайн тоже
+          </label>
           <button class="wie-chip" @click="moveTo('move')">Перенести</button>
           <button class="wie-chip" @click="moveTo('link')">Связать</button>
           <button class="wie-chip" @click="moveTo('copy')">Копия</button>
