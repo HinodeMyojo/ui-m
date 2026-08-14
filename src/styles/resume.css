@@ -1,0 +1,597 @@
+/* Стили модуля «Резюме» — docs/resume-module.md (back-m).
+   Глобальный файл по образцу roadmap.css. Все классы с префиксом rs-.
+
+   Отдельная история — лист А4 (.rs-sheet): он рисуется светлым и в тех же
+   пропорциях, что печать, потому что превью обязано совпадать с PDF. */
+
+.rs {
+  --rs-bg: #18191f;
+  --rs-card: #1e2027;
+  --rs-card-2: #22242d;
+  --rs-line: #2a2d38;
+  --rs-line-2: #2f3340;
+  --rs-text: #e8eaf2;
+  --rs-muted: #7a7f8e;
+  --rs-blue: #1767fd;
+  --rs-accent: #6e4aff;
+  --rs-ok: #22c55e;
+  --rs-warn: #f59e0b;
+  --rs-plan: #8b5cf6;
+  --rs-bad: #e5484d;
+
+  width: 100%;
+  min-height: 100vh;
+  background: var(--rs-bg);
+  color: var(--rs-text);
+  padding: 16px clamp(10px, 3vw, 40px) 80px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  box-sizing: border-box;
+}
+
+.rs-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.rs-header h1 {
+  margin: 0;
+  font-size: 22px;
+}
+
+.rs-sub {
+  color: var(--rs-muted);
+  font-size: 13px;
+}
+
+.rs-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.rs-spacer {
+  flex: 1;
+}
+
+.rs-btn {
+  background: var(--rs-card);
+  color: var(--rs-text);
+  border: 1px solid var(--rs-line);
+  border-radius: 10px;
+  padding: 7px 12px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: 0.15s;
+  white-space: nowrap;
+}
+
+.rs-btn:hover {
+  border-color: var(--rs-blue);
+}
+
+.rs-btn.is-primary {
+  background: var(--rs-blue);
+  border-color: var(--rs-blue);
+  color: #fff;
+}
+
+.rs-btn.is-danger:hover {
+  border-color: var(--rs-bad);
+  color: var(--rs-bad);
+}
+
+.rs-btn.is-active {
+  border-color: var(--rs-accent);
+  color: #fff;
+}
+
+.rs-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.rs-btn.is-small {
+  padding: 4px 8px;
+  font-size: 12px;
+  border-radius: 8px;
+}
+
+.rs-input,
+.rs-select,
+.rs-textarea {
+  background: var(--rs-card-2);
+  border: 1px solid var(--rs-line);
+  border-radius: 10px;
+  color: var(--rs-text);
+  padding: 7px 10px;
+  font-size: 13px;
+  font-family: inherit;
+  outline: none;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.rs-input:focus,
+.rs-select:focus,
+.rs-textarea:focus {
+  border-color: var(--rs-blue);
+}
+
+.rs-textarea {
+  resize: vertical;
+  min-height: 64px;
+  line-height: 1.4;
+}
+
+.rs-label {
+  display: block;
+  font-size: 12px;
+  color: var(--rs-muted);
+  margin: 0 0 4px;
+}
+
+.rs-field {
+  margin: 0 0 10px;
+}
+
+.rs-error {
+  color: var(--rs-bad);
+  font-size: 13px;
+}
+
+/* --- Список резюме --- */
+
+.rs-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 12px;
+}
+
+.rs-card {
+  background: var(--rs-card);
+  border: 1px solid var(--rs-line);
+  border-radius: 14px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.rs-card h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.rs-card-role {
+  color: var(--rs-muted);
+  font-size: 13px;
+}
+
+.rs-chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.rs-chip {
+  border: 1px solid var(--rs-line-2);
+  border-radius: 999px;
+  padding: 2px 9px;
+  font-size: 12px;
+  color: var(--rs-muted);
+}
+
+.rs-chip.is-fact {
+  color: var(--rs-ok);
+  border-color: rgba(34, 197, 94, 0.4);
+}
+
+.rs-chip.is-progress {
+  color: var(--rs-warn);
+  border-color: rgba(245, 158, 11, 0.4);
+}
+
+.rs-chip.is-plan {
+  color: var(--rs-plan);
+  border-color: rgba(139, 92, 246, 0.4);
+}
+
+.rs-chip.is-bad {
+  color: var(--rs-bad);
+  border-color: rgba(229, 72, 77, 0.4);
+}
+
+.rs-chip.is-ready {
+  color: var(--rs-blue);
+  border-color: rgba(23, 103, 253, 0.5);
+}
+
+/* --- Редактор: три колонки --- */
+
+.rs-editor {
+  display: grid;
+  grid-template-columns: 230px minmax(0, 1fr) 330px;
+  gap: 14px;
+  align-items: start;
+}
+
+@media (max-width: 1200px) {
+  .rs-editor {
+    grid-template-columns: 1fr;
+  }
+}
+
+.rs-pane {
+  background: var(--rs-card);
+  border: 1px solid var(--rs-line);
+  border-radius: 14px;
+  padding: 12px;
+}
+
+.rs-pane h4 {
+  margin: 0 0 8px;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--rs-muted);
+}
+
+.rs-tree-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.rs-tree-item:hover {
+  background: var(--rs-card-2);
+}
+
+.rs-tree-item.is-hidden {
+  opacity: 0.45;
+}
+
+.rs-tree-drag {
+  color: var(--rs-muted);
+  cursor: grab;
+}
+
+/* --- Лист А4 --- */
+
+.rs-sheet-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: center;
+}
+
+.rs-sheet {
+  --sheet-accent: #111111;
+  background: #fff;
+  color: #111;
+  width: 210mm;
+  max-width: 100%;
+  min-height: 297mm;
+  padding: 14mm 15mm;
+  box-sizing: border-box;
+  font-family: Calibri, Arial, Helvetica, sans-serif;
+  font-size: 10.5pt;
+  line-height: 1.35;
+  position: relative;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+  border-radius: 2px;
+}
+
+.rs-sheet h1 {
+  font-size: 18pt;
+  margin: 0 0 2mm;
+}
+
+.rs-sheet-headline {
+  font-size: 11.5pt;
+  font-weight: 600;
+  margin: 0 0 2mm;
+  color: var(--sheet-accent);
+}
+
+.rs-sheet-contacts {
+  font-size: 9.5pt;
+  margin: 0 0 5mm;
+  color: #333;
+}
+
+.rs-sheet h2 {
+  font-size: 11pt;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin: 5mm 0 2mm;
+  padding-bottom: 1mm;
+  border-bottom: 1px solid #bbb;
+  color: var(--sheet-accent);
+}
+
+.rs-sheet-entry {
+  margin: 0 0 3.5mm;
+}
+
+.rs-sheet-entry-head {
+  font-weight: 700;
+}
+
+.rs-sheet-entry-meta {
+  font-size: 9.5pt;
+  color: #444;
+}
+
+.rs-sheet ul {
+  margin: 1mm 0 0;
+  padding-left: 5mm;
+}
+
+.rs-sheet li {
+  margin: 0 0 1mm;
+}
+
+.rs-sheet-skills {
+  margin: 0 0 1.5mm;
+}
+
+/* Плановая строка: приглушена и помечена. В чистый экспорт она не попадёт. */
+.rs-line.is-planned {
+  color: #8b5cf6;
+}
+
+.rs-line.is-progress {
+  color: #a16207;
+}
+
+.rs-line.is-overdue {
+  text-decoration: underline wavy rgba(229, 72, 77, 0.6);
+}
+
+.rs-line-mark {
+  font-size: 8.5pt;
+  opacity: 0.8;
+  margin-right: 3px;
+}
+
+.rs-line-target {
+  display: block;
+  font-size: 9pt;
+  color: #6b7280;
+  font-style: italic;
+}
+
+.rs-line-links {
+  font-size: 8.5pt;
+  color: #2563eb;
+  margin-left: 4px;
+}
+
+.rs-line.is-selected {
+  outline: 2px solid rgba(23, 103, 253, 0.5);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+.rs-line-editable:focus {
+  outline: 2px solid rgba(23, 103, 253, 0.7);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+/* Граница первой страницы: дальше HR обычно не читает. */
+.rs-page-break {
+  position: absolute;
+  left: 0;
+  right: 0;
+  border-top: 1px dashed #e5484d;
+  pointer-events: none;
+}
+
+.rs-page-break span {
+  position: absolute;
+  right: 4mm;
+  top: -9px;
+  background: #fff;
+  padding: 0 6px;
+  font-size: 8pt;
+  color: #e5484d;
+}
+
+/* --- Боковая панель --- */
+
+.rs-side-tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.rs-link-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--rs-line);
+  font-size: 13px;
+}
+
+.rs-link-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rs-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--rs-line-2);
+  flex: none;
+}
+
+.rs-dot.is-done {
+  background: var(--rs-ok);
+}
+
+.rs-lint-item {
+  border-left: 3px solid var(--rs-line-2);
+  padding: 6px 0 6px 10px;
+  margin-bottom: 8px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.rs-lint-item.is-error {
+  border-color: var(--rs-bad);
+}
+
+.rs-lint-item.is-warn {
+  border-color: var(--rs-warn);
+}
+
+.rs-lint-item.is-info {
+  border-color: var(--rs-blue);
+}
+
+.rs-lint-hint {
+  color: var(--rs-muted);
+  font-size: 12px;
+  margin-top: 2px;
+}
+
+.rs-guide h5 {
+  margin: 12px 0 4px;
+  font-size: 13px;
+}
+
+.rs-guide p,
+.rs-guide li {
+  font-size: 12.5px;
+  color: #c3c7d4;
+  line-height: 1.45;
+}
+
+.rs-guide ul {
+  margin: 4px 0;
+  padding-left: 16px;
+}
+
+.rs-guide details {
+  border-bottom: 1px solid var(--rs-line);
+  padding: 6px 0;
+}
+
+.rs-guide summary {
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* --- Мобильная страница --- */
+
+.rs-today-card {
+  background: var(--rs-card);
+  border: 1px solid var(--rs-line);
+  border-radius: 14px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.rs-today-card.is-overdue {
+  border-color: rgba(229, 72, 77, 0.5);
+}
+
+.rs-today-card.is-ready {
+  border-color: rgba(34, 197, 94, 0.5);
+}
+
+.rs-progress {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--rs-line);
+  overflow: hidden;
+}
+
+.rs-progress > i {
+  display: block;
+  height: 100%;
+  background: var(--rs-ok);
+}
+
+/* --- Требования вакансии --- */
+
+.rs-req {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--rs-line);
+  font-size: 13px;
+}
+
+.rs-req.is-covered .rs-req-text {
+  color: var(--rs-ok);
+}
+
+.rs-req.is-missing .rs-req-text {
+  color: var(--rs-bad);
+}
+
+.rs-req-text {
+  flex: 1;
+}
+
+.rs-two {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 14px;
+}
+
+@media (max-width: 900px) {
+  .rs-two {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* --- Печать --- */
+
+@page {
+  size: A4;
+  margin: 14mm 15mm;
+}
+
+@media print {
+  .rs-print-hide,
+  .rs-page-break {
+    display: none !important;
+  }
+
+  body,
+  #app {
+    background: #fff !important;
+    display: block !important;
+  }
+
+  .rs-sheet {
+    box-shadow: none;
+    width: auto;
+    min-height: auto;
+    padding: 0;
+    border-radius: 0;
+  }
+}

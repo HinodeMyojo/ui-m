@@ -134,6 +134,38 @@ const router = createRouter({
       component: () => import("../views/RoadmapTodayView.vue"),
     },
     {
+      path: "/resume",
+      name: "Resume",
+      component: () => import("../views/ResumeView.vue"),
+    },
+    {
+      // Мобильная раскладка: плановые строки по дедлайну. Не адаптив.
+      path: "/resume/today",
+      name: "ResumeToday",
+      component: () => import("../views/ResumeTodayView.vue"),
+    },
+    {
+      path: "/resume/library",
+      name: "ResumeLibrary",
+      component: () => import("../views/ResumeLibraryView.vue"),
+    },
+    {
+      path: "/resume/vacancies",
+      name: "ResumeVacancies",
+      component: () => import("../views/ResumeVacanciesView.vue"),
+    },
+    {
+      path: "/resume/:id",
+      name: "ResumeEditor",
+      component: () => import("../views/ResumeEditorView.vue"),
+    },
+    {
+      // PDF печатает браузер: превью и печать — один и тот же компонент.
+      path: "/resume/:id/print",
+      name: "ResumePrint",
+      component: () => import("../views/ResumePrintView.vue"),
+    },
+    {
       // Гостевой доступ по ссылке — вход в приложение не нужен.
       path: "/travel/shared/:token",
       name: "SharedTrip",
