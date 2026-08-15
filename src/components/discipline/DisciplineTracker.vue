@@ -4,6 +4,12 @@ import confetti from "canvas-confetti";
 import { useRouter } from "vue-router";
 import { fetchDisciplineMonth, disciplineLogicalToday } from "../api.js";
 import DisciplineChecklist from "./DisciplineChecklist.vue";
+import {
+  STATUS_COLORS,
+  STATUS_LABELS,
+  dayCellStyle,
+  dayCellTitle,
+} from "./dayScale.js";
 import RoadmapWidget from "@/components/roadmap/RoadmapWidget.vue";
 
 const router = useRouter();
@@ -21,27 +27,6 @@ const today = ref(disciplineLogicalToday());
 const heatmapOpen = ref(false);
 const sheetOpen = ref(false);
 const modalDate = ref(null); // просмотр/правка произвольного дня
-
-const STATUS_COLORS = {
-  pre: "#3a3d47",
-  future: "#2a2d38",
-  pending: "#5b616e",
-  fail: "#e5484d",
-  rest: "#4aa8ff",
-  min: "#ffd666",
-  mid: "#63c94f",
-  max: "#8b5cf6",
-};
-const STATUS_LABELS = {
-  pre: "вне учёта",
-  future: "впереди",
-  pending: "в процессе",
-  fail: "провал",
-  rest: "отдых",
-  min: "минимум",
-  mid: "средний",
-  max: "макс",
-};
 
 async function load() {
   today.value = disciplineLogicalToday();
@@ -188,7 +173,7 @@ function weekdayName(dateStr) {
         </button>
         <div v-if="heatmapOpen" class="dsc-heatmap">
           <div v-for="d in month.days" :key="d.date" class="dsc-cell" :class="{ 'dsc-cell-today': d.date === today }"
-            :style="{ background: STATUS_COLORS[d.status] }" :title="`${d.day}: ${STATUS_LABELS[d.status]}${d.note ? ' — ' + d.note : ''}`"
+            :style="dayCellStyle(d)" :title="dayCellTitle(d)"
             @click="openDay(d)">
             <span v-if="d.maxedSkills.length > 1" class="dsc-cell-star">⭐</span>
           </div>
@@ -236,7 +221,7 @@ function weekdayName(dateStr) {
           <div class="dsc-prognosis">{{ prognosis }}</div>
           <div class="dsc-heatmap">
             <div v-for="d in month.days" :key="d.date" class="dsc-cell" :class="{ 'dsc-cell-today': d.date === today }"
-              :style="{ background: STATUS_COLORS[d.status] }" @click="openDay(d)"></div>
+              :style="dayCellStyle(d)" :title="dayCellTitle(d)" @click="openDay(d)"></div>
           </div>
           <DisciplineChecklist :month="month" :date="today" @changed="load" />
         </div>

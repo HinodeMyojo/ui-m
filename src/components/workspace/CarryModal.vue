@@ -9,11 +9,16 @@ const props = defineProps({
 const emit = defineEmits(["close", "done"]);
 
 const chosen = ref(new Set());
-const mode = ref("move");
-// Дедлайн едет вместе с карточкой на столько же дней — время суток остаётся
-// прежним. Иначе перенесённая задача сразу висит просроченной со вчера, и её
+// По умолчанию связываем: карточка остаётся в своём дне, а история дней —
+// честной. Перенос выдёргивает её из прошлого, поэтому он вторым.
+const mode = ref("link");
+// Дедлайн переезжает на тот же день, что и карточка, время суток остаётся
+// прежним. Иначе взятая задача сразу висит просроченной со вчера, и её
 // приходится править руками по одной. Выбор запоминается между заходами.
 const shiftDeadline = ref(localStorage.getItem("carryShiftDeadline") !== "off");
+// У копии карточка новая — её срок к прошлой не относится.
+const canShift = computed(() => mode.value !== "copy");
+const shifts = computed(() => shiftDeadline.value && canShift.value);
 
 watch(shiftDeadline, (on) => {
   localStorage.setItem("carryShiftDeadline", on ? "on" : "off");
@@ -31,25 +36,30 @@ const withDeadline = computed(() => {
   return count;
 });
 
-function shiftedDeadlineLabel(item, fromDate) {
+const isToday = computed(() => props.date === new Date().toLocaleDateString("sv-SE"));
+const targetLabel = computed(() =>
+  isToday.value
+    ? "сегодня"
+    : new Date(props.date + "T12:00:00").toLocaleDateString("ru-RU", {
+        day: "numeric",
+        month: "short",
+      }),
+);
+
+function shiftedDeadlineLabel(item) {
   if (!item.deadline) return "";
   const deadline = new Date(item.deadline);
-  const days = Math.round(
-    (new Date(props.date + "T12:00:00") - new Date(fromDate + "T12:00:00")) / 86400000,
-  );
-  const moved = new Date(deadline);
-  moved.setDate(moved.getDate() + days);
-  const time = moved.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
-  return shiftDeadline.value
-    ? `дедлайн → сегодня ${time}`
+  const time = deadline.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
+  return shifts.value
+    ? `дедлайн → ${targetLabel.value} ${time}`
     : `дедлайн ${deadline.toLocaleDateString("ru-RU", { day: "numeric", month: "short" })} ${time}`;
 }
 const busy = ref(false);
 const error = ref("");
 
 const MODES = [
-  { key: "move", label: "Перенести", hint: "та же карточка переедет в сегодня, из старого дня исчезнет" },
   { key: "link", label: "Связать", hint: "одна и та же карточка будет видна и там, и здесь" },
+  { key: "move", label: "Перенести", hint: "та же карточка переедет сюда, из старого дня исчезнет" },
   { key: "copy", label: "Копия", hint: "новая независимая карточка с тем же содержимым" },
 ];
 
@@ -87,9 +97,7 @@ async function apply() {
           date: props.date,
           fromDate: day.date,
           mode: mode.value,
-          // Дедлайн двигается только при переносе: у копии и связи старый день
-          // никуда не делся, и трогать его срок неправильно.
-          shiftDeadline: shiftDeadline.value && mode.value === "move",
+          shiftDeadline: shifts.value,
         });
       }
     }
@@ -123,10 +131,10 @@ async function apply() {
       </div>
       <div class="cm-hint">{{ MODES.find((m) => m.key === mode).hint }}</div>
 
-      <label v-if="mode === 'move'" class="cm-shift">
+      <label v-if="canShift" class="cm-shift">
         <input v-model="shiftDeadline" type="checkbox" />
         <span>
-          Дедлайны — на сегодня, время оставить прежним
+          Дедлайны — на {{ targetLabel }}, время оставить прежним
           <template v-if="withDeadline"> · затронет {{ withDeadline }}</template>
         </span>
       </label>
@@ -148,8 +156,8 @@ async function apply() {
             <input type="checkbox" :checked="chosen.has(item.id)" @change="toggle(item.id)" />
             <span class="cm-emoji">{{ item.emoji || "•" }}</span>
             <span class="cm-title">{{ item.title }}</span>
-            <span v-if="item.deadline" class="cm-deadline" :class="{ moved: shiftDeadline && mode === 'move' }">
-              {{ shiftedDeadlineLabel(item, day.date) }}
+            <span v-if="item.deadline" class="cm-deadline" :class="{ moved: shifts }">
+              {{ shiftedDeadlineLabel(item) }}
             </span>
             <span class="cm-status" :class="'st-' + item.status">
               {{ item.status === "doing" ? "в работе" : item.status === "paused" ? "пауза" : "не начата" }}
@@ -164,7 +172,7 @@ async function apply() {
         <span class="cm-count">Выбрано: {{ chosen.size }}</span>
         <button class="cm-btn" @click="emit('close')">Закрыть</button>
         <button class="cm-btn primary" :disabled="!chosen.size || busy" @click="apply">
-          {{ busy ? "Переношу…" : "Забрать в этот день" }}
+          {{ busy ? "Забираю…" : "Забрать в этот день" }}
         </button>
       </div>
     </div>

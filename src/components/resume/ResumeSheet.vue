@@ -50,7 +50,9 @@ function progressSuffix(deadline) {
 }
 
 function bulletText(bullet) {
-  if (clean.value && bullet.status === "in_progress") {
+  // Под правкой показываем сырой текст: иначе метка «(в процессе)» при
+  // сохранении уехала бы в само поле и накапливалась бы там.
+  if (!props.editable && clean.value && bullet.status === "in_progress") {
     return bullet.text + progressSuffix(bullet.deadline);
   }
   return bullet.text;
@@ -219,12 +221,28 @@ function onHeaderInput(field, event) {
             <span v-if="!clean && entry.status !== 'fact'" class="rs-line-mark">
               {{ entry.status === "planned" ? "◇ план" : "◈ в процессе" }}
             </span>
-            <span
-              class="rs-line-editable"
-              :contenteditable="editable"
-              @blur="onEntryInput(entry, 'title', $event)"
-              v-text="entryHead(entry)"
-            />
+            <!-- Организация и должность правятся раздельно. Один общий
+                 contenteditable на «Компания — Должность» писал бы всю строку
+                 в title, а рендер снова подставлял бы организацию впереди —
+                 и она размножалась бы с каждым сохранением. -->
+            <template v-if="editable">
+              <span
+                class="rs-line-editable"
+                data-placeholder="организация"
+                contenteditable
+                @blur="onEntryInput(entry, 'organization', $event)"
+                v-text="entry.organization"
+              />
+              <span class="rs-line-sep"> — </span>
+              <span
+                class="rs-line-editable"
+                data-placeholder="должность"
+                contenteditable
+                @blur="onEntryInput(entry, 'title', $event)"
+                v-text="entry.title"
+              />
+            </template>
+            <span v-else>{{ entryHead(entry) }}</span>
           </div>
           <div v-if="entryMeta(entry)" class="rs-sheet-entry-meta">{{ entryMeta(entry) }}</div>
           <div v-if="entry.description">{{ entry.description }}</div>

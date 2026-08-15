@@ -723,7 +723,8 @@ export async function setWorkItemStatus(id, data) {
 export async function placeWorkItem(id, data) {
   const response = await authorizedFetch(`${W}/items/${id}/place`, {
     method: "POST",
-    body: JSON.stringify(data),
+    // Зона нужна для переезда дедлайна: в UTC «23:30 МСК» — это уже вчера.
+    body: JSON.stringify({ tz: clientTimeZone(), ...data }),
   });
   return workJson(response, "не удалось перенести карточку");
 }

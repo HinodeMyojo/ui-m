@@ -153,7 +153,7 @@ function onEditEntry(patch) {
   return run(() =>
     updateEntry(patch.id, {
       title: patch.title ?? entry.title,
-      organization: entry.organization,
+      organization: patch.organization ?? entry.organization,
       location: entry.location,
       dateStart: entry.dateStart || null,
       dateEnd: entry.dateEnd || null,

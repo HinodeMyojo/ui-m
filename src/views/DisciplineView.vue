@@ -19,6 +19,12 @@ import {
 } from "@/components/api.js";
 import DisciplineChecklist from "@/components/discipline/DisciplineChecklist.vue";
 import DisciplinePlanEditor from "@/components/discipline/DisciplinePlanEditor.vue";
+import {
+  STATUS_COLORS,
+  STATUS_LABELS,
+  dayCellStyle,
+  dayCellTitle,
+} from "@/components/discipline/dayScale.js";
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, PointElement, LineElement, Tooltip, Legend, Filler);
 
@@ -36,14 +42,6 @@ const editorOpen = ref(false);
 const MONTH_NAMES = ["", "Январь", "Февраль", "Март", "Апрель", "Май", "Июнь",
   "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"];
 
-const STATUS_COLORS = {
-  pre: "#3a3d47", future: "#2a2d38", pending: "#5b616e", fail: "#e5484d",
-  rest: "#4aa8ff", min: "#ffd666", mid: "#63c94f", max: "#8b5cf6",
-};
-const STATUS_LABELS = {
-  pre: "вне учёта", future: "впереди", pending: "в процессе", fail: "провал",
-  rest: "отдых", min: "минимум", mid: "средний", max: "макс",
-};
 const VERDICT_LABELS = { pending: "месяц идёт", passed: "✅ месяц зачтён", failed: "❌ месяц не зачтён" };
 
 async function load() {
@@ -312,8 +310,8 @@ const monthsChart = computed(() => {
             </tr>
             <tr>
               <th class="dv-matrix-skill dv-matrix-status-label">День</th>
-              <td v-for="d in month.days" :key="d.day" class="dv-matrix-cell" :title="STATUS_LABELS[d.status]"
-                :style="{ background: STATUS_COLORS[d.status] }" @click="d.status !== 'pre' && (modalDate = d.date)">
+              <td v-for="d in month.days" :key="d.day" class="dv-matrix-cell" :title="dayCellTitle(d)"
+                :style="dayCellStyle(d)" @click="d.status !== 'pre' && (modalDate = d.date)">
               </td>
             </tr>
           </thead>
@@ -333,6 +331,10 @@ const monthsChart = computed(() => {
       <div class="dv-legend">
         <span v-for="(color, key) in STATUS_COLORS" :key="key" class="dv-legend-item">
           <i :style="{ background: color }"></i>{{ STATUS_LABELS[key] }}
+        </span>
+        <span class="dv-legend-item">
+          <i :style="dayCellStyle({ status: 'fail', minDone: 1, minTotal: 2 })"></i>
+          сделано частично
         </span>
       </div>
 

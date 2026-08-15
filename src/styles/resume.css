@@ -389,6 +389,16 @@
   border-radius: 3px;
 }
 
+/* Пустое поле иначе схлопывается в ноль ширины, и в него нечем попасть курсором. */
+.rs-line-editable[data-placeholder]:empty::before {
+  content: attr(data-placeholder);
+  color: #9aa1ab;
+}
+
+.rs-line-sep {
+  color: inherit;
+}
+
 /* Граница первой страницы: дальше HR обычно не читает. */
 .rs-page-break {
   position: absolute;
