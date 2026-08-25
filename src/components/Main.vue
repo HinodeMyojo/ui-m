@@ -23,6 +23,7 @@ import TimeStatsModal from "@/components/elements/TimeStatsModal.vue";
 
 import SkillsMiniWidget from "./elements/SkillsMiniWidget.vue";
 import DisciplineTracker from "./discipline/DisciplineTracker.vue";
+import RoadmapStatusBar from "./roadmap/RoadmapStatusBar.vue";
 import AgeCounter from "./elements/AgeCounter.vue";
 
 const DEFAULT_TASK_COLOR = "#25636A";
@@ -812,6 +813,9 @@ function closeTimeStats() {
         </div>
       </div>
     </div>
+    <!-- Отставание по roadmap'у — сразу под шапкой, docs/roadmap-module.md -->
+    <RoadmapStatusBar />
+
     <div class="body-wrap">
     <div class="body">
       <div class="columns-container" ref="calendarRef" @dragover="handleDragOver" @drop="handleDrop">

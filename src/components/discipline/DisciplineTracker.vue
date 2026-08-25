@@ -10,7 +10,6 @@ import {
   dayCellStyle,
   dayCellTitle,
 } from "./dayScale.js";
-import RoadmapWidget from "@/components/roadmap/RoadmapWidget.vue";
 
 const router = useRouter();
 
@@ -182,9 +181,8 @@ function weekdayName(dateStr) {
         <div class="dsc-today-label">Сегодня, {{ parseInt(today.slice(8)) }} число · {{ weekdayName(today) }}</div>
         <DisciplineChecklist :month="month" :date="today" @changed="load" />
 
-        <!-- Виджет активного roadmap'а — docs/roadmap-module.md. Живёт в этой же
-             правой колонке: чтение и дисциплина смотрятся вместе. -->
-        <RoadmapWidget />
+        <!-- Виджет roadmap'а переехал в полосу под шапкой (RoadmapStatusBar):
+             отставание должно быть видно сразу, а не в конце правой колонки. -->
       </template>
 
       <div v-else class="dsc-loading">Загрузка…</div>
