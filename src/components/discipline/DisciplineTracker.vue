@@ -562,14 +562,17 @@ function weekdayName(dateStr) {
     position: fixed;
     left: 0;
     right: 0;
-    bottom: 0;
+    /* Садится над нижним меню мобильного слоя, а не под него: 58px — высота
+       таб-бара, env() — «подбородок» айфона. Сюда попадают только с
+       /?desktop=1, месячной сеткой на телефоне. */
+    bottom: calc(58px + env(safe-area-inset-bottom, 0px));
     z-index: 1100;
     background: #14161cf2;
     border-top: 1px solid #262933;
     backdrop-filter: blur(6px);
     align-items: center;
     gap: 8px;
-    padding: 10px 14px calc(10px + env(safe-area-inset-bottom));
+    padding: 10px 14px;
     cursor: pointer;
   }
 

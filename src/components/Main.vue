@@ -791,12 +791,12 @@ function closeTimeStats() {
         <AgeCounter />
       </div>
       <div class="header-center">
-        <v-icon icon="mdi-chevron-left" size="large" class="month-nav-icon" @click="handlePrevMonth" />
+        <button class="month-nav-icon" aria-label="Предыдущий месяц" @click="handlePrevMonth">‹</button>
         <div class="month-block">
           <h3>{{ getMonthName(currentMonth) }}</h3>
           <span class="year-label">{{ currentYear }}</span>
         </div>
-        <v-icon icon="mdi-chevron-right" size="large" class="month-nav-icon" @click="handleNextMonth" />
+        <button class="month-nav-icon" aria-label="Следующий месяц" @click="handleNextMonth">›</button>
       </div>
       <div class="header-right">
         <button class="add-task-btn" @click="router.push('/today')">Сегодня</button>
@@ -1841,6 +1841,14 @@ function closeTimeStats() {
 .month-nav-icon {
   color: #fff;
   cursor: pointer;
+  background: none;
+  border: none;
+  /* Пальцем по стрелке месяца тоже попадают — 44px, как везде на телефоне. */
+  min-width: 44px;
+  min-height: 44px;
+  font-size: 30px;
+  line-height: 1;
+  padding: 0;
 }
 
 .month-nav-icon:hover {

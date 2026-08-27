@@ -16,8 +16,10 @@
 
 <script setup>
 import { ref, watch, computed, onMounted, onBeforeUnmount, toRaw } from 'vue';
-import { TextLayer, AnnotationMode } from 'pdfjs-dist';
 import 'pdfjs-dist/web/pdf_viewer.css';
+// Берём ту же сборку pdf.js, что подняла читалка: их две (обычная и legacy для
+// старых Safari), и мешать классы из разных нельзя.
+import { pdfjs } from '../composables/usePdfLoader.js';
 import PdfAnnotationLayer from './PdfAnnotationLayer.vue';
 
 const props = defineProps({
@@ -126,6 +128,7 @@ async function render() {
         ctx.fillStyle = '#ffffff';
         ctx.fillRect(0, 0, viewport.width, viewport.height);
 
+        const { AnnotationMode } = pdfjs();
         renderTask = page.render({ canvasContext: ctx, viewport, annotationMode: AnnotationMode.ENABLE_FORMS });
         await renderTask.promise;
         renderTask = null;
@@ -139,6 +142,7 @@ async function render() {
             tl.style.setProperty('--total-scale-factor', props.zoomLevel);
             try {
                 const textContent = await page.getTextContent();
+                const { TextLayer } = pdfjs();
                 textLayerInstance = new TextLayer({
                     textContentSource: textContent,
                     container: tl,

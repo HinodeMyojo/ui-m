@@ -1,9 +1,34 @@
 <script setup>
-import { RouterView } from "vue-router";
+import { computed, defineAsyncComponent } from "vue";
+import { RouterView, useRoute } from "vue-router";
+import { isMobile } from "@/composables/useIsMobile.js";
+
+// Нижнее меню — часть мобильного слоя, а не главной страницы: уйти в «Сегодня»
+// и не иметь дороги назад, кроме системной кнопки, — это не навигация.
+const MobileTabBar = defineAsyncComponent(
+  () => import("@/components/mobile/MobileTabBar.vue"),
+);
+
+const route = useRoute();
+
+// Экраны, которые занимают телефон целиком: вход, читалка (там своя панель и
+// каждый пиксель под текст), печать резюме и гостевая ссылка на поездку.
+const FULLSCREEN = ["/login", "/pdfReader"];
+
+const showTabBar = computed(() => {
+  if (!isMobile.value) return false;
+  if (route.meta?.public) return false;
+  if (FULLSCREEN.includes(route.path)) return false;
+  if (route.path.endsWith("/print")) return false;
+  return true;
+});
 </script>
 
 <template>
-  <RouterView />
+  <div class="app-body" :class="{ 'with-tabbar': showTabBar }">
+    <RouterView />
+  </div>
+  <MobileTabBar v-if="showTabBar" />
 </template>
 
 <style>
@@ -25,6 +50,22 @@ body {
   position: relative;
   z-index: 1;
   min-height: 100vh; /* добавьте это */
+}
+
+.app-body {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+
+/* Запас под нижнее меню держит обёртка, а не каждый экран по отдельности:
+   иначе всякий новый раздел заново выясняет, что последняя строка спряталась
+   под таб-баром. 58px — высота меню, env() — «подбородок» айфона. */
+.app-body.with-tabbar {
+  min-height: 100dvh;
+  box-sizing: border-box;
+  padding-bottom: calc(58px + env(safe-area-inset-bottom, 0px));
+  background: #14151b;
 }
 
 .modal-overlay {

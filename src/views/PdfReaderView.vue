@@ -616,7 +616,12 @@ async function openFromLibrary(id) {
             httpHeaders: token ? { Authorization: `Bearer ${token}` } : {},
             filename: details?.title || details?.filename || '',
         });
-    } catch {
+    } catch (e) {
+        // Молча проглоченная ошибка выглядела как «книга просто не открывается»:
+        // ни спиннера, ни текста, снова экран выбора файла.
+        if (!loadError.value) {
+            loadError.value = 'Не удалось открыть книгу: ' + (e?.message || e);
+        }
         libraryFileId.value = '';
     }
 }

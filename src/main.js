@@ -3,29 +3,19 @@ import "./assets/main.css";
 import { createApp } from "vue";
 import { createPinia } from "pinia";
 
-// Vuetify
-import "vuetify/styles";
-import { createVuetify } from "vuetify";
-import * as components from "vuetify/components";
-import * as directives from "vuetify/directives";
-import "@mdi/font/css/materialdesignicons.css";
-
 import App from "./App.vue";
 import router from "./router";
 
-const vuetify = createVuetify({
-  components,
-  directives,
-  icons: {
-    defaultSet: "mdi",
-  },
-});
+// Vuetify отсюда убран. Он подключался целиком — все компоненты, все стили и
+// шрифт Material Design Icons — ради ровно двух <v-icon> со стрелками месяца на
+// главной. Это мегабайт JS, семьсот килобайт CSS и три файла шрифта на каждое
+// первое открытие; стрелки теперь обычные кнопки. Понадобится снова —
+// подключать через vite-plugin-vuetify, с автоимпортом, а не пачкой.
 
 const app = createApp(App);
 
 app.use(createPinia());
 app.use(router);
-app.use(vuetify);
 
 app.mount("#app");
 

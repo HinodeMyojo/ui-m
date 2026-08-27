@@ -25,9 +25,6 @@ export default defineConfig({
       util: "util",
     },
   },
-  ssr: {
-    noExternal: ["vuetify"],
-  },
   server: {
     host: "0.0.0.0",
     proxy: {

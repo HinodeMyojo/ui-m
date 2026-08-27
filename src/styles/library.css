@@ -440,3 +440,58 @@
   border-color: var(--lb-blue);
   color: var(--lb-text);
 }
+
+/* --- Телефон -------------------------------------------------------------
+   Полка сама по себе ложится в две колонки — сетка обложек этого и хотела.
+   Править надо не раскладку, а размеры: кнопки в 31px мимо пальца, а поля
+   в 13px заставляют Safari зумить страницу при фокусе и обратно уже не
+   отъезжать. */
+
+@media (max-width: 768px) {
+  .lb {
+    padding: 10px 10px 20px;
+  }
+
+  .lb-header h1 {
+    font-size: 18px;
+  }
+
+  .lb-btn {
+    min-height: 40px;
+    padding: 0 12px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .lb-btn.is-small {
+    min-height: 34px;
+  }
+
+  .lb-input,
+  .lb-select,
+  .lb-textarea {
+    font-size: 16px;
+    min-height: 42px;
+  }
+
+  .lb-textarea {
+    min-height: 90px;
+  }
+
+  /* Поиск занимает строку целиком — с ним работают чаще, чем с фильтрами. */
+  .lb-search {
+    flex: 1 1 100%;
+  }
+
+  .lb-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  /* «Продолжить чтение» — три корешка в видимой части, дальше листается. */
+  .lb-continue .lb-book {
+    min-width: 112px;
+    max-width: 112px;
+  }
+}

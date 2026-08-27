@@ -1,11 +1,11 @@
 import { createRouter, createWebHistory } from "vue-router";
 import HomeView from "../views/HomeView.vue";
 import LoginView from "../views/LoginView.vue";
-import SkillsView from "../views/SkillsView.vue";
-import SkillTreeView from "../views/SkillTreeView.vue";
-import MdToMdfView from "@/views/MdToMdfView.vue";
-import PdfReaderView from "@/views/PdfReaderView.vue";
-import VocabularyView from "@/views/VocabularyView.vue";
+
+// Всё, кроме главной и входа, грузится по требованию. Раньше половина разделов
+// лежала в общем бандле и приезжала на телефон при первом открытии — вместе с
+// редактором диаграмм, читалкой и словарём, в которые с телефона заходят раз
+// в месяц.
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -18,7 +18,7 @@ const router = createRouter({
     {
       path: "/mdToPdf",
       name: "mdToPdf",
-      component: MdToMdfView,
+      component: () => import("@/views/MdToMdfView.vue"),
     },
     {
       path: "/login",
@@ -28,22 +28,22 @@ const router = createRouter({
     {
       path: "/skills",
       name: "Skills",
-      component: SkillsView,
+      component: () => import("../views/SkillsView.vue"),
     },
     {
       path: "/skill-tree",
       name: "SkillTree",
-      component: SkillTreeView,
+      component: () => import("../views/SkillTreeView.vue"),
     },
     {
       path: "/pdfReader",
       name: "pdfReader",
-      component: PdfReaderView,
+      component: () => import("@/views/PdfReaderView.vue"),
     },
     {
       path: "/vocabulary",
       name: "Vocabulary",
-      component: VocabularyView,
+      component: () => import("@/views/VocabularyView.vue"),
     },
     {
       path: "/diagrams",
