@@ -1,7 +1,14 @@
 <script setup>
 import { ref, computed, onMounted } from "vue";
 import LibraryCover from "@/components/library/LibraryCover.vue";
-import { updatePdfFile, linkPdfRoadmapItem, deletePdfFile, replacePdfFile } from "@/api/pdfFiles.js";
+import {
+  updatePdfFile,
+  linkPdfRoadmapItem,
+  deletePdfFile,
+  replacePdfFile,
+  savePdfFile,
+  formatPdfSize,
+} from "@/api/pdfFiles.js";
 import { fetchRoadmaps, fetchRoadmapFull } from "@/components/roadmapApi.js";
 
 // Карточка книги: метаданные, полка, теги, привязка к пункту roadmap'а.
@@ -29,6 +36,34 @@ const roadmapItems = ref([]);
 const busy = ref(false);
 const error = ref("");
 const replaceInput = ref(null);
+const downloading = ref(false);
+const downloadPct = ref(0);
+
+// Скачать книгу себе. Файл лежит на сервере за токеном, поэтому это не ссылка,
+// а честная загрузка блобом — с процентом, чтобы на телефоне было видно, что
+// сорок мегабайт едут, а не всё зависло.
+async function download() {
+  downloading.value = true;
+  downloadPct.value = 0;
+  error.value = "";
+  try {
+    await savePdfFile(props.file, (part) => {
+      downloadPct.value = Math.round(part * 100);
+    });
+  } catch (e) {
+    error.value = e.message || "не удалось скачать книгу";
+  } finally {
+    downloading.value = false;
+  }
+}
+
+const downloadLabel = computed(() => {
+  if (!downloading.value) {
+    const size = formatPdfSize(props.file.size);
+    return size ? `⬇ Скачать · ${size}` : "⬇ Скачать";
+  }
+  return downloadPct.value ? `⬇ ${downloadPct.value}%` : "⬇ Скачиваю…";
+});
 
 // Файл на диске потерялся (например, контейнер пересоздали без тома под
 // uploads) — карточку не выбрасываем, а даём подложить файл обратно.
@@ -222,6 +257,14 @@ onMounted(loadRoadmapItems);
       <div class="lb-row">
         <button class="lb-btn is-primary" :disabled="busy" @click="save">Сохранить</button>
         <button v-if="!file.fileMissing" class="lb-btn" @click="emit('read')">📖 Читать</button>
+        <button
+          v-if="!file.fileMissing"
+          class="lb-btn"
+          :disabled="downloading"
+          @click="download"
+        >
+          {{ downloadLabel }}
+        </button>
         <button v-else class="lb-btn" :disabled="busy" @click="replaceInput.click()">
           📎 Загрузить файл заново
         </button>

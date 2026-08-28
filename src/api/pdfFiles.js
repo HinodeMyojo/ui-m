@@ -129,14 +129,64 @@ export async function fetchPdfCoverObjectUrl(id) {
   return URL.createObjectURL(blob);
 }
 
-export async function downloadPdfAsFile(id, filename) {
+// Имя, под которым книга ляжет на диск. У карточки обычно человеческое
+// название, а у исходника — что-то вроде
+// «Фундаментальный+подход+к+программной+архитектуре.+ [skladchik.org].pdf»;
+// на диск кладём то, по чему книгу потом найдут глазами.
+export function pdfSaveName(file) {
+  const raw = String(file?.title || file?.filename || "book").trim();
+  // Слэши, двоеточия и звёздочки в имени файла не переживут ни Windows, ни iOS.
+  const safe = raw
+    .replace(/[\/:*?"<>|]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return /\.pdf$/i.test(safe) ? safe : `${safe}.pdf`;
+}
+
+// Скачать книгу себе. Ручка закрыта токеном, поэтому обычной ссылкой не
+// обойтись — забираем тело сами и отдаём браузеру готовый blob.
+//
+// onProgress зовут долей 0..1, пока сервер сообщил размер: сорокамегабайтная
+// книга на мобильном интернете едет минуту, и кнопка без цифры выглядит
+// зависшей. Если браузер не умеет читать тело потоком (Safari до 14.1), просто
+// ждём blob целиком — прогресса не будет, скачивание будет.
+export async function savePdfFile(file, onProgress) {
   const token = localStorage.getItem("token");
-  const response = await fetch(getPdfDownloadUrl(id), {
+  const response = await fetch(getPdfDownloadUrl(file.id), {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
   });
   if (!response.ok) throw await apiError(response);
-  const blob = await response.blob();
-  return new File([blob], filename || "document.pdf", { type: "application/pdf" });
+
+  // Content-Length разрешён к чтению из другого источника без отдельного
+  // Access-Control-Expose-Headers — он в списке безопасных.
+  const total = Number(response.headers.get("content-length")) || file.size || 0;
+  let blob;
+  if (response.body?.getReader && total > 0 && typeof onProgress === "function") {
+    const reader = response.body.getReader();
+    const chunks = [];
+    let loaded = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      loaded += value.length;
+      onProgress(Math.min(1, loaded / total));
+    }
+    blob = new Blob(chunks, { type: "application/pdf" });
+  } else {
+    blob = await response.blob();
+  }
+
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = pdfSaveName(file);
+  // Safari не жмёт на ссылку, которой нет в документе.
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  // Отзывать object-URL сразу нельзя: Safari не успевает забрать содержимое.
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
 }
 
 // --- Чтение ---
