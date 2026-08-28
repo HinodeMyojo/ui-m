@@ -53,6 +53,7 @@
                 <div class="pdf-viewport" :class="{ 'pdf-night-viewport': nightMode }"
                     :style="nightMode ? { filter: `invert(1) hue-rotate(180deg) brightness(${nightBrightness / 100})` } : {}"
                     ref="viewportEl" @scroll="onScroll" @mouseup="onViewportMouseUp" @mousemove="onViewportMouseMove">
+                    <div class="pdf-pages" ref="pagesEl">
                     <PdfPageCanvas v-for="n in pageCount" :key="n" :pdfDoc="pdfDoc" :pageNum="n"
                         :defaultWidth="defaultPageSize.width" :defaultHeight="defaultPageSize.height"
                         :zoomLevel="zoomLevel" :nightMode="nightMode" :searchQuery="searchQuery"
@@ -63,6 +64,7 @@
                         @remove-annotation="removeAnnotation"
                         @edit-annotation-note="openNoteEdit"
                         :ref="el => setPageRef(n, el?.$el ?? el)" />
+                    </div>
                 </div>
             </div>
 
@@ -204,6 +206,7 @@ const { apiKey, hoverMode, sourceLang, targetLang, isTranslating, translationErr
         LANGUAGES } = usePdfTranslation(fileName);
 
 const viewportEl = ref(null);
+const pagesEl = ref(null);
 
 // ── Окно живых страниц ────────────────────────────────────────────────────
 //
@@ -512,6 +515,140 @@ function onViewportWheel(e) {
     zoomTo(next, e.offsetY);
 }
 
+// ── Жесты на телефоне ─────────────────────────────────────────────────────
+//
+// Своего щипка у читалки не было, поэтому пальцами масштабировался весь
+// документ браузера: шапка и низ уезжали за пределы видимой области, а вернуть
+// «одну страницу по ширине» было уже нечем. Теперь щипок меняет масштаб книги,
+// а зум самого браузера внутри читалки запрещён.
+//
+// Во время жеста страницы не перерисовываем — тянем CSS-трансформ, это работа
+// для видеокарты. Настоящий масштаб выставляем один раз, когда пальцы убрали.
+
+// Масштаб, при котором страница ровно по ширине экрана.
+function fitZoomValue() {
+    const vp = viewportEl.value;
+    const width = defaultPageSize.value.width;
+    if (!vp || !width) return 1;
+    const style = getComputedStyle(vp);
+    const padding = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
+    return Math.max(0.25, Math.min(4, (vp.clientWidth - padding) / width));
+}
+
+let pinch = null;
+
+function touchSpread(touches) {
+    return Math.hypot(
+        touches[0].clientX - touches[1].clientX,
+        touches[0].clientY - touches[1].clientY,
+    );
+}
+
+function onTouchStart(e) {
+    if (e.touches.length !== 2) return;
+    const vp = viewportEl.value;
+    if (!vp) return;
+    const rect = vp.getBoundingClientRect();
+    const style = getComputedStyle(vp);
+    const padLeft = parseFloat(style.paddingLeft);
+    const padTop = parseFloat(style.paddingTop);
+    const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2 - rect.left;
+    const midY = (e.touches[0].clientY + e.touches[1].clientY) / 2 - rect.top;
+    pinch = {
+        spread: touchSpread(e.touches),
+        zoom: zoomLevel.value,
+        scale: 1,
+        midX,
+        midY,
+        // Точка книги под пальцами — её и держим на месте.
+        contentX: vp.scrollLeft + midX,
+        contentY: vp.scrollTop + midY,
+        originX: vp.scrollLeft + midX - padLeft,
+        originY: vp.scrollTop + midY - padTop,
+    };
+    setRenderPaused(true);
+}
+
+function onTouchMove(e) {
+    if (!pinch || e.touches.length !== 2) return;
+    e.preventDefault();
+    const raw = touchSpread(e.touches) / pinch.spread;
+    pinch.scale = Math.max(0.25 / pinch.zoom, Math.min(4 / pinch.zoom, raw));
+    const el = pagesEl.value;
+    if (el) {
+        el.style.transformOrigin = pinch.originX + 'px ' + pinch.originY + 'px';
+        el.style.transform = 'scale(' + pinch.scale + ')';
+    }
+}
+
+function onTouchEnd(e) {
+    if (pinch) {
+        if (e.touches.length > 0) return;   // палец ещё на экране — жест не закончен
+        const done = pinch;
+        pinch = null;
+        const el = pagesEl.value;
+        if (el) { el.style.transform = ''; el.style.transformOrigin = ''; }
+        applyZoomKeepingPoint(done.zoom * done.scale, done);
+        return;
+    }
+    onDoubleTap(e);
+}
+
+// Ставит масштаб и возвращает под палец ту же точку книги.
+function applyZoomKeepingPoint(target, point) {
+    const before = zoomLevel.value;
+    setZoom(target);
+    nextTick(() => requestAnimationFrame(() => {
+        const vp = viewportEl.value;
+        if (vp) {
+            const k = zoomLevel.value / before;
+            vp.scrollLeft = point.contentX * k - point.midX;
+            vp.scrollTop = point.contentY * k - point.midY;
+        }
+        setRenderPaused(false);
+        requestPageRecalc();
+    }));
+}
+
+// Двойное касание: туда-обратно между «страница по ширине» и двукратным
+// увеличением. Один жест, чтобы всегда вернуться к целой странице.
+let lastTapAt = 0;
+let lastTapX = 0;
+let lastTapY = 0;
+
+function onDoubleTap(e) {
+    const touch = e.changedTouches && e.changedTouches[0];
+    if (!touch || e.touches.length) return;
+    const now = Date.now();
+    const near = Math.abs(touch.clientX - lastTapX) < 30 && Math.abs(touch.clientY - lastTapY) < 30;
+    if (now - lastTapAt < 300 && near) {
+        lastTapAt = 0;
+        const vp = viewportEl.value;
+        if (!vp) return;
+        const rect = vp.getBoundingClientRect();
+        const midX = touch.clientX - rect.left;
+        const midY = touch.clientY - rect.top;
+        const fit = fitZoomValue();
+        const atFit = Math.abs(zoomLevel.value - fit) < fit * 0.05;
+        setRenderPaused(true);
+        applyZoomKeepingPoint(atFit ? Math.min(4, fit * 2) : fit, {
+            midX, midY,
+            contentX: vp.scrollLeft + midX,
+            contentY: vp.scrollTop + midY,
+        });
+        return;
+    }
+    lastTapAt = now;
+    lastTapX = touch.clientX;
+    lastTapY = touch.clientY;
+}
+
+// Safari на iOS зумит страницу собственными жестами и user-scalable не
+// слушает — гасим их явно, иначе читалка уезжает вся целиком.
+function preventBrowserZoom(e) {
+    e.preventDefault();
+}
+
 // ── Zoom fit helpers ──────────────────────────────────────────────────────
 async function getFirstPageDimensions() {
     if (!pdfDoc.value) return null;
@@ -746,12 +883,18 @@ function onCloseDoc() {
 onMounted(() => {
     window.addEventListener('keydown', onWindowKeydown);
     document.addEventListener('mousedown', onDocumentMouseDown);
+    for (const name of ['gesturestart', 'gesturechange', 'gestureend']) {
+        rootEl.value?.addEventListener(name, preventBrowserZoom, { passive: false });
+    }
     if (libraryFileId.value) openFromLibrary(libraryFileId.value);
 });
 
 onBeforeUnmount(() => {
     window.removeEventListener('keydown', onWindowKeydown);
     document.removeEventListener('mousedown', onDocumentMouseDown);
+    for (const name of ['gesturestart', 'gesturechange', 'gestureend']) {
+        rootEl.value?.removeEventListener(name, preventBrowserZoom);
+    }
     viewportEl.value?.removeEventListener('wheel', onViewportWheel);
     clearTimeout(toastTimer);
     clearTimeout(hoverDebounce);
@@ -767,6 +910,16 @@ onBeforeUnmount(() => {
 watch(viewportEl, (el, oldEl) => {
     oldEl?.removeEventListener('wheel', onViewportWheel);
     el?.addEventListener('wheel', onViewportWheel, { passive: false });
+
+    oldEl?.removeEventListener('touchstart', onTouchStart);
+    oldEl?.removeEventListener('touchmove', onTouchMove);
+    oldEl?.removeEventListener('touchend', onTouchEnd);
+    if (el) {
+        el.addEventListener('touchstart', onTouchStart, { passive: true });
+        // Не passive: во время щипка прокрутку надо придержать.
+        el.addEventListener('touchmove', onTouchMove, { passive: false });
+        el.addEventListener('touchend', onTouchEnd, { passive: true });
+    }
 
     pageObserver?.disconnect();
     pageObserver = null;
