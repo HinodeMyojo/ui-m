@@ -16,6 +16,10 @@ const FLUSH_INTERVAL_MS = 30000;   // как часто отправляем п�
 const TICK_MS = 5000;              // шаг счётчика времени
 const IDLE_LIMIT_MS = 90000;       // не шевелились полторы минуты — время не идёт
 const COVER_WIDTH = 320;
+// Сервер не заводит сессию чтения короче минуты (roadmap_pdf.go). Порция раз в
+// 30 секунд до этого порога не дотягивает никогда, поэтому время копим здесь и
+// отдаём, когда минута набралась: иначе часы в плане так и стоят на нуле.
+const MIN_SESSION_SECONDS = 60;
 
 export function usePdfReadingSync(fileId, pdfDoc, pageCount, currentPage, goToPage) {
     const details = ref(null);
@@ -25,6 +29,9 @@ export function usePdfReadingSync(fileId, pdfDoc, pageCount, currentPage, goToPa
 
     let lastActivity = Date.now();
     let lastSentPage = 0;
+    // Дата, за которую сессия на сервере уже заведена: с этого момента он
+    // принимает любые добавки, и придерживать время больше незачем.
+    let openDate = '';
     let tickTimer = null;
     let flushTimer = null;
 
@@ -59,18 +66,25 @@ export function usePdfReadingSync(fileId, pdfDoc, pageCount, currentPage, goToPa
     async function flush({ finished = false, beacon = false } = {}) {
         if (!fileId.value) return;
         const page = currentPage.value;
-        const seconds = secondsPending.value;
+        const date = pdfLogicalToday();
+        // Уходим из читалки — отдаём всё накопленное, дальше решает сервер.
+        const leaving = finished || beacon;
+        const dayOpen = openDate === date;
+        const holding = !leaving && !dayOpen && secondsPending.value < MIN_SESSION_SECONDS;
+        const seconds = holding ? 0 : secondsPending.value;
         if (!finished && seconds === 0 && page === lastSentPage) return;
 
         const payload = {
             currentPage: page,
             pageCount: pageCount.value,
             seconds,
-            date: pdfLogicalToday(),
+            date,
             finished,
         };
-        secondsPending.value = 0;
+        secondsPending.value -= seconds;
         lastSentPage = page;
+        // Минута ушла — значит сессия за этот день на сервере есть.
+        if (seconds >= MIN_SESSION_SECONDS || (dayOpen && seconds > 0)) openDate = date;
 
         if (beacon) {
             sendPdfProgressBeacon(fileId.value, payload);
@@ -81,6 +95,7 @@ export function usePdfReadingSync(fileId, pdfDoc, pageCount, currentPage, goToPa
         } catch {
             // Не смогли отправить — вернём секунды, уйдут со следующей попыткой.
             secondsPending.value += seconds;
+            if (seconds > 0) openDate = '';
         }
     }
 
@@ -137,6 +152,7 @@ export function usePdfReadingSync(fileId, pdfDoc, pageCount, currentPage, goToPa
         secondsPending.value = 0;
         sessionSeconds.value = 0;
         lastSentPage = 0;
+        openDate = '';
         if (!id) return;
         await loadDetails();
         markActivity();
