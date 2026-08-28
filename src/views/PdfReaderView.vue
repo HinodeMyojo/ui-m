@@ -1,5 +1,6 @@
 <template>
-    <div class="pdf-reader" :class="{ dark: darkMode }" tabindex="0" @keydown="onKeydown" ref="rootEl">
+    <div class="pdf-reader" :class="{ dark: darkMode, 'pdf-chrome-hidden': !chromeVisible }"
+        tabindex="0" @keydown="onKeydown" ref="rootEl">
 
         <!-- Drop zone (before PDF loaded) -->
         <template v-if="!pdfDoc">
@@ -138,10 +139,14 @@
 
             <!-- Reading info badge -->
             <div class="pdf-reading-info">
-                {{ Math.round(readProgress * 100) }}% · {{ estimatedReadingTime }}
+                <span class="pdf-ri-page">{{ currentPage }}/{{ pageCount }}</span>
+                <span class="pdf-ri-sep"> · </span>{{ Math.round(readProgress * 100) }}%
+                <span class="pdf-ri-extra"> · {{ estimatedReadingTime }}</span>
                 <template v-if="libraryFileId">
-                    · 📚 сохраняю позицию
-                    <template v-if="sessionSeconds >= 60"> · {{ Math.round(sessionSeconds / 60) }} мин</template>
+                    <span class="pdf-ri-extra"> · 📚 сохраняю позицию</span>
+                    <template v-if="sessionSeconds >= 60">
+                        <span class="pdf-ri-extra"> · {{ Math.round(sessionSeconds / 60) }} мин</span>
+                    </template>
                 </template>
             </div>
         </template>
@@ -207,6 +212,25 @@ const { apiKey, hoverMode, sourceLang, targetLang, isTranslating, translationErr
 
 const viewportEl = ref(null);
 const pagesEl = ref(null);
+
+// Режим чтения: панели прячутся, экран отдан тексту. На телефоне шапка с
+// номером страницы и нижняя плашка съедали около сотни точек по вертикали из
+// восьмисот — это полторы строки текста на каждом экране.
+//
+// Панели возвращаются по одиночному тапу и прячутся, когда начинаешь листать:
+// раз человек читает, кнопки ему не нужны.
+const chromeVisible = ref(true);
+// Откуда отсчитываем «человек начал листать». Появление панели само меняет
+// высоту области чтения, браузер поправляет прокрутку — и без порога панель
+// пряталась бы ровно в тот момент, когда её позвали.
+let chromeScrollAnchor = 0;
+let chromeToggledAt = 0;
+
+function toggleChrome() {
+    chromeVisible.value = !chromeVisible.value;
+    chromeToggledAt = Date.now();
+    chromeScrollAnchor = viewportEl.value?.scrollTop ?? 0;
+}
 
 // ── Окно живых страниц ────────────────────────────────────────────────────
 //
@@ -304,6 +328,11 @@ watch(pdfDoc, async (doc) => {
         }
     } catch { /* останемся с A4 */ } finally {
         layoutReady.value = true;
+        // Книга открылась — панели видно, и возврат на сохранённую страницу их
+        // не прячет: это не человек листает, это читалка восстанавливает место.
+        chromeVisible.value = true;
+        chromeToggledAt = Date.now();
+        chromeScrollAnchor = viewportEl.value?.scrollTop ?? 0;
     }
 });
 
@@ -465,6 +494,13 @@ function onScroll(e) {
     if (e.ctrlKey) return;
     requestPageRecalc();
     onViewportScrollForHover();
+    // Листаешь — значит читаешь, кнопки не нужны. Порог в сорок точек и паузу
+    // после ручного показа отсчитываем, чтобы панель не пряталась от дрожания
+    // прокрутки и не мигала.
+    if (chromeVisible.value && isMobile.value && Date.now() - chromeToggledAt > 600) {
+        const top = viewportEl.value?.scrollTop ?? 0;
+        if (Math.abs(top - chromeScrollAnchor) > 40) chromeVisible.value = false;
+    }
 
     // Пока лист летит, отрисовку придерживаем — иначе она отъедает те самые
     // кадры, из-за которых прокрутка и дёргается.
@@ -544,7 +580,17 @@ function touchSpread(touches) {
     );
 }
 
+// Одиночное касание отличаем от прокрутки и от выделения: палец не должен
+// сдвинуться больше чем на десяток точек, и всё должно уложиться в полсекунды.
+let tapStart = null;
+let chromeTapTimer = null;
+
 function onTouchStart(e) {
+    if (e.touches.length === 1 && !pinch) {
+        tapStart = { x: e.touches[0].clientX, y: e.touches[0].clientY, at: Date.now() };
+    } else {
+        tapStart = null;
+    }
     if (e.touches.length !== 2) return;
     const vp = viewportEl.value;
     if (!vp) return;
@@ -589,9 +635,32 @@ function onTouchEnd(e) {
         const el = pagesEl.value;
         if (el) { el.style.transform = ''; el.style.transformOrigin = ''; }
         applyZoomKeepingPoint(done.zoom * done.scale, done);
+        tapStart = null;
         return;
     }
+    if (!isTap(e)) { tapStart = null; return; }
+    tapStart = null;
     onDoubleTap(e);
+}
+
+function isTap(e) {
+    const touch = e.changedTouches && e.changedTouches[0];
+    if (!touch || !tapStart || e.touches.length) return false;
+    if (Date.now() - tapStart.at > 500) return false;
+    return Math.abs(touch.clientX - tapStart.x) < 12 && Math.abs(touch.clientY - tapStart.y) < 12;
+}
+
+// Тап по тексту книги: панели то появляются, то уходят. Ждём триста
+// миллисекунд — вдруг это первый тап из двойного, который меняет масштаб.
+function scheduleChromeToggle(target) {
+    clearTimeout(chromeTapTimer);
+    // Тапом по ссылке в книге переходят, а не прячут панели. Выделенный текст
+    // тап снимает — панели тут тоже ни при чём.
+    if (target?.closest?.('.pdf-link-annotation')) return;
+    if (selToolbar.visible) { hideSelToolbar(); return; }
+    const sel = window.getSelection();
+    if (sel && !sel.isCollapsed) return;
+    chromeTapTimer = setTimeout(toggleChrome, 300);
 }
 
 // Ставит масштаб и возвращает под палец ту же точку книги.
@@ -623,6 +692,7 @@ function onDoubleTap(e) {
     const near = Math.abs(touch.clientX - lastTapX) < 30 && Math.abs(touch.clientY - lastTapY) < 30;
     if (now - lastTapAt < 300 && near) {
         lastTapAt = 0;
+        clearTimeout(chromeTapTimer);   // это двойной тап, панели не трогаем
         const vp = viewportEl.value;
         if (!vp) return;
         const rect = vp.getBoundingClientRect();
@@ -641,6 +711,7 @@ function onDoubleTap(e) {
     lastTapAt = now;
     lastTapX = touch.clientX;
     lastTapY = touch.clientY;
+    scheduleChromeToggle(e.target);
 }
 
 // Safari на iOS зумит страницу собственными жестами и user-scalable не
@@ -679,7 +750,24 @@ function hideSelToolbar() {
 }
 
 function onViewportMouseUp() {
-    setTimeout(() => {
+    setTimeout(updateSelectionToolbar, 10);
+}
+
+// На тач-экране mouseup не приходит вовсе — выделение там делают долгим
+// нажатием и тянут за маркеры, а браузер сообщает об этом только событием
+// selectionchange. Из-за этого «выделить и записать заметку» с телефона не
+// работало в принципе.
+let selectionTimer = null;
+
+function onSelectionChange() {
+    if (!pdfDoc.value) return;
+    clearTimeout(selectionTimer);
+    // Пока тянут за маркеры, событие сыплется десятками — ждём, когда утихнет.
+    selectionTimer = setTimeout(updateSelectionToolbar, 350);
+}
+
+function updateSelectionToolbar() {
+    {
         const sel = window.getSelection();
         if (!sel || sel.isCollapsed) { hideSelToolbar(); return; }
         const selectedText = sel.toString().trim();
@@ -710,14 +798,23 @@ function onViewportMouseUp() {
 
         pendingSelection = { selectedText, rects, pageNum };
 
-        const topY = Math.min(...clientRects.map(r => r.top));
-        const midX = (clientRects[0].left + clientRects[clientRects.length - 1].right) / 2 - 110;
+        const topY = Math.min(...clientRects.map((r) => r.top));
+        const midX = (clientRects[0].left + clientRects[clientRects.length - 1].right) / 2 - 115;
 
-        selToolbar.x = midX;
-        selToolbar.y = topY;
+        // Панель не должна вылезать за экран: на телефоне ширины ровно столько,
+        // чтобы промахнуться мимо края. И если сверху места нет — показываем
+        // под выделением, а не под шапкой браузера.
+        const TOOLBAR_W = 230;
+        const TOOLBAR_H = 52;
+        const bottomY = Math.max(...clientRects.map((r) => r.bottom));
+        selToolbar.x = Math.max(8, Math.min(window.innerWidth - TOOLBAR_W - 8, midX));
+        const wantY = topY > TOOLBAR_H + 8 ? topY : bottomY + 12;
+        // Выделение могло уехать за экран (например, после смены масштаба) —
+        // панель всё равно должна остаться там, где до неё дотянется палец.
+        selToolbar.y = Math.max(8, Math.min(window.innerHeight - TOOLBAR_H - 8, wantY));
         selToolbar.existingNote = '';
         selToolbar.visible = true;
-    }, 10);
+    }
 }
 
 function onHighlight(color) {
@@ -886,6 +983,7 @@ onMounted(() => {
     for (const name of ['gesturestart', 'gesturechange', 'gestureend']) {
         rootEl.value?.addEventListener(name, preventBrowserZoom, { passive: false });
     }
+    document.addEventListener('selectionchange', onSelectionChange);
     if (libraryFileId.value) openFromLibrary(libraryFileId.value);
 });
 
@@ -895,6 +993,9 @@ onBeforeUnmount(() => {
     for (const name of ['gesturestart', 'gesturechange', 'gestureend']) {
         rootEl.value?.removeEventListener(name, preventBrowserZoom);
     }
+    document.removeEventListener('selectionchange', onSelectionChange);
+    clearTimeout(selectionTimer);
+    clearTimeout(chromeTapTimer);
     viewportEl.value?.removeEventListener('wheel', onViewportWheel);
     clearTimeout(toastTimer);
     clearTimeout(hoverDebounce);

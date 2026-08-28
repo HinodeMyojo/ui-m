@@ -1662,6 +1662,29 @@ body.pdf-dark .pdf-tm-pos {
         overscroll-behavior: contain;
     }
 
+    /* Режим чтения: панели убраны, экран отдан тексту. Возвращаются одиночным
+       тапом по странице. */
+    .pdf-chrome-hidden .pdf-toolbar,
+    .pdf-chrome-hidden .pdf-reading-info {
+        display: none;
+    }
+
+    /* Плашка внизу: на телефоне от неё нужны страница и процент, всё
+       остальное — «сохраняю позицию», оценка времени — занимало место и
+       ничего не решало. */
+    .pdf-reading-info {
+        bottom: 6px;
+        right: 6px;
+        left: auto;
+        font-size: 11px;
+        padding: 4px 9px;
+        opacity: 0.75;
+    }
+
+    .pdf-ri-extra {
+        display: none;
+    }
+
     .pdf-page-wrapper {
         margin-bottom: 10px;
         /* Триста теней, которые композитор пересчитывает при каждой прокрутке,
@@ -1671,32 +1694,49 @@ body.pdf-dark .pdf-tm-pos {
     }
 
 
-    /* Toolbar: wrap into two rows */
+    /* Панель в одну строку. Раньше она разъезжалась на две — вторая целиком
+       под «‹ 89 / 320 ›» — и вместе с нижней плашкой съедала около сотни точек
+       из восьмисот. Это полторы строки книги на каждом экране. */
     .pdf-toolbar {
-        flex-wrap: wrap;
-        gap: 4px;
-        padding: 4px 8px;
-        min-height: auto;
+        flex-wrap: nowrap;
+        gap: 2px;
+        padding: 3px 6px;
+        min-height: 44px;
     }
 
     .pdf-toolbar-left {
         order: 1;
-        flex: 1;
+        flex: 0 0 auto;
         min-width: 0;
     }
 
     .pdf-toolbar-center {
-        order: 3;
-        width: 100%;
-        justify-content: center;
+        order: 2;
+        flex: 0 0 auto;
+        width: auto;
         margin: 0;
-        padding: 2px 0;
+        padding: 0;
     }
 
     .pdf-toolbar-right {
-        order: 2;
-        flex-wrap: wrap;
+        order: 3;
+        flex: 1 1 auto;
+        flex-wrap: nowrap;
         gap: 2px;
+        justify-content: flex-end;
+        overflow-x: auto;
+        scrollbar-width: none;
+    }
+
+    .pdf-toolbar-right::-webkit-scrollbar {
+        display: none;
+    }
+
+    /* Имя файла и версия сборки — единственное, что на телефоне не нужно
+       совсем: заголовок книги виден на самой странице. */
+    .pdf-filename,
+    .pdf-app-version {
+        display: none;
     }
 
     .pdf-filename {
