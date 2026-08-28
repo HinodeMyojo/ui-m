@@ -6,7 +6,15 @@ COPY . .
 RUN npm run build
 
 FROM node:lts-alpine
-RUN apk add --no-cache nginx
+
+# Зеркало Alpine. С боевого сервера dl-cdn.alpinelinux.org не отвечает вообще —
+# ни по https, ни по http: соединение висит и отваливается по таймауту. 27 августа
+# 2026 это уронило сборку образа (`apk add nginx` восемь минут перебирал зеркала и
+# сдался), деплой при этом отчитался успехом и поднял контейнер на старом образе.
+# Адрес вынесен в аргумент: сменить зеркало можно одной строкой, не трогая Dockerfile.
+ARG ALPINE_MIRROR=https://mirror.yandex.ru/mirrors/alpine
+RUN sed -i "s|https\?://dl-cdn.alpinelinux.org/alpine|${ALPINE_MIRROR}|g" /etc/apk/repositories \
+    && apk add --no-cache nginx
 
 WORKDIR /app
 

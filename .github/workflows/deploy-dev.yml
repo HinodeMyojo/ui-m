@@ -56,7 +56,14 @@ jobs:
           username: ${{ secrets.DEV_SERVER_USER }}
           key: ${{ secrets.DEV_SSH_PRIVATE_KEY }}
           script: |
+            # set -e обязателен. Без него код шага — это код ПОСЛЕДНЕЙ команды:
+            # 27 августа 2026 сборка образа упала, следом `up -d` благополучно
+            # поднял контейнер на старом образе, и деплой отчитался зелёным.
+            # Правки не доезжали до сервера, а CI это никак не показывал.
+            set -e
             cd /home/hinode/planner/ui
-            sudo docker compose down
+            # Сначала собираем, потом подменяем контейнер. Раньше `down` шёл первым,
+            # и сайт лежал всю сборку — а если сборка падала, оставался на старом
+            # образе. Теперь неудачная сборка вообще ничего не трогает.
             sudo docker compose build --build-arg UPSTREAM_PROXY=${{ secrets.UPSTREAM_PROXY }}
-            sudo docker compose up -d
+            sudo docker compose up -d --remove-orphans
