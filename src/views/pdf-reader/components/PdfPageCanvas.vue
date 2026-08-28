@@ -1,25 +1,32 @@
 <template>
-    <div class="pdf-page-wrapper" :data-page="pageNum"
+    <!-- Страница вне активного окна — это только пустая рамка нужного размера.
+         Ни канваса, ни текстового слоя, ни мерцающей заглушки: в толстой книге
+         таких страниц три сотни, и каждая стоила и памяти, и анимации. -->
+    <div class="pdf-page-wrapper" ref="wrapperEl" :data-page="pageNum"
         :style="placeholderStyle">
-        <div class="pdf-page-num-label">{{ pageNum }}</div>
-        <canvas ref="canvasEl" v-show="rendered"></canvas>
-        <div v-if="!rendered" class="pdf-page-placeholder"></div>
-        <div ref="textLayerEl" class="textLayer"></div>
-        <PdfAnnotationLayer
-            :annotations="annotations"
-            :zoomLevel="zoomLevel"
-            @remove="emit('remove-annotation', $event)"
-            @edit-note="emit('edit-annotation-note', $event)"
-        />
+        <template v-if="active">
+            <div class="pdf-page-num-label">{{ pageNum }}</div>
+            <canvas ref="canvasEl" v-show="rendered"></canvas>
+            <div v-if="!rendered" class="pdf-page-placeholder"></div>
+            <div ref="textLayerEl" class="textLayer"></div>
+            <PdfAnnotationLayer
+                v-if="annotations.length"
+                :annotations="annotations"
+                :zoomLevel="zoomLevel"
+                @remove="emit('remove-annotation', $event)"
+                @edit-note="emit('edit-annotation-note', $event)"
+            />
+        </template>
     </div>
 </template>
 
 <script setup>
-import { ref, watch, computed, onMounted, onBeforeUnmount, toRaw } from 'vue';
+import { ref, watch, computed, nextTick, onMounted, onBeforeUnmount, toRaw } from 'vue';
 import 'pdfjs-dist/web/pdf_viewer.css';
 // Берём ту же сборку pdf.js, что подняла читалка: их две (обычная и legacy для
 // старых Safari), и мешать классы из разных нельзя.
 import { pdfjs } from '../composables/usePdfLoader.js';
+import { scheduleRender, cancelRender } from '../composables/usePdfRenderQueue.js';
 import PdfAnnotationLayer from './PdfAnnotationLayer.vue';
 
 const props = defineProps({
@@ -36,10 +43,15 @@ const props = defineProps({
     // страниц при открытии — самый дорогой способ ничего не показать.
     defaultWidth: { type: Number, default: 612 },
     defaultHeight: { type: Number, default: 792 },
+    // Страница в окне вокруг экрана: рисуем и держим в памяти только такие.
+    // Решает это родитель — одним наблюдателем на весь документ, а не тремя
+    // сотнями отдельных.
+    active: { type: Boolean, default: false },
 });
 
 const emit = defineEmits(['remove-annotation', 'edit-annotation-note', 'height-changed']);
 
+const wrapperEl = ref(null);
 const canvasEl = ref(null);
 const textLayerEl = ref(null);
 const rendered = ref(false);
@@ -49,9 +61,6 @@ let dimsLoaded = false;
 
 let renderTask = null;
 let textLayerInstance = null;
-let observer = null;
-let isVisible = false;
-let needsRender = false;
 
 // ── Placeholder size so layout doesn't jump ─────────────────────────────
 const placeholderStyle = computed(() => ({
@@ -97,9 +106,28 @@ async function renderLinkAnnotations(page, viewport, wrapperEl) {
 }
 
 // ── Actual render ────────────────────────────────────────────────────────
-async function render() {
-    if (!props.pdfDoc || !canvasEl.value) return;
-    needsRender = false;
+// Насколько эта страница далеко от центра экрана — по этому числу очередь
+// выбирает, что рисовать следующим.
+function distanceFromScreenCentre() {
+    const el = wrapperEl.value;
+    if (!el) return Number.MAX_SAFE_INTEGER;
+    const box = el.getBoundingClientRect();
+    return Math.abs(box.top + box.height / 2 - window.innerHeight / 2);
+}
+
+// Рисуем не сразу, а через общую очередь: страниц в окне несколько, поток один.
+function render() {
+    if (!props.pdfDoc || !props.active) return;
+    scheduleRender(props.pageNum, distanceFromScreenCentre, renderNow);
+}
+
+async function renderNow() {
+    if (!props.pdfDoc || !props.active) return;
+    // Канвас появляется вместе с активностью — ждём, пока Vue его вставит.
+    if (!canvasEl.value) {
+        await nextTick();
+        if (!canvasEl.value || !props.active) return;
+    }
     const doc = toRaw(props.pdfDoc);
     try {
         const page = await doc.getPage(props.pageNum);
@@ -160,10 +188,15 @@ async function render() {
     }
 }
 
-// ── Render only when visible ─────────────────────────────────────────────
-function scheduleRenderIfVisible() {
-    if (isVisible) render();
-    else needsRender = true;
+// ── Освобождение ─────────────────────────────────────────────────────────
+// Страница ушла из окна: отменяем начатое и отпускаем всё тяжёлое. Канвас
+// уносит v-if в шаблоне — вместе с ним браузер отдаёт и его буфер, а это
+// три мегабайта на страницу.
+function release() {
+    cancelRender(props.pageNum);
+    if (renderTask) { renderTask.cancel(); renderTask = null; }
+    if (textLayerInstance) { textLayerInstance.cancel?.(); textLayerInstance = null; }
+    rendered.value = false;
 }
 
 // ── Natural page dimensions (get without rendering) ──────────────────────
@@ -179,22 +212,14 @@ async function loadPageDimensions() {
     } catch { /* ignore */ }
 }
 
+// Вошли в окно — рисуем, вышли — отпускаем.
+watch(() => props.active, (on) => {
+    if (on) render();
+    else release();
+});
+
 onMounted(() => {
-    const el = canvasEl.value?.closest('.pdf-page-wrapper');
-    if (!el) return;
-
-    // rootMargin — рисуем страницу чуть заранее, чтобы при обычной прокрутке
-    // она уже была готова.
-    observer = new IntersectionObserver((entries) => {
-        for (const entry of entries) {
-            isVisible = entry.isIntersecting;
-            if (isVisible && (needsRender || !rendered.value)) {
-                render();
-            }
-        }
-    }, { threshold: 0.01, rootMargin: '400px 0px' });
-
-    observer.observe(el);
+    if (props.active) render();
 });
 
 // Заглушка подстраивается под первую страницу документа, пока не узнали свою.
@@ -204,25 +229,21 @@ watch(() => [props.defaultWidth, props.defaultHeight], ([w, h]) => {
     pageHeight.value = h;
 });
 
-// Re-render on zoom change (only if visible)
+// Масштаб поменялся — перерисовываем, но только то, что на виду.
 watch(() => props.zoomLevel, () => {
     rendered.value = false;
-    scheduleRenderIfVisible();
+    if (props.active) render();
 });
 
-// Re-render if pdfDoc changes
+// Сменился документ
 watch(() => props.pdfDoc, async (doc) => {
     rendered.value = false;
     dimsLoaded = false;
-    if (doc) {
-        if (isVisible) await loadPageDimensions();
-        scheduleRenderIfVisible();
+    if (doc && props.active) {
+        await loadPageDimensions();
+        render();
     }
 });
 
-onBeforeUnmount(() => {
-    if (renderTask) renderTask.cancel();
-    if (observer) observer.disconnect();
-    if (textLayerInstance) textLayerInstance.cancel?.();
-});
+onBeforeUnmount(release);
 </script>

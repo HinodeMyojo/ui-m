@@ -56,12 +56,13 @@
                     <PdfPageCanvas v-for="n in pageCount" :key="n" :pdfDoc="pdfDoc" :pageNum="n"
                         :defaultWidth="defaultPageSize.width" :defaultHeight="defaultPageSize.height"
                         :zoomLevel="zoomLevel" :nightMode="nightMode" :searchQuery="searchQuery"
-                        :searchPageMatches="searchMatches.filter(m => m.pageNum === n).length"
-                        :annotations="annotationsForPage(n)"
+                        :searchPageMatches="matchesByPage[n] || 0"
+                        :annotations="annotationsByPage[n] || EMPTY_ANNOTATIONS"
+                        :active="layoutReady && activePages.has(n)"
                         :goToPage="goToPage"
                         @remove-annotation="removeAnnotation"
                         @edit-annotation-note="openNoteEdit"
-                        :ref="el => { if (el) pageRefs[n] = el?.$el ?? el; }" />
+                        :ref="el => setPageRef(n, el?.$el ?? el)" />
                 </div>
             </div>
 
@@ -147,8 +148,9 @@
 </template>
 
 <script setup>
-import { ref, reactive, watch, nextTick, onMounted, onBeforeUnmount } from 'vue';
+import { ref, computed, reactive, watch, nextTick, onMounted, onBeforeUnmount } from 'vue';
 import { usePdfLoader }         from './pdf-reader/composables/usePdfLoader.js';
+import { resetRenderQueue, setRenderPaused } from './pdf-reader/composables/usePdfRenderQueue.js';
 import { usePdfTheme }          from './pdf-reader/composables/usePdfTheme.js';
 import { usePdfZoom }           from './pdf-reader/composables/usePdfZoom.js';
 import { usePdfNavigation }     from './pdf-reader/composables/usePdfNavigation.js';
@@ -163,6 +165,7 @@ import { usePdfReadingSync }    from './pdf-reader/composables/usePdfReadingSync
 import { addVocabCard }         from '@/components/api.js';
 import { getPdfDownloadUrl, getPdfDetailsCached } from '@/api/pdfFiles.js';
 import { useRoute, useRouter }  from 'vue-router';
+import { isMobile }             from '@/composables/useIsMobile.js';
 import PdfDropZone              from './pdf-reader/components/PdfDropZone.vue';
 import PdfToolbar               from './pdf-reader/components/PdfToolbar.vue';
 import PdfPageCanvas            from './pdf-reader/components/PdfPageCanvas.vue';
@@ -201,6 +204,78 @@ const { apiKey, hoverMode, sourceLang, targetLang, isTranslating, translationErr
         LANGUAGES } = usePdfTranslation(fileName);
 
 const viewportEl = ref(null);
+
+// ── Окно живых страниц ────────────────────────────────────────────────────
+//
+// Раньше каждая страница заводила собственный IntersectionObserver и держала
+// канвас — в книге на триста страниц это триста наблюдателей, триста канвасов
+// (даже пустой резервирует буфер) и триста бесконечных анимаций-мерцалок.
+// Замер на эмуляции айфона: 5 секунд только на монтирование списка, 59 МБ под
+// канвасами сразу и 95 МБ после пролистывания.
+//
+// Теперь наблюдатель один на весь документ, а страницы вне окна — пустые рамки
+// нужного размера. rootMargin в 100% даёт запас по экрану сверху и снизу, чтобы
+// при обычной прокрутке страница успевала нарисоваться заранее.
+const activePages = ref(new Set());
+const EMPTY_ANNOTATIONS = [];
+// Пока не известен размер первой страницы и не выбран масштаб, не рисуем ничего.
+// Иначе на телефоне первая страница рисуется дважды: сперва в натуральную
+// величину, потом заново — по ширине экрана. На придушенном процессоре это
+// лишняя секунда ровно там, где её больнее всего ждать.
+const layoutReady = ref(false);
+let pageObserver = null;
+
+// Пересчёт текущей страницы — не чаще раза на кадр. Событие прокрутки на
+// телефоне приходит по несколько раз за кадр, а обработчик только и делает,
+// что читает разметку: это самый дорогой способ потерять кадр.
+let scrollFrame = 0;
+
+function requestPageRecalc() {
+    if (scrollFrame) return;
+    scrollFrame = requestAnimationFrame(() => {
+        scrollFrame = 0;
+        onViewportScroll(viewportEl.value, activePages.value);
+    });
+}
+
+function onPageIntersect(entries) {
+    for (const entry of entries) {
+        const n = +entry.target.dataset.page;
+        if (!n) continue;
+        if (entry.isIntersecting) activePages.value.add(n);
+        else activePages.value.delete(n);
+    }
+    // Текущую страницу ищем только среди живых, а список живых обновляет
+    // наблюдатель — уже после того, как прокрутка утихла. Без пересчёта здесь
+    // номер в шапке застревает на той странице, откуда прыгнули.
+    requestPageRecalc();
+}
+
+function setPageRef(n, el) {
+    const previous = pageRefs.value[n];
+    if (previous && previous !== el) pageObserver?.unobserve(previous);
+    if (el) {
+        pageRefs.value[n] = el;
+        pageObserver?.observe(el);
+    } else {
+        delete pageRefs.value[n];
+        activePages.value.delete(n);
+    }
+}
+
+// Совпадения поиска и выделения — картой по номеру страницы. Фильтр в шаблоне
+// вызывался на каждую из трёхсот страниц при каждой перерисовке.
+const matchesByPage = computed(() => {
+    const map = {};
+    for (const m of searchMatches.value) map[m.pageNum] = (map[m.pageNum] || 0) + 1;
+    return map;
+});
+
+const annotationsByPage = computed(() => {
+    const map = {};
+    for (const a of annotations.value) (map[a.pageNum] ||= []).push(a);
+    return map;
+});
 const rootEl = ref(null);
 
 // Размер первой страницы: по нему рисуются заглушки всех остальных, пока до них
@@ -208,12 +283,25 @@ const rootEl = ref(null);
 const defaultPageSize = ref({ width: 612, height: 792 });
 
 watch(pdfDoc, async (doc) => {
-    if (!doc) return;
+    resetRenderQueue();
+    if (!doc) {
+        layoutReady.value = false;
+        return;
+    }
     try {
         const page = await doc.getPage(1);
         const viewport = page.getViewport({ scale: 1 });
         defaultPageSize.value = { width: viewport.width, height: viewport.height };
-    } catch { /* останемся с A4 */ }
+        // На телефоне книга открывается по ширине экрана. Масштаб 1 означает
+        // страницу в её натуральные 612 точек при экране в 390: каждую строку
+        // приходилось возить пальцем вбок, и читать было нечем.
+        if (isMobile.value) {
+            await nextTick();
+            fitWidth(viewportEl.value, viewport.width);
+        }
+    } catch { /* останемся с A4 */ } finally {
+        layoutReady.value = true;
+    }
 });
 
 // ── Translation UI state ──────────────────────────────────────────────────
@@ -368,10 +456,18 @@ async function expandHoverToModal() {
 }
 
 // ── Scroll coordinator ────────────────────────────────────────────────────
+let renderResumeTimer = null;
+
 function onScroll(e) {
     if (e.ctrlKey) return;
-    onViewportScroll(viewportEl.value);
+    requestPageRecalc();
     onViewportScrollForHover();
+
+    // Пока лист летит, отрисовку придерживаем — иначе она отъедает те самые
+    // кадры, из-за которых прокрутка и дёргается.
+    setRenderPaused(true);
+    clearTimeout(renderResumeTimer);
+    renderResumeTimer = setTimeout(() => setRenderPaused(false), 180);
 }
 
 // ── Zoom with stable scroll position ─────────────────────────────────────
@@ -661,6 +757,9 @@ onBeforeUnmount(() => {
     clearTimeout(hoverDebounce);
     clearTimeout(hoverHideTimer);
     clearTimeout(scrollEndTimer);
+    clearTimeout(renderResumeTimer);
+    if (scrollFrame) cancelAnimationFrame(scrollFrame);
+    resetRenderQueue();
     stopSpeech();
     document.body.classList.remove('pdf-dark');
 });
@@ -668,6 +767,27 @@ onBeforeUnmount(() => {
 watch(viewportEl, (el, oldEl) => {
     oldEl?.removeEventListener('wheel', onViewportWheel);
     el?.addEventListener('wheel', onViewportWheel, { passive: false });
+
+    pageObserver?.disconnect();
+    pageObserver = null;
+    activePages.value.clear();
+    if (!el) {
+        pageRefs.value = {};
+        return;
+    }
+    pageObserver = new IntersectionObserver(onPageIntersect, {
+        root: el,
+        rootMargin: '100% 0px',
+        threshold: 0,
+    });
+    // Ссылки на обёртки могли проставиться и до, и после появления области
+    // прокрутки — подписываемся на то, что уже есть, остальное подхватит
+    // setPageRef.
+    nextTick(() => {
+        for (const wrapper of Object.values(pageRefs.value)) {
+            if (wrapper) pageObserver?.observe(wrapper);
+        }
+    });
 });
 
 watch(pdfDoc, (doc) => {

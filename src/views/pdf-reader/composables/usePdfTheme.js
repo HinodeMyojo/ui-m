@@ -1,11 +1,15 @@
 import { ref } from 'vue';
+import { isMobile } from '@/composables/useIsMobile.js';
 
 export function usePdfTheme() {
     const darkMode = ref(localStorage.getItem('pdf-dark') === '1');
     const nightMode = ref(localStorage.getItem('pdf-night') === '1');
     const nightBrightness = ref(Number(localStorage.getItem('pdf-night-brightness') ?? 100));
     const isFullscreen = ref(false);
-    const showSidebar = ref(true);
+    // На телефоне читалка открывается сразу в текст. Панель разделов там —
+    // перекрытие на 85% ширины поверх страницы, и первое, что человек видел,
+    // открыв книгу, — пустое «Содержание недоступно для этого PDF».
+    const showSidebar = ref(!isMobile.value);
     const showThumbnails = ref(false);
 
     function toggleDark() {
