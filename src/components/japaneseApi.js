@@ -98,3 +98,68 @@ export function jpKatakanaToHiragana(value) {
 // Пути черт KanjiVG нарисованы в квадрате 109×109 — это его размер, а не
 // произвольная константа вьюпорта.
 export const JP_STROKE_BOX = 109;
+
+// --- Озвучка ---
+//
+// Web Speech API: голос уже есть в системе, платить не за что и сеть не нужна.
+// Облачный TTS с кешем в S3 — это озвучка колоды целиком, отдельная история;
+// здесь нужна кнопка «как это звучит» прямо на карточке.
+//
+// Произносится всегда кана, а не запись кандзи: синтезатор сам выбирает чтение
+// иероглифов и на 生 или 何 ошибается, а кану читает однозначно.
+
+let jaVoice = null;
+let voicesRequested = false;
+
+function pickJapaneseVoice() {
+  const synth = globalThis.speechSynthesis;
+  if (!synth) return null;
+  const voices = synth.getVoices();
+  if (!voices.length) return null;
+  return voices.find((v) => v.lang === "ja-JP") || voices.find((v) => v.lang?.startsWith("ja")) || null;
+}
+
+// Голоса в Safari подъезжают асинхронно, поэтому запрашиваем их заранее и
+// перечитываем по событию: к первому тапу список обычно уже готов.
+export function primeJapaneseVoice() {
+  const synth = globalThis.speechSynthesis;
+  if (!synth || voicesRequested) return;
+  voicesRequested = true;
+  jaVoice = pickJapaneseVoice();
+  synth.addEventListener?.("voiceschanged", () => {
+    jaVoice = pickJapaneseVoice();
+  });
+}
+
+export function canSpeakJapanese() {
+  return !!globalThis.speechSynthesis;
+}
+
+// speakJapanese произносит кану. Возвращает false, если синтезатора нет —
+// кнопку в таком случае показывать незачем.
+export function speakJapanese(kana) {
+  const synth = globalThis.speechSynthesis;
+  const text = String(kana || "").trim();
+  if (!synth || !text) return false;
+  primeJapaneseVoice();
+  if (!jaVoice) jaVoice = pickJapaneseVoice();
+
+  synth.cancel(); // повторный тап перебивает предыдущее, а не встаёт в очередь
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = "ja-JP";
+  if (jaVoice) u.voice = jaVoice;
+  // Чуть медленнее обычного: на карточке слушают, как оно устроено, а не
+  // сколько успеет проговорить синтезатор.
+  u.rate = 0.85;
+  synth.speak(u);
+  return true;
+}
+
+// Что произносить у карточки: у слова — его чтение, у кандзи — то чтение,
+// которое учим. Для ключа звучания нет вовсе.
+export function speakableOf(card) {
+  if (!card) return "";
+  if (card.itemType === "word") return card.reading || "";
+  if (card.itemType === "kanji") return card.mainReading || "";
+  return "";
+}

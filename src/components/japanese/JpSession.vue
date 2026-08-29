@@ -15,6 +15,10 @@ import {
   JP_RATING_HARD,
   JP_RATING_GOOD,
   JP_RATING_EASY,
+  canSpeakJapanese,
+  primeJapaneseVoice,
+  speakJapanese,
+  speakableOf,
 } from "@/components/japaneseApi.js";
 
 // Сессия изучения — общий экран для телефона и десктопа.
@@ -225,7 +229,18 @@ async function finish() {
 
 const meaning = computed(() => (card.value?.meaningsRu || []).slice(0, 3).join(", "));
 
-onMounted(() => begin(1));
+// Что можно произнести на этой карточке. У ключа звучания нет: это часть
+// знака, а не слово.
+const speakable = computed(() => (canSpeakJapanese() ? speakableOf(card.value) : ""));
+
+function say() {
+  speakJapanese(speakable.value);
+}
+
+onMounted(() => {
+  primeJapaneseVoice();
+  begin(1);
+});
 onBeforeUnmount(stopTicker);
 </script>
 
@@ -313,6 +328,12 @@ onBeforeUnmount(stopTicker);
               {{ realTiles.join(" + ") }}
             </template>
             <template v-else>{{ card.options?.[card.correctIndex] }}</template>
+          </div>
+
+          <!-- Звук только после ответа: до него он подсказывал бы чтение,
+               а на механике ввода чтения — прямо выдавал ответ. -->
+          <div v-if="speakable" class="jps-say">
+            <button class="jps-say-btn" @click="say">🔊 {{ speakable }}</button>
           </div>
           <div v-if="card.components?.length" class="jps-parts">
             <span v-for="c in card.components" :key="c.char" class="jps-part">
@@ -576,6 +597,27 @@ onBeforeUnmount(stopTicker);
   color: #cfd3e0;
   font-size: 14px;
   margin-right: 3px;
+}
+
+.jps-say {
+  display: flex;
+  justify-content: center;
+}
+
+.jps-say-btn {
+  min-height: 40px;
+  padding: 0 14px;
+  border-radius: 11px;
+  border: 1px solid var(--m-line, #262933);
+  background: var(--m-card-2, #22242d);
+  color: var(--m-text, #e6e8ef);
+  font-size: 15px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.jps-say-btn:active {
+  background: #2b2e39;
 }
 
 .jps-mnemonic {

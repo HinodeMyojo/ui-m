@@ -1,6 +1,12 @@
 <script setup>
-import { ref } from "vue";
-import { analyzeJpText, fetchJpKanji } from "@/components/japaneseApi.js";
+import { ref, onMounted } from "vue";
+import {
+  analyzeJpText,
+  fetchJpKanji,
+  canSpeakJapanese,
+  primeJapaneseVoice,
+  speakJapanese,
+} from "@/components/japaneseApi.js";
 import JpStrokeOrder from "./JpStrokeOrder.vue";
 
 // Разбор текста. Второй сценарий из спеки целиком: читает Нечаеву или мангу,
@@ -53,6 +59,15 @@ function stateLabel(item) {
 }
 
 const SAMPLE = "日本語を勉強しています";
+
+// Произносится кана: синтезатор сам выбирает чтение иероглифов и на 生 или 何
+// ошибается, а кану читает однозначно.
+const canSpeak = canSpeakJapanese();
+onMounted(primeJapaneseVoice);
+
+function say(kana) {
+  speakJapanese(kana);
+}
 </script>
 
 <template>
@@ -90,6 +105,14 @@ const SAMPLE = "日本語を勉強しています";
             <div class="jpa-word-head">
               <span class="jpa-word-text">{{ w.text }}</span>
               <span class="jpa-word-reading">{{ w.reading }}</span>
+              <button
+                v-if="canSpeak && w.reading"
+                class="jpa-say"
+                :aria-label="`Произнести ${w.text}`"
+                @click="say(w.reading)"
+              >
+                🔊
+              </button>
               <span class="jpa-state" :class="{ 'is-on': w.inStudy, 'is-done': w.learned }">
                 {{ stateLabel(w) }}
               </span>
@@ -110,29 +133,40 @@ const SAMPLE = "日本語を勉強しています";
         <div v-if="!result.kanji.length" class="jp-empty">В строке нет иероглифов</div>
 
         <div v-else class="jpa-list">
-          <button
+          <!-- Строка знака — не одна кнопка: внутри живёт вторая, для звука,
+               а кнопка в кнопке невалидна и на телефоне ловит не тот тап. -->
+          <div
             v-for="k in result.kanji"
             :key="k.char"
             class="jpa-kanji"
             :class="{ 'is-study': k.inStudy, 'is-done': k.learned }"
-            @click="openKanji(k.char)"
           >
-            <span class="jpa-kanji-char">{{ k.char }}</span>
-            <span class="jpa-kanji-body">
-              <span class="jpa-kanji-meaning">
-                {{ k.meaningsRu.slice(0, 3).join(", ") || "нет в справочнике" }}
+            <button class="jpa-kanji-main" @click="openKanji(k.char)">
+              <span class="jpa-kanji-char">{{ k.char }}</span>
+              <span class="jpa-kanji-body">
+                <span class="jpa-kanji-meaning">
+                  {{ k.meaningsRu.slice(0, 3).join(", ") || "нет в справочнике" }}
+                </span>
+                <span class="jpa-kanji-sub">
+                  <template v-if="k.mainReading">{{ k.mainReading }} · </template>
+                  <template v-if="k.jlpt">N{{ k.jlpt }} · </template>
+                  {{ k.strokes }} черт
+                  <template v-if="k.count > 1"> · {{ k.count }} раза в строке</template>
+                </span>
               </span>
-              <span class="jpa-kanji-sub">
-                <template v-if="k.mainReading">{{ k.mainReading }} · </template>
-                <template v-if="k.jlpt">N{{ k.jlpt }} · </template>
-                {{ k.strokes }} черт
-                <template v-if="k.count > 1"> · {{ k.count }} раза в строке</template>
-              </span>
-            </span>
+            </button>
+            <button
+              v-if="canSpeak && k.mainReading"
+              class="jpa-say"
+              :aria-label="`Произнести чтение ${k.char}`"
+              @click="say(k.mainReading)"
+            >
+              🔊
+            </button>
             <span class="jpa-state" :class="{ 'is-on': k.inStudy, 'is-done': k.learned }">
               {{ stateLabel(k) }}
             </span>
-          </button>
+          </div>
         </div>
       </section>
     </template>
@@ -142,7 +176,16 @@ const SAMPLE = "日本語を勉強しています";
     <section v-else-if="detail" class="jp-card jpa-detail">
       <div class="jpa-detail-head">
         <div class="jp-char-lg">{{ detail.char }}</div>
-        <button class="jp-btn jp-btn-sm" @click="detail = null">Свернуть</button>
+        <div class="jp-row">
+          <button
+            v-if="canSpeak && detail.mainReading"
+            class="jp-btn jp-btn-sm"
+            @click="say(detail.mainReading)"
+          >
+            🔊 {{ detail.mainReading }}
+          </button>
+          <button class="jp-btn jp-btn-sm" @click="detail = null">Свернуть</button>
+        </div>
       </div>
       <div class="jpa-detail-meanings">{{ detail.meaningsRu.join(", ") }}</div>
       <div class="jp-muted">
@@ -257,16 +300,47 @@ const SAMPLE = "日本語を勉強しています";
 .jpa-kanji {
   display: flex;
   align-items: center;
-  gap: 11px;
+  gap: 8px;
   width: 100%;
-  text-align: left;
   padding: 9px 11px;
   border-radius: 10px;
   background: #22242d;
   border: 1px solid #2a2d38;
   color: #e8eaf2;
+  box-sizing: border-box;
+}
+
+.jpa-kanji-main {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  background: none;
+  border: none;
+  padding: 0;
+  color: inherit;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
+}
+
+/* Кнопка звука — своя цель под палец, не меньше 44px. */
+.jpa-say {
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  border-radius: 11px;
+  background: #1b1d25;
+  border: 1px solid #2a2d38;
+  color: #cfd3e0;
+  font-size: 17px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.jpa-say:active {
+  background: #2b2e39;
 }
 
 .jpa-kanji.is-study {
