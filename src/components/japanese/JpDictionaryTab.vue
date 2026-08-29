@@ -42,6 +42,15 @@ async function search(text) {
   }
 }
 
+// Русских значений кандзи нет ни в одном свободном источнике, и до отдельного
+// прохода перевода в поле «русские» лежит английский. Показывать одну и ту же
+// строку дважды — выглядит как поломка, а не как честная подстановка.
+const showEnglish = computed(() => {
+  const k = kanji.value;
+  if (!k?.meaningsEn?.length) return false;
+  return k.meaningsEn.join(", ") !== k.meaningsRu.join(", ");
+});
+
 const stateLabel = computed(() => {
   const k = kanji.value;
   if (!k?.inStudy) return "не в изучении";
@@ -93,9 +102,7 @@ const levelLabel = computed(() => {
 
         <div class="jpw-facts">
           <div class="jpw-meanings">{{ kanji.meaningsRu.join(", ") }}</div>
-          <div v-if="kanji.meaningsEn?.length" class="jp-muted">
-            {{ kanji.meaningsEn.join(", ") }}
-          </div>
+          <div v-if="showEnglish" class="jp-muted">{{ kanji.meaningsEn.join(", ") }}</div>
 
           <div class="jp-field">
             <label>Оны</label>
