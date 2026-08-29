@@ -58,6 +58,8 @@ export const fetchJpKanji = (char) => request(`/kanji/${encodeURIComponent(char)
 // Разбор вставленной строки целиком: какие в ней кандзи и слова и что из
 // этого уже учится. Первый знак строки — не разбор.
 export const analyzeJpText = (text) => post("/analyze", { text });
+export const fetchJpGrid = () => request("/grid");
+export const fetchJpAchievements = () => request("/achievements");
 export const fetchJpSettings = () => request("/settings");
 export const saveJpSettings = (body) => put("/settings", body);
 
@@ -67,6 +69,8 @@ export const JP_MECH_MEANING = "meaning-choice";
 export const JP_MECH_READING = "reading-input";
 export const JP_MECH_BUILD = "build-from-keys";
 export const JP_MECH_TRACE = "trace";
+export const JP_MECH_READING_IN_WORD = "reading-in-word";
+export const JP_MECH_TELL_APART = "tell-apart";
 
 // Оценки FSRS. На телефоне из них видны три: «не знал» ставится самим фактом
 // ошибки, спрашивать после неё ещё и уверенность бессмысленно.

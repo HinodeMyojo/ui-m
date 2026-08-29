@@ -13,6 +13,8 @@ import {
   JP_MECH_READING,
   JP_MECH_BUILD,
   JP_MECH_TRACE,
+  JP_MECH_READING_IN_WORD,
+  JP_MECH_TELL_APART,
   JP_RATING_AGAIN,
   JP_RATING_HARD,
   JP_RATING_GOOD,
@@ -62,6 +64,7 @@ const elapsed = ref(0);
 let ticker = null;
 
 const card = computed(() => queue.value[index.value] || null);
+const isArena = computed(() => props.kind === "arena");
 const total = computed(() => queue.value.length);
 const plannedSec = computed(() => session.value?.plannedSec || props.sec || 360);
 const leftSec = computed(() => Math.max(0, plannedSec.value - elapsed.value));
@@ -185,6 +188,11 @@ function checkReading() {
 function reveal(v) {
   verdict.value = v;
   phase.value = PHASE.REVEAL;
+  // Арена — про скорость: спрашивать после ответа ещё и уверенность значит
+  // отдать половину минуты кнопкам.
+  if (isArena.value) {
+    rate(v === "wrong" ? JP_RATING_AGAIN : JP_RATING_GOOD);
+  }
 }
 
 // --- Отправка ---
@@ -272,15 +280,31 @@ onBeforeUnmount(stopTicker);
     <div v-if="phase === PHASE.LOADING" class="jps-mid jps-muted">Собираю…</div>
 
     <div v-else-if="phase === PHASE.EMPTY" class="jps-mid">
-      <p class="jps-muted">{{ error || "На сегодня всё — повторять нечего." }}</p>
+      <p class="jps-muted">
+        {{
+          error ||
+          (isArena
+            ? "Арена гоняет только закреплённое — пока закреплять нечего."
+            : "На сегодня всё — повторять нечего.")
+        }}
+      </p>
       <button class="m-btn" @click="emit('exit')">Назад</button>
     </div>
 
     <!-- Итог раунда -->
     <div v-else-if="phase === PHASE.DONE" class="jps-mid jps-done">
-      <div class="jps-done-acc">{{ result?.accuracyPct ?? 0 }}%</div>
+      <div class="jps-done-acc">
+        <template v-if="isArena">{{ result?.correct ?? 0 }}</template>
+        <template v-else>{{ result?.accuracyPct ?? 0 }}%</template>
+      </div>
       <div class="jps-muted">
-        {{ result?.correct ?? 0 }} из {{ result?.cards ?? 0 }} · +{{ result?.xp ?? 0 }} XP
+        <template v-if="isArena">
+          верных за минуту из {{ result?.cards ?? 0 }}
+          <template v-if="session?.bestScore"> · рекорд {{ session.bestScore }}</template>
+        </template>
+        <template v-else>
+          {{ result?.correct ?? 0 }} из {{ result?.cards ?? 0 }} · +{{ result?.xp ?? 0 }} XP
+        </template>
       </div>
 
       <div class="jps-done-rows">
@@ -294,14 +318,20 @@ onBeforeUnmount(stopTicker);
         <div v-if="result?.dueTomorrow" class="jps-done-row">
           🕓 Завтра ждут: {{ result.dueTomorrow }}
         </div>
+        <div v-for="a in result?.achievements || []" :key="a.code" class="jps-done-row is-good">
+          🏅 {{ a.title }}
+        </div>
       </div>
 
       <div class="jps-done-actions">
         <button class="m-btn m-btn-accent jps-again" @click="begin(round + 1)">
-          Ещё раунд
-          <span v-if="result?.nextRoundXpMultiplier > 1" class="jps-mult">
-            ×{{ result.nextRoundXpMultiplier }}
-          </span>
+          <template v-if="isArena">Ещё минута</template>
+          <template v-else>
+            Ещё раунд
+            <span v-if="result?.nextRoundXpMultiplier > 1" class="jps-mult">
+              ×{{ result.nextRoundXpMultiplier }}
+            </span>
+          </template>
         </button>
         <button class="m-btn" @click="emit('exit')">Хватит</button>
       </div>
@@ -315,17 +345,47 @@ onBeforeUnmount(stopTicker);
           <span v-if="card.isNew" class="jps-new">новое</span>
         </div>
 
+        <!-- В различении похожих начертание и есть ответ: сверху показывается
+             значение, а знаки лежат в вариантах. -->
         <div
-          v-if="!(phase === PHASE.ASK && card.mechanic === JP_MECH_TRACE)"
+          v-if="phase === PHASE.ASK && card.mechanic === JP_MECH_TELL_APART"
+          class="jps-ask-meaning"
+        >
+          {{ meaning }}
+        </div>
+
+        <!-- Он или кун: слово целиком, спрашиваемый знак подсвечен. -->
+        <div v-else-if="card.mechanic === JP_MECH_READING_IN_WORD" class="jps-word-focus">
+          <span
+            v-for="(ch, i) in [...card.char]"
+            :key="i"
+            :class="{ 'is-focus': ch === card.focus }"
+            >{{ ch }}</span
+          >
+        </div>
+
+        <div
+          v-else-if="!(phase === PHASE.ASK && card.mechanic === JP_MECH_TRACE)"
           class="jps-char"
           :class="{ 'is-word': card.itemType === 'word' }"
         >
           {{ card.char }}
         </div>
 
+        <div v-if="card.mechanic === JP_MECH_READING_IN_WORD" class="jps-hint jps-hint-sm">
+          как читается {{ card.focus }} в этом слове
+        </div>
+
         <!-- В «собери из ключей» и «введи чтение» значение — это условие
              задачи, а не ответ, поэтому видно сразу. -->
-        <div v-if="card.mechanic !== JP_MECH_MEANING" class="jps-hint">{{ meaning }}</div>
+        <!-- В различении похожих значение и есть вопрос, оно уже стоит выше:
+             второй раз тем же текстом — просто шум. -->
+        <div
+          v-if="card.mechanic !== JP_MECH_MEANING && card.mechanic !== JP_MECH_TELL_APART"
+          class="jps-hint"
+        >
+          {{ meaning }}
+        </div>
         <div v-if="card.mechanic === JP_MECH_READING" class="jps-hint jps-hint-sm">
           главное чтение
         </div>
@@ -344,6 +404,9 @@ onBeforeUnmount(stopTicker);
               {{ realTiles.join(" + ") }}
             </template>
             <template v-else-if="card.mechanic === JP_MECH_TRACE">{{ meaning }}</template>
+            <template v-else-if="card.mechanic === JP_MECH_TELL_APART">
+              {{ card.options?.[card.correctIndex] }} — {{ meaning }}
+            </template>
             <template v-else>{{ card.options?.[card.correctIndex] }}</template>
           </div>
 
@@ -364,11 +427,27 @@ onBeforeUnmount(stopTicker);
       <!-- Всё нажимаемое — здесь, в нижней трети. -->
       <div class="jps-bottom">
         <template v-if="phase === PHASE.ASK">
-          <div v-if="card.mechanic === JP_MECH_MEANING" class="jps-options">
+          <div
+            v-if="card.mechanic === JP_MECH_MEANING || card.mechanic === JP_MECH_READING_IN_WORD"
+            class="jps-options"
+          >
             <button
               v-for="(o, i) in card.options"
               :key="i"
               class="jps-option"
+              @click="pickOption(i)"
+            >
+              {{ o }}
+            </button>
+          </div>
+
+          <!-- Различение похожих: выбирают начертание, поэтому варианты
+               крупные и в сетку, а не строками с текстом. -->
+          <div v-else-if="card.mechanic === JP_MECH_TELL_APART" class="jps-glyphs">
+            <button
+              v-for="(o, i) in card.options"
+              :key="i"
+              class="jps-glyph"
               @click="pickOption(i)"
             >
               {{ o }}
@@ -683,6 +762,44 @@ onBeforeUnmount(stopTicker);
   text-align: center;
   font-size: 13px;
   color: var(--m-muted, #7a7f8e);
+}
+
+.jps-ask-meaning {
+  font-size: 26px;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+/* Слово целиком, спрашиваемый знак подсвечен: вопрос «как читается вот этот
+   здесь» иначе не поставить. */
+.jps-word-focus {
+  font-size: 60px;
+  line-height: 1.1;
+}
+
+.jps-word-focus .is-focus {
+  color: #a58bff;
+}
+
+.jps-glyphs {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+
+.jps-glyph {
+  min-height: 84px;
+  border-radius: 13px;
+  border: 1px solid var(--m-line, #262933);
+  background: var(--m-card-2, #22242d);
+  color: var(--m-text, #e6e8ef);
+  font-size: 44px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.jps-glyph:active {
+  background: #2b2e39;
 }
 
 .jps-typed {

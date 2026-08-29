@@ -31,6 +31,10 @@ const TABS = [
 ];
 
 const tab = ref(localStorage.getItem("japaneseTab") || "study");
+// Тип запускаемой сессии: обычная смесь или арена на минуту.
+const sessionKind = ref("mix");
+// Знак, открытый из сетки дзёё, — разбор показывает по нему карточку.
+const openedChar = ref("");
 const overview = ref(null);
 const decks = ref([]);
 const error = ref("");
@@ -68,9 +72,20 @@ function deckPct(deck) {
   return Math.round((deck.learned / deck.total) * 100);
 }
 
+function start(kind) {
+  sessionKind.value = kind;
+  inSession.value = true;
+}
+
 function endSession() {
   inSession.value = false;
   load();
+}
+
+// Из сетки дзёё открывается карточка знака — она живёт в разборе.
+function openKanji(char) {
+  openedChar.value = char;
+  selectTab("analyze");
 }
 
 onMounted(load);
@@ -106,7 +121,7 @@ onMounted(load);
       <!-- Сессия занимает вкладку целиком: во время неё на экране не должно
            быть ничего, кроме карточки. -->
       <section v-if="inSession" class="jp-card jpv-session">
-        <JpSession @exit="endSession" />
+        <JpSession :kind="sessionKind" @exit="endSession" />
       </section>
 
       <template v-else>
@@ -122,7 +137,7 @@ onMounted(load);
                 {{ overview?.dueNow ?? 0 }} к повторению · {{ overview?.newLeft ?? 0 }} новых
               </div>
             </div>
-            <button class="jp-btn is-primary jpv-go" @click="inSession = true">
+            <button class="jp-btn is-primary jpv-go" @click="start('mix')">
               Заниматься {{ minutes }} мин
             </button>
           </div>
@@ -173,6 +188,25 @@ onMounted(load);
         </section>
 
         <section class="jp-card">
+          <div class="jpv-start">
+            <div class="jpv-start-facts">
+              <div class="jpv-arena-title">⚡ Арена</div>
+              <div class="jp-muted">
+                Минута на скорость по уже закреплённому. Интервалы не двигает и стрик не
+                закрывает — только рекорд.
+              </div>
+            </div>
+            <button
+              class="jp-btn jpv-go"
+              :disabled="!overview?.kanjiLearned && !overview?.wordsLearned"
+              @click="start('arena')"
+            >
+              Минута
+            </button>
+          </div>
+        </section>
+
+        <section class="jp-card">
           <h3>Сегодня</h3>
           <div class="jp-stats">
             <div class="jp-stat">
@@ -201,8 +235,8 @@ onMounted(load);
     </template>
 
     <JpDecksTab v-else-if="tab === 'decks'" />
-    <JpAnalyzeTab v-else-if="tab === 'analyze'" />
-    <JpProgressTab v-else-if="tab === 'progress'" />
+    <JpAnalyzeTab v-else-if="tab === 'analyze'" :initial-char="openedChar" />
+    <JpProgressTab v-else-if="tab === 'progress'" @open="openKanji" />
     <JpSettingsTab v-else-if="tab === 'settings'" />
   </div>
 </template>
@@ -229,6 +263,12 @@ onMounted(load);
 .jpv-start-facts {
   flex: 1;
   min-width: 180px;
+}
+
+.jpv-arena-title {
+  font-size: 18px;
+  font-weight: 700;
+  margin-bottom: 4px;
 }
 
 .jpv-start-big {

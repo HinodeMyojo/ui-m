@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed, onMounted } from "vue";
-import { fetchJpOverview, fetchJpDecks } from "@/components/japaneseApi.js";
+import { fetchJpOverview, fetchJpDecks, fetchJpAchievements } from "@/components/japaneseApi.js";
+import JpGrid from "./JpGrid.vue";
 
 // Прогресс. Цель — крепкий N3, и вся страница отвечает на один вопрос: далеко
 // ли до неё. Поэтому первой строкой идёт не XP и не уровень, а пройденная доля
@@ -10,8 +11,11 @@ import { fetchJpOverview, fetchJpDecks } from "@/components/japaneseApi.js";
 const N3_KANJI = 650;
 const N3_WORDS = 3700;
 
+const emit = defineEmits(["open"]);
+
 const overview = ref(null);
 const decks = ref([]);
+const achievements = ref([]);
 const loading = ref(true);
 const error = ref("");
 
@@ -19,9 +23,14 @@ async function load() {
   loading.value = true;
   error.value = "";
   try {
-    const [o, d] = await Promise.all([fetchJpOverview(), fetchJpDecks()]);
+    const [o, d, a] = await Promise.all([
+      fetchJpOverview(),
+      fetchJpDecks(),
+      fetchJpAchievements(),
+    ]);
     overview.value = o;
     decks.value = d || [];
+    achievements.value = a || [];
   } catch (e) {
     error.value = e.message || "не загрузилось";
   } finally {
@@ -46,6 +55,11 @@ const debtTone = computed(() => {
 });
 
 const started = computed(() => decks.value.filter((d) => d.started > 0));
+
+// Взятые вехи впереди, к невзятым идём. Показываются и те и другие: список
+// только из взятых не говорит, к чему стремиться.
+const earned = computed(() => achievements.value.filter((a) => a.earned));
+const pending = computed(() => achievements.value.filter((a) => !a.earned).slice(0, 6));
 
 function pct(deck) {
   if (!deck.total) return 0;
@@ -144,6 +158,23 @@ onMounted(load);
         </div>
       </section>
 
+      <JpGrid @open="emit('open', $event)" />
+
+      <section class="jp-card">
+        <h3>Вехи — {{ earned.length }} из {{ achievements.length }}</h3>
+        <div v-if="!achievements.length" class="jp-empty">Список не загрузился</div>
+        <template v-else>
+          <div class="jpp-badges">
+            <span v-for="a in earned" :key="a.code" class="jpp-badge is-on">{{ a.title }}</span>
+            <span v-if="!earned.length" class="jp-muted">Пока ни одной — всё впереди</span>
+          </div>
+          <div v-if="pending.length" class="jp-muted" style="margin-top: 10px">
+            Ближайшие:
+            <span v-for="a in pending" :key="a.code" class="jpp-badge">{{ a.title }}</span>
+          </div>
+        </template>
+      </section>
+
       <section class="jp-card">
         <h3>Наборы в работе</h3>
         <div v-if="!started.length" class="jp-empty">Ни одного ещё не начат</div>
@@ -196,6 +227,28 @@ onMounted(load);
   display: flex;
   align-items: baseline;
   gap: 10px;
+}
+
+.jpp-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.jpp-badge {
+  display: inline-block;
+  font-size: 12px;
+  border-radius: 999px;
+  padding: 4px 10px;
+  background: #22242d;
+  border: 1px solid #2f3340;
+  color: #7a7f8e;
+  margin: 2px 3px 0 0;
+}
+
+.jpp-badge.is-on {
+  border-color: rgba(99, 201, 79, 0.55);
+  color: #9ee08c;
 }
 
 .jpp-decks {

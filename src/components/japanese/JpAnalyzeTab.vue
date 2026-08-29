@@ -17,6 +17,11 @@ import JpTraceCanvas from "./JpTraceCanvas.vue";
 // найденному слову видно значение, чтение и учится ли оно уже. Тап по знаку
 // открывает полную карточку с составом, порядком черт и похожими.
 
+const props = defineProps({
+  // Знак, с которого открыть вкладку: сетка дзёё ведёт сюда по тапу.
+  initialChar: { type: String, default: "" },
+});
+
 const text = ref("");
 const result = ref(null);
 const loading = ref(false);
@@ -80,7 +85,10 @@ function onTraced(stats) {
 // Произносится кана: синтезатор сам выбирает чтение иероглифов и на 生 или 何
 // ошибается, а кану читает однозначно.
 const canSpeak = canSpeakJapanese();
-onMounted(primeJapaneseVoice);
+onMounted(() => {
+  primeJapaneseVoice();
+  if (props.initialChar) openKanji(props.initialChar);
+});
 
 function say(kana) {
   speakJapanese(kana);
