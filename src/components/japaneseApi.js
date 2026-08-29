@@ -71,6 +71,7 @@ export const JP_MECH_BUILD = "build-from-keys";
 export const JP_MECH_TRACE = "trace";
 export const JP_MECH_READING_IN_WORD = "reading-in-word";
 export const JP_MECH_TELL_APART = "tell-apart";
+export const JP_MECH_CLOZE = "cloze";
 
 // Оценки FSRS. На телефоне из них видны три: «не знал» ставится самим фактом
 // ошибки, спрашивать после неё ещё и уверенность бессмысленно.

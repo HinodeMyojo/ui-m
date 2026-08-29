@@ -15,6 +15,7 @@ import {
   JP_MECH_TRACE,
   JP_MECH_READING_IN_WORD,
   JP_MECH_TELL_APART,
+  JP_MECH_CLOZE,
   JP_RATING_AGAIN,
   JP_RATING_HARD,
   JP_RATING_GOOD,
@@ -345,10 +346,18 @@ onBeforeUnmount(stopTicker);
           <span v-if="card.isNew" class="jps-new">новое</span>
         </div>
 
+        <!-- Пропуск в предложении: вопрос — сама фраза, знака над ней нет. -->
+        <template v-if="card.mechanic === JP_MECH_CLOZE">
+          <div class="jps-sentence">{{ card.sentence }}</div>
+          <div v-if="card.sentenceTranslation" class="jps-hint">
+            {{ card.sentenceTranslation }}
+          </div>
+        </template>
+
         <!-- В различении похожих начертание и есть ответ: сверху показывается
              значение, а знаки лежат в вариантах. -->
         <div
-          v-if="phase === PHASE.ASK && card.mechanic === JP_MECH_TELL_APART"
+          v-else-if="phase === PHASE.ASK && card.mechanic === JP_MECH_TELL_APART"
           class="jps-ask-meaning"
         >
           {{ meaning }}
@@ -404,6 +413,9 @@ onBeforeUnmount(stopTicker);
               {{ realTiles.join(" + ") }}
             </template>
             <template v-else-if="card.mechanic === JP_MECH_TRACE">{{ meaning }}</template>
+            <template v-else-if="card.mechanic === JP_MECH_CLOZE">
+              {{ card.options?.[card.correctIndex] }}
+            </template>
             <template v-else-if="card.mechanic === JP_MECH_TELL_APART">
               {{ card.options?.[card.correctIndex] }} — {{ meaning }}
             </template>
@@ -428,7 +440,11 @@ onBeforeUnmount(stopTicker);
       <div class="jps-bottom">
         <template v-if="phase === PHASE.ASK">
           <div
-            v-if="card.mechanic === JP_MECH_MEANING || card.mechanic === JP_MECH_READING_IN_WORD"
+            v-if="
+              card.mechanic === JP_MECH_MEANING ||
+              card.mechanic === JP_MECH_READING_IN_WORD ||
+              card.mechanic === JP_MECH_CLOZE
+            "
             class="jps-options"
           >
             <button
@@ -762,6 +778,13 @@ onBeforeUnmount(stopTicker);
   text-align: center;
   font-size: 13px;
   color: var(--m-muted, #7a7f8e);
+}
+
+/* Фраза читается, а не разглядывается: кегль умеренный, строки переносятся. */
+.jps-sentence {
+  font-size: 27px;
+  line-height: 1.5;
+  padding: 0 4px;
 }
 
 .jps-ask-meaning {
