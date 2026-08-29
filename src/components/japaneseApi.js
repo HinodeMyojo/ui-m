@@ -66,6 +66,7 @@ export const saveJpSettings = (body) => put("/settings", body);
 export const JP_MECH_MEANING = "meaning-choice";
 export const JP_MECH_READING = "reading-input";
 export const JP_MECH_BUILD = "build-from-keys";
+export const JP_MECH_TRACE = "trace";
 
 // Оценки FSRS. На телефоне из них видны три: «не знал» ставится самим фактом
 // ошибки, спрашивать после неё ещё и уверенность бессмысленно.

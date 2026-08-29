@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount, nextTick } from "vue";
 import JpKanaKeyboard from "./JpKanaKeyboard.vue";
+import JpTraceCanvas from "./JpTraceCanvas.vue";
 import {
   startJpSession,
   answerJpCard,
@@ -11,6 +12,7 @@ import {
   JP_MECH_MEANING,
   JP_MECH_READING,
   JP_MECH_BUILD,
+  JP_MECH_TRACE,
   JP_RATING_AGAIN,
   JP_RATING_HARD,
   JP_RATING_GOOD,
@@ -136,6 +138,14 @@ const canSubmit = computed(() => {
   if (card.value.mechanic === JP_MECH_BUILD) return tiles.value.length > 0;
   return false;
 });
+
+// Обводка отвечает сама, как только знак доведён до конца: отдельная кнопка
+// «готово» после последней черты — лишний тап на ровном месте.
+// Промахи решают оценку: провёл начисто — «верно», лазил в подсказку или
+// мазал — «почти», и карточка вернётся раньше.
+function traceDone({ misses }) {
+  reveal(misses === 0 ? "right" : "close");
+}
 
 function pickOption(i) {
   if (phase.value !== PHASE.ASK) return;
@@ -305,7 +315,13 @@ onBeforeUnmount(stopTicker);
           <span v-if="card.isNew" class="jps-new">новое</span>
         </div>
 
-        <div class="jps-char" :class="{ 'is-word': card.itemType === 'word' }">{{ card.char }}</div>
+        <div
+          v-if="!(phase === PHASE.ASK && card.mechanic === JP_MECH_TRACE)"
+          class="jps-char"
+          :class="{ 'is-word': card.itemType === 'word' }"
+        >
+          {{ card.char }}
+        </div>
 
         <!-- В «собери из ключей» и «введи чтение» значение — это условие
              задачи, а не ответ, поэтому видно сразу. -->
@@ -327,6 +343,7 @@ onBeforeUnmount(stopTicker);
             <template v-else-if="card.mechanic === JP_MECH_BUILD">
               {{ realTiles.join(" + ") }}
             </template>
+            <template v-else-if="card.mechanic === JP_MECH_TRACE">{{ meaning }}</template>
             <template v-else>{{ card.options?.[card.correctIndex] }}</template>
           </div>
 
@@ -364,6 +381,11 @@ onBeforeUnmount(stopTicker);
             <button class="m-btn m-btn-accent jps-wide" :disabled="!canSubmit" @click="submit">
               Ответить
             </button>
+          </template>
+
+          <template v-else-if="card.mechanic === JP_MECH_TRACE">
+            <div class="jps-trace-hint">Обведи знак по контуру, черту за чертой</div>
+            <JpTraceCanvas :paths="card.strokePaths || []" :char="card.char" @done="traceDone" />
           </template>
 
           <template v-else>
@@ -655,6 +677,12 @@ onBeforeUnmount(stopTicker);
 
 .jps-option:active {
   background: #2b2e39;
+}
+
+.jps-trace-hint {
+  text-align: center;
+  font-size: 13px;
+  color: var(--m-muted, #7a7f8e);
 }
 
 .jps-typed {

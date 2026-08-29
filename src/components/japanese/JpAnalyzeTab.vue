@@ -8,6 +8,7 @@ import {
   speakJapanese,
 } from "@/components/japaneseApi.js";
 import JpStrokeOrder from "./JpStrokeOrder.vue";
+import JpTraceCanvas from "./JpTraceCanvas.vue";
 
 // Разбор текста. Второй сценарий из спеки целиком: читает Нечаеву или мангу,
 // встречает непонятное — вставляет строку и видит, из чего она состоит.
@@ -44,6 +45,8 @@ async function openKanji(char) {
   error.value = "";
   try {
     detail.value = await fetchJpKanji(char);
+    tracing.value = false;
+    traceResult.value = null;
   } catch (e) {
     detail.value = null;
     error.value = e.message || "карточка не нашлась";
@@ -59,6 +62,20 @@ function stateLabel(item) {
 }
 
 const SAMPLE = "日本語を勉強しています";
+
+// Обводка в карточке — тренажёр без последствий: ничего не отправляется и
+// на повторения не влияет, можно хоть двадцать раз подряд.
+const tracing = ref(false);
+const traceResult = ref(null);
+
+function startTrace() {
+  traceResult.value = null;
+  tracing.value = true;
+}
+
+function onTraced(stats) {
+  traceResult.value = stats;
+}
 
 // Произносится кана: синтезатор сам выбирает чтение иероглифов и на 生 или 何
 // ошибается, а кану читает однозначно.
@@ -246,7 +263,31 @@ function say(kana) {
         </div>
       </div>
 
-      <JpStrokeOrder v-if="detail.strokePaths?.length" :paths="detail.strokePaths" :size="180" />
+      <template v-if="detail.strokePaths?.length">
+        <div class="jp-field">
+          <label>Порядок черт</label>
+          <div class="jp-row">
+            <button class="jp-btn jp-btn-sm" @click="tracing = !tracing">
+              {{ tracing ? "Смотреть" : "✍️ Написать самому" }}
+            </button>
+            <span v-if="traceResult" class="jp-muted">
+              {{
+                traceResult.misses === 0
+                  ? "начисто, ни одного промаха"
+                  : `промахов ${traceResult.misses}`
+              }}
+            </span>
+          </div>
+        </div>
+        <JpTraceCanvas
+          v-if="tracing"
+          :key="detail.char"
+          :paths="detail.strokePaths"
+          :char="detail.char"
+          @done="onTraced"
+        />
+        <JpStrokeOrder v-else :paths="detail.strokePaths" :size="180" />
+      </template>
     </section>
   </div>
 </template>
