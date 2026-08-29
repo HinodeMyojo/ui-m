@@ -1141,6 +1141,10 @@ function closeTimeStats() {
           <div class="icon">📄</div>
           <p class="text">Резюме</p>
         </button>
+        <button class="nyamaaa" @click="router.push('/japanese')">
+          <div class="icon">語</div>
+          <p class="text">Японский</p>
+        </button>
         <button class="nyamaaa nyamaaa-soon nyamaaa-unknown" disabled>
           <div class="icon">❓</div>
           <span class="nyama-badge">Неизвестно</span>

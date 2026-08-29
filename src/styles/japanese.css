@@ -1,0 +1,277 @@
+/* Общие стили раздела «Японский». Файл глобальный намеренно — тем же приёмом,
+   что и sport.css: вкладок пять, и держать одинаковые карточки и кнопки в
+   scoped-стилях каждой значит развести их внешний вид за две правки.
+   Все классы с префиксом jp-. */
+
+.jp {
+  --jp-bg: #18191f;
+  --jp-card: #1e2027;
+  --jp-card-2: #22242d;
+  --jp-line: #2a2d38;
+  --jp-line-2: #2f3340;
+  --jp-text: #e8eaf2;
+  --jp-muted: #7a7f8e;
+  --jp-accent: #6e4aff;
+  --jp-blue: #1767fd;
+  --jp-ok: #63c94f;
+  --jp-warn: #ffd666;
+  --jp-bad: #e5484d;
+
+  width: 100%;
+  min-height: 100vh;
+  background: var(--jp-bg);
+  color: var(--jp-text);
+  padding: 16px clamp(10px, 3vw, 40px) 80px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  box-sizing: border-box;
+}
+
+.jp-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.jp-header h1 {
+  margin: 0;
+  font-size: 22px;
+}
+
+.jp-tabs {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.jp-tab {
+  background: var(--jp-card-2);
+  border: 1px solid var(--jp-line-2);
+  color: #cfd3e0;
+  border-radius: 8px;
+  padding: 7px 14px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.jp-tab:hover {
+  border-color: var(--jp-accent);
+}
+
+.jp-tab.is-active {
+  background: var(--jp-accent);
+  border-color: var(--jp-accent);
+  color: #fff;
+}
+
+.jp-btn {
+  background: var(--jp-card-2);
+  border: 1px solid var(--jp-line-2);
+  color: var(--jp-text);
+  border-radius: 8px;
+  padding: 8px 14px;
+  cursor: pointer;
+  font-size: 13px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.jp-btn:hover:not(:disabled) {
+  border-color: var(--jp-accent);
+}
+
+.jp-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.jp-btn.is-primary {
+  background: var(--jp-accent);
+  border-color: var(--jp-accent);
+  color: #fff;
+}
+
+.jp-btn.is-danger {
+  color: #ff9ea0;
+  border-color: #4a2b30;
+  background: #2a1c1f;
+}
+
+.jp-btn-sm {
+  padding: 5px 10px;
+  font-size: 12px;
+}
+
+.jp-card {
+  background: var(--jp-card);
+  border: 1px solid var(--jp-line);
+  border-radius: 12px;
+  padding: 14px 16px;
+}
+
+.jp-card h3 {
+  margin: 0 0 10px;
+  font-size: 15px;
+}
+
+.jp-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 12px;
+}
+
+.jp-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.jp-muted {
+  color: var(--jp-muted);
+  font-size: 13px;
+}
+
+.jp-error {
+  background: #2a1c1f;
+  border: 1px solid #4a2b30;
+  color: #ff9ea0;
+  border-radius: 10px;
+  padding: 9px 12px;
+  font-size: 13px;
+}
+
+.jp-empty {
+  color: var(--jp-muted);
+  font-size: 13px;
+  padding: 14px;
+  text-align: center;
+}
+
+.jp-input,
+.jp-select {
+  background: #16171d;
+  border: 1px solid var(--jp-line-2);
+  color: var(--jp-text);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 14px;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.jp-textarea {
+  background: #16171d;
+  border: 1px solid var(--jp-line-2);
+  color: var(--jp-text);
+  border-radius: 8px;
+  padding: 10px;
+  font-size: 15px;
+  outline: none;
+  width: 100%;
+  min-height: 110px;
+  resize: vertical;
+  box-sizing: border-box;
+  line-height: 1.6;
+}
+
+.jp-input:focus,
+.jp-select:focus,
+.jp-textarea:focus {
+  border-color: var(--jp-accent);
+}
+
+.jp-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.jp-field > label {
+  font-size: 12px;
+  color: var(--jp-muted);
+}
+
+.jp-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+/* --- Числа сводки --- */
+
+.jp-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));
+  gap: 10px;
+}
+
+.jp-stat {
+  background: var(--jp-card-2);
+  border: 1px solid var(--jp-line);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
+.jp-stat-label {
+  font-size: 11px;
+  color: var(--jp-muted);
+}
+
+.jp-stat-value {
+  font-size: 21px;
+  font-weight: 700;
+  margin-top: 2px;
+}
+
+.jp-bar {
+  height: 6px;
+  border-radius: 999px;
+  background: #16171d;
+  overflow: hidden;
+}
+
+.jp-bar > span {
+  display: block;
+  height: 100%;
+  background: var(--jp-accent);
+}
+
+/* --- Иероглифы --- */
+
+/* Начертание должно быть крупным везде, где его показывают: разглядеть черты
+   в 16 пикселях невозможно, а именно за этим на карточку и смотрят. */
+.jp-char-lg {
+  font-size: 96px;
+  line-height: 1;
+}
+
+.jp-char-md {
+  font-size: 34px;
+  line-height: 1;
+}
+
+.jp-readings {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.jp-reading {
+  background: var(--jp-card-2);
+  border: 1px solid var(--jp-line);
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 13px;
+}
+
+.jp-reading.is-main {
+  border-color: var(--jp-accent);
+  color: #c9b9ff;
+}

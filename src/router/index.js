@@ -134,6 +134,17 @@ const router = createRouter({
       component: () => import("../views/RoadmapTodayView.vue"),
     },
     {
+      path: "/japanese",
+      name: "Japanese",
+      component: () => import("../views/JapaneseView.vue"),
+    },
+    {
+      // Экран сессии для телефона: отдельная раскладка, не адаптив.
+      path: "/japanese/today",
+      name: "JapaneseToday",
+      component: () => import("../views/JapaneseTodayView.vue"),
+    },
+    {
       path: "/resume",
       name: "Resume",
       component: () => import("../views/ResumeView.vue"),

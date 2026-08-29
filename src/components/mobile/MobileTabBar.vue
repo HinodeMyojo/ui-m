@@ -21,6 +21,7 @@ const MORE = [
   { to: "/discipline", icon: "🎯", label: "Дисциплина" },
   { to: "/roadmap", icon: "🗺️", label: "Roadmap" },
   { to: "/roadmap/today", icon: "📖", label: "Чтение дня" },
+  { to: "/japanese/today", icon: "語", label: "Японский" },
   { to: "/resume/today", icon: "📄", label: "Резюме" },
   { to: "/learning-skills", icon: "🧠", label: "Навыки" },
   { to: "/travel", icon: "✈️", label: "Путешествия" },

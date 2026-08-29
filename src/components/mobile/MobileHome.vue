@@ -18,6 +18,7 @@ const MobileRoadmapCard = defineAsyncComponent(() => import("./MobileRoadmapCard
 const MobileTodayCard = defineAsyncComponent(() => import("./MobileTodayCard.vue"));
 const MobileDisciplineCard = defineAsyncComponent(() => import("./MobileDisciplineCard.vue"));
 const MobileSportCard = defineAsyncComponent(() => import("./MobileSportCard.vue"));
+const MobileJapaneseCard = defineAsyncComponent(() => import("./MobileJapaneseCard.vue"));
 const MobileReadingCard = defineAsyncComponent(() => import("./MobileReadingCard.vue"));
 
 const router = useRouter();
@@ -62,6 +63,7 @@ const weekdayLabel = computed(() => WEEKDAYS[now.getDay()]);
       <MobileRoadmapCard />
       <MobileTodayCard />
       <MobileDisciplineCard />
+      <MobileJapaneseCard />
       <MobileSportCard />
       <MobileReadingCard />
 
