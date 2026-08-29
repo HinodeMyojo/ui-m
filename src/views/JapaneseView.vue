@@ -3,32 +3,36 @@ import { ref, computed, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import "@/styles/japanese.css";
 
-import { fetchJpOverview } from "@/components/japaneseApi.js";
+import { fetchJpOverview, fetchJpDecks } from "@/components/japaneseApi.js";
 import JpSession from "@/components/japanese/JpSession.vue";
 import JpDecksTab from "@/components/japanese/JpDecksTab.vue";
-import JpDictionaryTab from "@/components/japanese/JpDictionaryTab.vue";
+import JpAnalyzeTab from "@/components/japanese/JpAnalyzeTab.vue";
 import JpProgressTab from "@/components/japanese/JpProgressTab.vue";
 import JpSettingsTab from "@/components/japanese/JpSettingsTab.vue";
 
-// Раздел «Японский». Вкладка «Скан» появится на втором этапе — пустой заглушки
-// в меню не держим.
+// Раздел «Японский». Первый экран отвечает на вопрос «где я и что дальше», а
+// не сразу бросает в сессию: заниматься начинают с виджета на главной или с
+// кнопки здесь, а в раздел заходят посмотреть, как идут дела.
 //
-// Занятие идёт тем же компонентом, что и на телефоне: раскладка сессии
-// мобильная по существу (вопрос сверху, ответы снизу), и вторая её версия
-// означала бы две реализации механик и расхождение между ними.
+// Вкладка «Скан» появится на втором этапе — пустой заглушки в меню не держим.
 
 const router = useRouter();
+
+// Цель из спеки: крепкий N3 — примерно столько кандзи и слов.
+const N3_KANJI = 650;
+const N3_WORDS = 3700;
 
 const TABS = [
   { code: "study", title: "Учить" },
   { code: "decks", title: "Наборы" },
-  { code: "dict", title: "Словарь" },
+  { code: "analyze", title: "Разбор" },
   { code: "progress", title: "Прогресс" },
   { code: "settings", title: "Настройки" },
 ];
 
 const tab = ref(localStorage.getItem("japaneseTab") || "study");
 const overview = ref(null);
+const decks = ref([]);
 const error = ref("");
 const inSession = ref(false);
 
@@ -37,45 +41,63 @@ function selectTab(code) {
   localStorage.setItem("japaneseTab", code);
 }
 
-async function loadOverview() {
+async function load() {
   error.value = "";
   try {
-    overview.value = await fetchJpOverview();
+    const [o, d] = await Promise.all([fetchJpOverview(), fetchJpDecks()]);
+    overview.value = o;
+    decks.value = d || [];
   } catch (e) {
-    error.value = e.message || "не удалось загрузить сводку";
+    error.value = e.message || "не удалось загрузить раздел";
   }
 }
 
 const minutes = computed(() => Math.round((overview.value?.sessionSec || 360) / 60));
 const burning = computed(() => (overview.value?.dueNow || 0) + (overview.value?.newLeft || 0));
+const enabled = computed(() => decks.value.filter((d) => d.enabled));
+
+const kanjiPct = computed(() =>
+  Math.min(100, Math.round(((overview.value?.kanjiLearned || 0) / N3_KANJI) * 100)),
+);
+const wordsPct = computed(() =>
+  Math.min(100, Math.round(((overview.value?.wordsLearned || 0) / N3_WORDS) * 100)),
+);
+
+function deckPct(deck) {
+  if (!deck.total) return 0;
+  return Math.round((deck.learned / deck.total) * 100);
+}
 
 function endSession() {
   inSession.value = false;
-  loadOverview();
+  load();
 }
 
-onMounted(loadOverview);
+onMounted(load);
 </script>
 
 <template>
   <div class="jp">
     <div class="jp-header">
       <h1>語 Японский</h1>
-      <div class="jp-tabs">
-        <button
-          v-for="t in TABS"
-          :key="t.code"
-          class="jp-tab"
-          :class="{ 'is-active': tab === t.code }"
-          @click="selectTab(t.code)"
-        >
-          {{ t.title }}
-        </button>
-      </div>
-      <div class="jp-row">
-        <button class="jp-btn" @click="router.push('/japanese/today')">📱 Экран сессии</button>
+      <div class="jp-head-right">
+        <span v-if="overview" class="jp-streak">🔥 {{ overview.streak }}</span>
         <button class="jp-btn" @click="router.push('/')">← Назад</button>
       </div>
+    </div>
+
+    <!-- Полоса разделов листается вбок: пять вкладок в 390px не помещаются, а
+         перенос во вторую строку выглядит как сломанная вёрстка. -->
+    <div class="jp-tabs">
+      <button
+        v-for="t in TABS"
+        :key="t.code"
+        class="jp-tab"
+        :class="{ 'is-active': tab === t.code }"
+        @click="selectTab(t.code)"
+      >
+        {{ t.title }}
+      </button>
     </div>
 
     <div v-if="error" class="jp-error">{{ error }}</div>
@@ -97,14 +119,57 @@ onMounted(loadOverview);
                 <template v-else>Ничего не горит</template>
               </div>
               <div class="jp-muted">
-                {{ overview?.dueNow ?? 0 }} к повторению · {{ overview?.newLeft ?? 0 }} новых ·
-                🔥 {{ overview?.streak ?? 0 }}
+                {{ overview?.dueNow ?? 0 }} к повторению · {{ overview?.newLeft ?? 0 }} новых
               </div>
             </div>
             <button class="jp-btn is-primary jpv-go" @click="inSession = true">
               Заниматься {{ minutes }} мин
             </button>
           </div>
+        </section>
+
+        <!-- Первое, что должно быть видно в разделе: куда я иду и далеко ли. -->
+        <section class="jp-card">
+          <h3>До крепкого N3</h3>
+          <div class="jpv-goal-row">
+            <span>Кандзи</span>
+            <b>{{ overview?.kanjiLearned ?? 0 }} из {{ N3_KANJI }}</b>
+            <span class="jp-muted">{{ kanjiPct }}%</span>
+          </div>
+          <div class="jp-bar"><span :style="{ width: kanjiPct + '%' }" /></div>
+          <div class="jpv-goal-row">
+            <span>Слова</span>
+            <b>{{ overview?.wordsLearned ?? 0 }} из {{ N3_WORDS }}</b>
+            <span class="jp-muted">{{ wordsPct }}%</span>
+          </div>
+          <div class="jp-bar"><span :style="{ width: wordsPct + '%' }" /></div>
+          <p class="jp-muted" style="margin: 10px 0 0">
+            «Закреплено» — это интервал повторения дороc до трёх недель. До этого единица
+            считается начатой, а не выученной.
+          </p>
+        </section>
+
+        <section class="jp-card">
+          <h3>Что учится сейчас</h3>
+          <div v-if="!enabled.length" class="jp-error">
+            Ни один набор не включён — новых единиц не будет. Включи набор на вкладке «Наборы».
+          </div>
+          <div v-else class="jpv-decks">
+            <div v-for="d in enabled" :key="d.id" class="jpv-deck">
+              <div class="jpv-deck-head">
+                <b>{{ d.name }}</b>
+                <span class="jp-muted">
+                  {{ d.learned }}/{{ d.total }} · {{ deckPct(d) }}% · {{ d.sharePct }}% потока
+                </span>
+              </div>
+              <div class="jp-bar">
+                <span :style="{ width: deckPct(d) + '%', background: d.color || '#6e4aff' }" />
+              </div>
+            </div>
+          </div>
+          <button class="jp-btn" style="margin-top: 10px" @click="selectTab('decks')">
+            Настроить наборы
+          </button>
         </section>
 
         <section class="jp-card">
@@ -127,10 +192,6 @@ onMounted(loadOverview);
               <div class="jp-stat-value">{{ overview?.newLeft ?? 0 }}</div>
             </div>
             <div class="jp-stat">
-              <div class="jp-stat-label">Долг</div>
-              <div class="jp-stat-value">{{ overview?.debt ?? 0 }}</div>
-            </div>
-            <div class="jp-stat">
               <div class="jp-stat-label">Посыплется завтра</div>
               <div class="jp-stat-value">{{ overview?.atRiskTomorrow ?? 0 }}</div>
             </div>
@@ -140,13 +201,24 @@ onMounted(loadOverview);
     </template>
 
     <JpDecksTab v-else-if="tab === 'decks'" />
-    <JpDictionaryTab v-else-if="tab === 'dict'" />
+    <JpAnalyzeTab v-else-if="tab === 'analyze'" />
     <JpProgressTab v-else-if="tab === 'progress'" />
     <JpSettingsTab v-else-if="tab === 'settings'" />
   </div>
 </template>
 
 <style scoped>
+.jp-head-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.jp-streak {
+  font-size: 15px;
+  font-weight: 700;
+}
+
 .jpv-start {
   display: flex;
   align-items: center;
@@ -156,7 +228,7 @@ onMounted(loadOverview);
 
 .jpv-start-facts {
   flex: 1;
-  min-width: 200px;
+  min-width: 180px;
 }
 
 .jpv-start-big {
@@ -169,6 +241,40 @@ onMounted(loadOverview);
   min-height: 52px;
   padding: 0 26px;
   font-size: 16px;
+  flex: 1;
+  min-width: 180px;
+  justify-content: center;
+}
+
+.jpv-goal-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  font-size: 14px;
+  margin: 8px 0 5px;
+}
+
+.jpv-goal-row b {
+  margin-left: auto;
+}
+
+.jpv-decks {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.jpv-deck-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 5px;
+  font-size: 13px;
+}
+
+.jpv-deck-head .jp-muted {
+  margin-left: auto;
 }
 
 /* Сессия — мобильная раскладка по существу; на широком экране её держит

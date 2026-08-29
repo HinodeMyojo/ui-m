@@ -96,7 +96,7 @@ onMounted(load);
             <div class="jp-stat-value">{{ overview.freezes }}</div>
           </div>
           <div class="jp-stat">
-            <div class="jp-stat-label">Уровень</div>
+            <div class="jp-stat-label">Уровень за XP</div>
             <div class="jp-stat-value">{{ overview.level }}</div>
           </div>
           <div class="jp-stat">
@@ -112,6 +112,10 @@ onMounted(load);
 
       <section class="jp-card">
         <h3>Долг повторений</h3>
+        <p class="jp-muted" style="margin-top: 0">
+          Уровень и XP — это только счёт за усердие, к JLPT они отношения не имеют: честная
+          шкала — две полосы выше.
+        </p>
         <div class="jpp-debt" :style="{ color: debtTone.color }">
           {{ overview.debt }}
           <span class="jp-muted" style="font-size: 13px">— {{ debtTone.text }}</span>

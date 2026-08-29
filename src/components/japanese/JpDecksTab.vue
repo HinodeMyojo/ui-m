@@ -27,21 +27,13 @@ const textResult = ref(null);
 
 const systemDecks = computed(() => decks.value.filter((d) => d.kind === "system"));
 const userDecks = computed(() => decks.value.filter((d) => d.kind !== "system"));
+const enabledDecks = computed(() => decks.value.filter((d) => d.enabled));
 
-// Вес имеет смысл только относительно других включённых наборов: 50 из 50 —
-// это все новые единицы, 50 из 150 — треть.
-const enabledWeight = computed(() =>
-  decks.value.reduce((sum, d) => sum + (d.enabled ? d.weight : 0), 0),
-);
-
-function share(deck) {
-  if (!deck.enabled || !enabledWeight.value) return "—";
-  return `${Math.round((deck.weight / enabledWeight.value) * 100)}% потока`;
-}
-
-function progress(deck) {
-  if (!deck.total) return "0%";
-  return `${Math.round((deck.learned / deck.total) * 100)}%`;
+// Долю в потоке считает сервер: вес сам по себе не значит ничего, важно
+// отношение к сумме весов включённых наборов.
+function pct(deck) {
+  if (!deck.total) return 0;
+  return Math.round((deck.learned / deck.total) * 100);
 }
 
 async function load() {
@@ -122,6 +114,41 @@ onMounted(load);
     <div v-if="loading" class="jp-empty">Загружаю…</div>
 
     <template v-else>
+      <!-- Вес — единственное непонятное место во всём разделе, поэтому он
+           объясняется прямо здесь, а не спрятан в настройках. -->
+      <section class="jp-card">
+        <h3>Как это работает</h3>
+        <ul class="jpd-help">
+          <li>
+            Очередь — не список, а смесь <b>включённых</b> наборов. Новые единицы берутся из них
+            по весу: 60 и 40 значит «шесть новых из десяти из первого, четыре из второго».
+          </li>
+          <li>
+            <b>Вес значит что-то только рядом с другими включёнными.</b> Один включённый набор
+            с весом 5 даст те же 100% потока, что и с весом 100.
+          </li>
+          <li>
+            <b>Карточка на единицу одна.</b> Выучил 語 из «Нечаевой» — он тем самым закрыт и в
+            N5, и в кёику, и в частотном наборе: прогресс вырастет у всех, где он есть. Копий
+            не бывает.
+          </li>
+          <li>
+            Сколько новых в день — решает система по долгу повторений. Набор задаёт,
+            <b>что</b> учить, а не сколько.
+          </li>
+        </ul>
+
+        <div v-if="enabledDecks.length" class="jpd-flow">
+          <span class="jp-muted">Поток новых сейчас делят:</span>
+          <span v-for="d in enabledDecks" :key="d.id" class="jpd-flow-chip">
+            {{ d.name }} — {{ d.sharePct }}%
+          </span>
+        </div>
+        <div v-else class="jp-error" style="margin-top: 10px">
+          Ни один набор не включён — новых единиц не будет вовсе.
+        </div>
+      </section>
+
       <section class="jp-card">
         <h3>Вставить кандзи текстом</h3>
         <p class="jp-muted">
@@ -171,29 +198,42 @@ onMounted(load);
         <div v-if="!userDecks.length" class="jp-empty">Пока ни одного</div>
         <div v-else class="jpd-list">
           <div v-for="d in userDecks" :key="d.id" class="jpd-item">
-            <label class="jp-check">
-              <input
-                type="checkbox"
-                :checked="d.enabled"
-                :disabled="busy"
-                @change="patch(d, { enabled: !d.enabled })"
-              />
-              <b>{{ d.name }}</b>
-            </label>
-            <span class="jp-muted">{{ d.learned }}/{{ d.total }} · {{ progress(d) }}</span>
-            <input
-              class="jp-input jpd-weight"
-              type="number"
-              min="1"
-              max="100"
-              :value="d.weight"
-              :disabled="busy"
-              @change="patch(d, { weight: Number($event.target.value) })"
-            />
-            <span class="jp-muted jpd-share">{{ share(d) }}</span>
-            <button class="jp-btn jp-btn-sm is-danger" :disabled="busy" @click="remove(d)">
-              Удалить
-            </button>
+            <div class="jpd-row">
+              <label class="jp-check">
+                <input
+                  type="checkbox"
+                  :checked="d.enabled"
+                  :disabled="busy"
+                  @change="patch(d, { enabled: !d.enabled })"
+                />
+                <b>{{ d.name }}</b>
+              </label>
+              <button class="jp-btn jp-btn-sm is-danger" :disabled="busy" @click="remove(d)">
+                Удалить
+              </button>
+            </div>
+            <div class="jp-bar">
+              <span :style="{ width: pct(d) + '%', background: d.color || '#6e4aff' }" />
+            </div>
+            <div class="jpd-row">
+              <span class="jp-muted">
+                {{ d.learned }} из {{ d.total }} закреплено ({{ pct(d) }}%), в работе
+                {{ d.started }}
+              </span>
+              <label class="jpd-weight-field">
+                <span class="jp-muted">вес</span>
+                <input
+                  class="jp-input jpd-weight"
+                  type="number"
+                  min="1"
+                  max="100"
+                  :value="d.weight"
+                  :disabled="busy"
+                  @change="patch(d, { weight: Number($event.target.value) })"
+                />
+                <span class="jp-muted">{{ d.enabled ? `${d.sharePct}% потока` : "выключен" }}</span>
+              </label>
+            </div>
           </div>
         </div>
       </section>
@@ -205,26 +245,39 @@ onMounted(load);
         </p>
         <div class="jpd-list" style="margin-top: 10px">
           <div v-for="d in systemDecks" :key="d.id" class="jpd-item">
-            <label class="jp-check">
-              <input
-                type="checkbox"
-                :checked="d.enabled"
-                :disabled="busy"
-                @change="patch(d, { enabled: !d.enabled })"
-              />
-              <b>{{ d.name }}</b>
-            </label>
-            <span class="jp-muted">{{ d.learned }}/{{ d.total }} · {{ progress(d) }}</span>
-            <input
-              class="jp-input jpd-weight"
-              type="number"
-              min="1"
-              max="100"
-              :value="d.weight"
-              :disabled="busy"
-              @change="patch(d, { weight: Number($event.target.value) })"
-            />
-            <span class="jp-muted jpd-share">{{ share(d) }}</span>
+            <div class="jpd-row">
+              <label class="jp-check">
+                <input
+                  type="checkbox"
+                  :checked="d.enabled"
+                  :disabled="busy"
+                  @change="patch(d, { enabled: !d.enabled })"
+                />
+                <b>{{ d.name }}</b>
+              </label>
+            </div>
+            <div class="jp-bar">
+              <span :style="{ width: pct(d) + '%', background: d.color || '#6e4aff' }" />
+            </div>
+            <div class="jpd-row">
+              <span class="jp-muted">
+                {{ d.learned }} из {{ d.total }} закреплено ({{ pct(d) }}%), в работе
+                {{ d.started }}
+              </span>
+              <label class="jpd-weight-field">
+                <span class="jp-muted">вес</span>
+                <input
+                  class="jp-input jpd-weight"
+                  type="number"
+                  min="1"
+                  max="100"
+                  :value="d.weight"
+                  :disabled="busy"
+                  @change="patch(d, { weight: Number($event.target.value) })"
+                />
+                <span class="jp-muted">{{ d.enabled ? `${d.sharePct}% потока` : "выключен" }}</span>
+              </label>
+            </div>
           </div>
         </div>
       </section>
@@ -247,29 +300,65 @@ onMounted(load);
 
 .jpd-item {
   display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  padding: 8px 10px;
+  flex-direction: column;
+  gap: 7px;
+  padding: 9px 11px;
   border-radius: 9px;
   background: #22242d;
   border: 1px solid #2a2d38;
 }
 
+.jpd-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
 .jpd-item .jp-check {
   flex: 1;
-  min-width: 170px;
+  min-width: 150px;
+}
+
+.jpd-weight-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
 }
 
 /* Вес — короткое поле: значение всегда двузначное. */
 .jpd-weight {
-  width: 68px;
+  width: 62px;
   text-align: center;
 }
 
-.jpd-share {
-  width: 92px;
-  text-align: right;
+.jpd-help {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #cfd3e0;
+}
+
+.jpd-flow {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+
+.jpd-flow-chip {
+  font-size: 12px;
+  border-radius: 999px;
+  padding: 4px 10px;
+  background: #22242d;
+  border: 1px solid #2f3340;
 }
 
 .jpd-result {

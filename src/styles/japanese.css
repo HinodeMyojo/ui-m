@@ -41,10 +41,22 @@
   font-size: 22px;
 }
 
+/* Полоса вкладок листается вбок, а не переносится: пять кнопок в 390px во
+   вторую строку выглядят как сломанная вёрстка, а не как навигация. */
 .jp-tabs {
   display: flex;
   gap: 6px;
-  flex-wrap: wrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding-bottom: 2px;
+}
+
+.jp-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.jp-tab {
+  flex: 0 0 auto;
 }
 
 .jp-tab {

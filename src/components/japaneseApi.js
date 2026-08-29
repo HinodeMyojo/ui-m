@@ -54,6 +54,10 @@ export const addJpKanjiByText = (id, text) => post(`/decks/${id}/kanji-text`, { 
 // --- Справочник и настройки ---
 
 export const fetchJpKanji = (char) => request(`/kanji/${encodeURIComponent(char)}`);
+
+// Разбор вставленной строки целиком: какие в ней кандзи и слова и что из
+// этого уже учится. Первый знак строки — не разбор.
+export const analyzeJpText = (text) => post("/analyze", { text });
 export const fetchJpSettings = () => request("/settings");
 export const saveJpSettings = (body) => put("/settings", body);
 
