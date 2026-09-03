@@ -473,9 +473,33 @@ function pointerMove(event) {
   edgeScroll(event.clientX);
 }
 
+// Колонку выбираем по горизонтали, а не по тому, что физически под курсором:
+// колонки высотой в свои карточки, и бросок влево на уровне десятой карточки
+// попадал мимо короткой колонки — в пустоту под ней.
+function columnAt(x, y) {
+  const el = board.value;
+  if (!el) return null;
+  const rect = el.getBoundingClientRect();
+  // Ушли выше или ниже доски — это уже не перенос, а отмена.
+  if (y < rect.top - 40 || y > rect.bottom + 40) return null;
+
+  const columns = Array.from(el.querySelectorAll("[data-status]"));
+  let nearest = null;
+  let bestDistance = Infinity;
+  for (const column of columns) {
+    const box = column.getBoundingClientRect();
+    if (x >= box.left && x <= box.right) return column;
+    const distance = x < box.left ? box.left - x : x - box.right;
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      nearest = column;
+    }
+  }
+  return nearest; // в зазоре между колонками и по краям доски — ближайшая
+}
+
 function updateTarget(x, y) {
-  const under = document.elementFromPoint(x, y);
-  const column = under?.closest?.("[data-status]");
+  const column = columnAt(x, y);
   if (!column) {
     drag.value.over = null;
     drag.value.beforeId = null;
