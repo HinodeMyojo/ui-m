@@ -8,6 +8,7 @@ import JpSession from "@/components/japanese/JpSession.vue";
 import JpDecksTab from "@/components/japanese/JpDecksTab.vue";
 import JpAnalyzeTab from "@/components/japanese/JpAnalyzeTab.vue";
 import JpScanTab from "@/components/japanese/JpScanTab.vue";
+import JpLevelsTab from "@/components/japanese/JpLevelsTab.vue";
 import JpProgressTab from "@/components/japanese/JpProgressTab.vue";
 import JpSettingsTab from "@/components/japanese/JpSettingsTab.vue";
 
@@ -30,6 +31,7 @@ const TABS = [
   { code: "analyze", title: "Разбор" },
   { code: "scan", title: "Скан" },
   { code: "progress", title: "Прогресс" },
+  { code: "levels", title: "Уровни" },
   { code: "settings", title: "Настройки" },
 ];
 
@@ -254,6 +256,7 @@ onMounted(load);
     />
     <JpScanTab v-else-if="tab === 'scan'" @analyze="analyzeScanned" />
     <JpProgressTab v-else-if="tab === 'progress'" @open="openKanji" />
+    <JpLevelsTab v-else-if="tab === 'levels'" />
     <JpSettingsTab v-else-if="tab === 'settings'" />
   </div>
 </template>
