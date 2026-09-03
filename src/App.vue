@@ -15,6 +15,11 @@ const AutumnLayer = defineAsyncComponent(
   () => import("@/components/autumn/AutumnLayer.vue"),
 );
 
+// Погода слева — она же источник дождя и ветра для осеннего слоя.
+const WeatherPanel = defineAsyncComponent(
+  () => import("@/components/weather/WeatherPanel.vue"),
+);
+
 const route = useRoute();
 
 // Экраны, которые занимают телефон целиком: вход, читалка (там своя панель и
@@ -36,7 +41,10 @@ const showTabBar = computed(() => {
   </div>
   <MobileTabBar v-if="showTabBar" />
   <!-- Печать резюме — единственный экран без вайба: листья попадут в PDF. -->
-  <AutumnLayer v-if="!route.path.endsWith('/print')" />
+  <template v-if="!route.path.endsWith('/print')">
+    <AutumnLayer />
+    <WeatherPanel v-if="!route.meta?.public" />
+  </template>
 </template>
 
 <style>
