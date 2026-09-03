@@ -2,8 +2,8 @@
 import { ref, computed, watch, onMounted, onBeforeUnmount } from "vue";
 import confetti from "canvas-confetti";
 import MarkdownView from "./MarkdownView.vue";
-import MainTasksPanel from "./MainTasksPanel.vue";
 import { AUTUMN_COLORS } from "@/composables/useAutumn.js";
+import { checkTask, createWorkItem } from "@/components/api.js";
 
 // Общий вид дня: все карточки разом. Отсюда день не только читают, но и
 // разгребают — карточку можно перетащить в другой статус, закрыть одним
@@ -14,6 +14,8 @@ const props = defineProps({
   focus: { type: String, default: "" },
   date: { type: String, default: "" },
   isToday: { type: Boolean, default: false },
+  // Подзадачи с главной страницы с дедлайном около этого дня (окно ±сутки).
+  mainSubtasks: { type: Array, default: () => [] },
 });
 const emit = defineEmits(["open", "add", "move", "sort", "refresh"]);
 
@@ -38,10 +40,88 @@ const GROUPS = [
 // при переносе карточек. «Отменено» прячем, пока там пусто, но на время
 // перетаскивания показываем: в колонку, которой нет, нечего и бросить.
 const groups = computed(() =>
-  GROUPS.map((g) => ({ ...g, items: props.items.filter((i) => i.status === g.key) })).filter(
-    (g) => g.key !== "dropped" || g.items.length || !!drag.value,
-  ),
+  GROUPS.map((g) => ({
+    ...g,
+    items: props.items.filter((i) => i.status === g.key),
+    subs: subsByColumn.value[g.key] || [],
+  })).filter((g) => g.key !== "dropped" || g.items.length || !!drag.value),
 );
+
+// --- Подзадачи с главной страницы ---
+
+// Сервер отдаёт окно в сутки по краям: календарный день у дедлайна свой в
+// каждой таймзоне, и решает его тот, кто этот день видит, — браузер.
+function localDay(value) {
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "";
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
+    d.getDate(),
+  ).padStart(2, "0")}`;
+}
+
+const subsByColumn = computed(() => {
+  const byColumn = {};
+  for (const sub of props.mainSubtasks) {
+    if (!sub.deadline || localDay(sub.deadline) !== props.date) continue;
+    const key = sub.column || "todo";
+    (byColumn[key] = byColumn[key] || []).push(sub);
+  }
+  return byColumn;
+});
+
+function subTime(sub) {
+  return new Date(sub.deadline).toLocaleTimeString("ru-RU", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+const subBusy = ref(new Set());
+const subError = ref("");
+
+// Галочку ставим сразу, ответ сервера её только подтверждает: ждать перезагрузку
+// дня ради одного клика — ровно то, из-за чего задачи не закрывают.
+async function toggleSub(sub, event) {
+  event.stopPropagation();
+  if (subBusy.value.has(sub.id)) return;
+  const next = !sub.done;
+  sub.done = next;
+  if (next) {
+    sub.column = "done";
+    celebrate(sub.id, event.currentTarget.closest(".ovw-sub"));
+  }
+  subBusy.value = new Set(subBusy.value).add(sub.id);
+  subError.value = "";
+  try {
+    await checkTask(sub.id, next);
+    emit("refresh");
+  } catch (e) {
+    sub.done = !next;
+    subError.value = e.message || "не удалось отметить подзадачу";
+  } finally {
+    const rest = new Set(subBusy.value);
+    rest.delete(sub.id);
+    subBusy.value = rest;
+  }
+}
+
+// Подзадача — не карточка дня, но одним нажатием ею становится: так у неё
+// появляются время, полотно и всё остальное хозяйство ежедневника.
+async function subToDay(sub, event) {
+  event.stopPropagation();
+  subError.value = "";
+  try {
+    await createWorkItem({
+      date: props.date,
+      title: sub.title,
+      color: sub.color || sub.parentColor || "",
+      taskIds: [sub.id],
+    });
+    emit("refresh");
+  } catch (e) {
+    subError.value = e.message || "не удалось перенести в день";
+  }
+}
 
 const done = computed(() => props.items.filter((i) => i.status === "done").length);
 const total = computed(() => props.items.filter((i) => i.status !== "dropped").length);
@@ -459,6 +539,8 @@ onBeforeUnmount(() => {
 
     <div v-if="allDoneBanner" class="ovw-alldone">🎃 Всё закрыто. День твой.</div>
 
+    <div v-if="subError" class="ovw-alert">{{ subError }}</div>
+
     <div v-if="blockersTotal" class="ovw-alert">
       🚧 Открытых блокеров сегодня: <b>{{ blockersTotal }}</b>
     </div>
@@ -478,10 +560,13 @@ onBeforeUnmount(() => {
         <div class="ovw-col-head" :style="{ '--status': STATUS_META[g.key].color }">
           <span class="ovw-col-dot"></span>
           {{ g.title }}
-          <span class="ovw-col-count">{{ g.items.length }}</span>
+          <span class="ovw-col-count">{{ g.items.length + g.subs.length }}</span>
         </div>
 
-        <div v-if="!g.items.length && drag?.over !== g.key" class="ovw-col-empty">
+        <div
+          v-if="!g.items.length && !g.subs.length && drag?.over !== g.key"
+          class="ovw-col-empty"
+        >
           {{ g.key === "done" ? "сюда — закрытое" : "пусто" }}
         </div>
 
@@ -585,15 +670,59 @@ onBeforeUnmount(() => {
         </template>
 
         <div v-if="drag?.over === g.key && drag.beforeId === null" class="ovw-slot"></div>
-      </section>
 
-      <!-- Задачи с главного экрана: другая сущность, поэтому своя колонка -->
-      <MainTasksPanel
-        v-if="date"
-        class="ovw-col side"
-        :date="date"
-        @added="emit('refresh')"
-      />
+        <!-- Подзадачи с главной страницы: не карточки дня, но сегодня их срок,
+             поэтому стоят в колонке своего статуса — только выделены. -->
+        <article
+          v-for="sub in g.subs"
+          :key="'sub-' + sub.id"
+          class="ovw-sub"
+          :class="{ muted: sub.done, pop: popped.has(sub.id) }"
+          :style="{ '--accent': sub.parentColor || sub.color || '#e07b39' }"
+        >
+          <div class="ovw-sub-flags">
+            <span class="ovw-sub-flag">с главной</span>
+            <span v-if="sub.parentIsGlobal" class="ovw-sub-flag global">глобальная</span>
+            <span class="ovw-sub-flag due">⏳ {{ subTime(sub) }}</span>
+          </div>
+
+          <div class="ovw-sub-parent">
+            <span v-if="sub.parentSticker" class="ovw-sub-sticker">{{ sub.parentSticker }}</span>
+            {{ sub.parentTitle }}
+            <span class="ovw-sub-arrow">→</span>
+          </div>
+
+          <div class="ovw-sub-top">
+            <button
+              class="ovw-check"
+              :class="{ on: sub.done }"
+              :title="sub.done ? 'Открыть заново' : 'Закрыть подзадачу'"
+              @click="toggleSub(sub, $event)"
+            >
+              <span v-if="sub.done">✓</span>
+            </button>
+            <span class="ovw-sub-title">{{ sub.title }}</span>
+            <button
+              class="ovw-sub-move"
+              title="Сделать карточкой этого дня"
+              @click="subToDay(sub, $event)"
+            >
+              ＋
+            </button>
+          </div>
+
+          <div v-if="sub.statusName || sub.openBlockers" class="ovw-sub-meta">
+            <span
+              v-if="sub.statusName"
+              class="ovw-sub-status"
+              :style="{ borderColor: sub.statusColor, color: sub.statusColor }"
+            >
+              {{ sub.statusName }}
+            </span>
+            <span v-if="sub.openBlockers" class="ovw-sub-blockers">🚧 {{ sub.openBlockers }}</span>
+          </div>
+        </article>
+      </section>
     </div>
 
     <div v-if="!items.length" class="ovw-empty">
@@ -1218,6 +1347,155 @@ onBeforeUnmount(() => {
   color: #ff9ba0;
   border-color: #6b2b2e;
   background: rgba(229, 72, 77, 0.12);
+}
+
+/* --- Подзадача с главной страницы --- */
+
+/* Стоит в колонке своего статуса, но карточкой дня не притворяется: тёплая
+   рамка, штриховка и ярлык «с главной» отличают её с одного взгляда. */
+.ovw-sub {
+  position: relative;
+  background: linear-gradient(160deg, rgba(224, 123, 57, 0.11), rgba(26, 28, 35, 0.9));
+  border: 1px dashed rgba(224, 123, 57, 0.45);
+  border-radius: 14px;
+  padding: 10px 12px 10px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  overflow: hidden;
+  transition: border-color 0.16s, opacity 0.2s;
+}
+
+.ovw-sub::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--accent);
+}
+
+.ovw-sub:hover {
+  border-color: rgba(224, 123, 57, 0.8);
+}
+
+.ovw-sub.muted {
+  opacity: 0.5;
+}
+
+.ovw-sub.pop {
+  animation: pop 0.62s cubic-bezier(0.2, 1.4, 0.4, 1);
+  border-color: #63c94f;
+  box-shadow: 0 0 24px rgba(99, 201, 79, 0.35);
+}
+
+.ovw-sub-flags {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+
+.ovw-sub-flag {
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #e8b04b;
+  background: rgba(224, 123, 57, 0.16);
+  border: 1px solid rgba(224, 123, 57, 0.4);
+  border-radius: 20px;
+  padding: 1px 8px;
+}
+
+.ovw-sub-flag.global {
+  color: #ffd666;
+}
+
+.ovw-sub-flag.due {
+  color: #cfd3e0;
+  background: #16171d;
+  border-color: #262a36;
+  text-transform: none;
+  letter-spacing: 0;
+  margin-left: auto;
+}
+
+/* Путь до подзадачи: без родителя непонятно, из чего она вообще. */
+.ovw-sub-parent {
+  color: #a5896a;
+  font-size: 11.5px;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.ovw-sub-arrow {
+  color: #6e7382;
+}
+
+.ovw-sub-sticker {
+  margin-right: 3px;
+}
+
+.ovw-sub-top {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+}
+
+.ovw-sub-title {
+  flex: 1;
+  color: #f0f2f7;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.ovw-sub.muted .ovw-sub-title {
+  text-decoration: line-through;
+  color: #9aa0b1;
+}
+
+.ovw-sub-move {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border-radius: 7px;
+  border: 1px dashed #3f4457;
+  background: transparent;
+  color: #8f95a6;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.ovw-sub-move:hover {
+  border-color: #e07b39;
+  border-style: solid;
+  color: #e8b04b;
+}
+
+.ovw-sub-meta {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+  padding-left: 31px;
+}
+
+.ovw-sub-status {
+  font-size: 10.5px;
+  border: 1px solid #3f4457;
+  border-radius: 20px;
+  padding: 1px 8px;
+}
+
+.ovw-sub-blockers {
+  font-size: 10.5px;
+  color: #ffc9cb;
+  background: rgba(229, 72, 77, 0.14);
+  border: 1px solid rgba(229, 72, 77, 0.4);
+  border-radius: 20px;
+  padding: 1px 8px;
 }
 
 /* --- Призрак под курсором --- */
