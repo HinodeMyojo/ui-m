@@ -61,6 +61,8 @@ export const analyzeJpText = (text) => post("/analyze", { text });
 export const fetchJpGrid = () => request("/grid");
 export const fetchJpAchievements = () => request("/achievements");
 export const importJpTranslations = (text) => post("/translations", { text });
+export const fetchJpPendingTranslations = (chunk = 1) =>
+  request(`/translations/pending?chunk=${chunk}`);
 export const fetchJpSettings = () => request("/settings");
 export const saveJpSettings = (body) => put("/settings", body);
 

@@ -4,6 +4,7 @@ import {
   fetchJpSettings,
   saveJpSettings,
   importJpTranslations,
+  fetchJpPendingTranslations,
   canSpeakJapanese,
   primeJapaneseVoice,
   speakJapanese,
@@ -67,6 +68,51 @@ async function save() {
 const translation = ref("");
 const translationBusy = ref(false);
 const translationResult = ref(null);
+
+// Кусок на перевод берётся с сервера, а не из файла рядом с приложением:
+// список меняется после каждой загрузки, и файл устарел бы сразу же.
+const pending = ref(null);
+const pendingChunk = ref(1);
+const pendingBusy = ref(false);
+const copied = ref(false);
+
+const PROMPT =
+  "Переведи значения кандзи на русский. Верни ровно те же строки: " +
+  "знак, табуляция, русские значения через запятую. Ничего не добавляй.";
+
+async function loadPending(chunk = pendingChunk.value) {
+  pendingBusy.value = true;
+  copied.value = false;
+  error.value = "";
+  try {
+    pending.value = await fetchJpPendingTranslations(chunk);
+    pendingChunk.value = pending.value.chunk;
+  } catch (e) {
+    error.value = e.message || "список не загрузился";
+  } finally {
+    pendingBusy.value = false;
+  }
+}
+
+// Копируем вместе с просьбой: иначе её приходится дописывать руками каждый раз.
+async function copyPending() {
+  const body = `${PROMPT}
+
+${pending.value?.text || ""}`;
+  try {
+    await navigator.clipboard.writeText(body);
+    copied.value = true;
+  } catch {
+    // Буфер обмена закрыт (не тот протокол, отказ в разрешении) — выделяем
+    // текст, дальше пользователь скопирует сам.
+    const area = document.querySelector(".jps-pending-text");
+    if (area) {
+      area.focus();
+      area.select();
+    }
+    error.value = "браузер не дал доступ к буферу — текст выделен, скопируй сам";
+  }
+}
 
 async function loadTranslations() {
   if (!translation.value.trim()) return;
@@ -237,13 +283,49 @@ onMounted(() => {
         <h3>Русские значения кандзи</h3>
         <p class="jp-muted">
           Свободного источника русских значений кандзи не существует: KANJIDIC2 даёт английские,
-          и они пока подставлены как есть. Переведённые куски вставляются сюда — строки вида
-          «знак, табуляция, значения через запятую». Комментарии и разделители можно не вычищать.
+          и они пока подставлены как есть. Круг такой: взял кусок → скопировал в чат → ответ
+          вставил обратно. Порядок кусков — по пользе: сперва N5, дальше вниз по уровням.
+          Останавливаться можно на любом: что переведено, то сразу работает.
         </p>
+        <div class="jp-row" style="margin-top: 10px">
+          <button class="jp-btn" :disabled="pendingBusy" @click="loadPending()">
+            Взять кусок на перевод
+          </button>
+          <span v-if="pending" class="jp-muted">
+            кусок {{ pending.chunk }} из {{ pending.chunks }} · без перевода
+            {{ pending.left }}
+          </span>
+        </div>
+
+        <template v-if="pending?.text">
+          <textarea
+            class="jp-textarea jps-pending-text"
+            style="margin-top: 8px; min-height: 130px"
+            readonly
+            :value="`${PROMPT}
+
+${pending.text}`"
+          ></textarea>
+          <div class="jp-row" style="margin-top: 8px">
+            <button class="jp-btn is-primary" @click="copyPending">
+              {{ copied ? "Скопировано" : "Скопировать для чата" }}
+            </button>
+            <button
+              class="jp-btn"
+              :disabled="pendingBusy || pendingChunk >= (pending?.chunks || 1)"
+              @click="loadPending(pendingChunk + 1)"
+            >
+              Следующий
+            </button>
+          </div>
+        </template>
+        <div v-else-if="pending" class="jp-empty">Всё переведено</div>
+
+        <p class="jp-muted" style="margin-top: 12px">Ответ из чата вставь сюда:</p>
         <textarea
           v-model="translation"
           class="jp-textarea"
-          style="margin-top: 10px"
+          style="margin-top: 6px"
           placeholder="語&#9;язык, речь, слово"
         ></textarea>
         <div class="jp-row" style="margin-top: 8px">
