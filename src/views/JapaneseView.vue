@@ -7,6 +7,7 @@ import { fetchJpOverview, fetchJpDecks } from "@/components/japaneseApi.js";
 import JpSession from "@/components/japanese/JpSession.vue";
 import JpDecksTab from "@/components/japanese/JpDecksTab.vue";
 import JpAnalyzeTab from "@/components/japanese/JpAnalyzeTab.vue";
+import JpScanTab from "@/components/japanese/JpScanTab.vue";
 import JpProgressTab from "@/components/japanese/JpProgressTab.vue";
 import JpSettingsTab from "@/components/japanese/JpSettingsTab.vue";
 
@@ -14,7 +15,8 @@ import JpSettingsTab from "@/components/japanese/JpSettingsTab.vue";
 // не сразу бросает в сессию: заниматься начинают с виджета на главной или с
 // кнопки здесь, а в раздел заходят посмотреть, как идут дела.
 //
-// Вкладка «Скан» появится на втором этапе — пустой заглушки в меню не держим.
+// Скан распознаёт прямо в браузере: облачный OCR требует ключа и денег, а на
+// free-tier сервере распознаванию не на чем работать.
 
 const router = useRouter();
 
@@ -26,6 +28,7 @@ const TABS = [
   { code: "study", title: "Учить" },
   { code: "decks", title: "Наборы" },
   { code: "analyze", title: "Разбор" },
+  { code: "scan", title: "Скан" },
   { code: "progress", title: "Прогресс" },
   { code: "settings", title: "Настройки" },
 ];
@@ -85,6 +88,15 @@ function endSession() {
 // Из сетки дзёё открывается карточка знака — она живёт в разборе.
 function openKanji(char) {
   openedChar.value = char;
+  selectTab("analyze");
+}
+
+// Распознанный со снимка текст уходит в разбор: скан только достаёт строку,
+// разбирает её всегда одно и то же место.
+const scannedText = ref("");
+
+function analyzeScanned(text) {
+  scannedText.value = text || "";
   selectTab("analyze");
 }
 
@@ -235,7 +247,12 @@ onMounted(load);
     </template>
 
     <JpDecksTab v-else-if="tab === 'decks'" />
-    <JpAnalyzeTab v-else-if="tab === 'analyze'" :initial-char="openedChar" />
+    <JpAnalyzeTab
+      v-else-if="tab === 'analyze'"
+      :initial-char="openedChar"
+      :initial-text="scannedText"
+    />
+    <JpScanTab v-else-if="tab === 'scan'" @analyze="analyzeScanned" />
     <JpProgressTab v-else-if="tab === 'progress'" @open="openKanji" />
     <JpSettingsTab v-else-if="tab === 'settings'" />
   </div>

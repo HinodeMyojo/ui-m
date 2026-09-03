@@ -20,6 +20,8 @@ import JpTraceCanvas from "./JpTraceCanvas.vue";
 const props = defineProps({
   // Знак, с которого открыть вкладку: сетка дзёё ведёт сюда по тапу.
   initialChar: { type: String, default: "" },
+  // Строка, с которой открыть вкладку: сюда приходит распознанное со снимка.
+  initialText: { type: String, default: "" },
 });
 
 const text = ref("");
@@ -88,6 +90,10 @@ const canSpeak = canSpeakJapanese();
 onMounted(() => {
   primeJapaneseVoice();
   if (props.initialChar) openKanji(props.initialChar);
+  if (props.initialText) {
+    text.value = props.initialText;
+    analyze();
+  }
 });
 
 function say(kana) {
