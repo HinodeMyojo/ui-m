@@ -9,6 +9,7 @@ import CarryModal from "@/components/workspace/CarryModal.vue";
 import GooglePanel from "@/components/workspace/GooglePanel.vue";
 import SearchModal from "@/components/workspace/SearchModal.vue";
 import SportTodayCard from "@/components/workspace/SportTodayCard.vue";
+import MainTasksPanel from "@/components/workspace/MainTasksPanel.vue";
 import RoadmapWidget from "@/components/roadmap/RoadmapWidget.vue";
 import DisciplineChecklist from "@/components/discipline/DisciplineChecklist.vue";
 import {
@@ -230,6 +231,57 @@ async function onDrop(target) {
   if (from < 0 || to < 0) return;
   order.splice(to, 0, ...order.splice(from, 1));
   dragId.value = null;
+  try {
+    await reorderWorkItems(date.value, order);
+    await load();
+  } catch (e) {
+    error.value = e.message;
+  }
+}
+
+// Перенос карточки в общем виде: статус берётся из колонки, место в дне — из
+// точки, куда её бросили. Меняем список сразу, не дожидаясь сервера: карточка,
+// которая на полсекунды прыгает обратно, ощущается сломанной.
+async function moveItem({ id, status, beforeId }) {
+  const list = day.value?.items;
+  if (!list) return;
+  const index = list.findIndex((i) => i.id === id);
+  if (index < 0) return;
+  const item = list[index];
+  const previous = item.status;
+
+  item.status = status;
+  list.splice(index, 1);
+  const at = beforeId ? list.findIndex((i) => i.id === beforeId) : -1;
+  if (at < 0) list.push(item);
+  else list.splice(at, 0, item);
+
+  try {
+    if (previous !== status) await setWorkItemStatus(id, { status, closeTasks: false });
+    await reorderWorkItems(date.value, list.map((i) => i.id));
+    await load();
+  } catch (e) {
+    error.value = e.message;
+    await load();
+  }
+}
+
+// Ключ сортировки: сначала то, у чего есть слот в дне, потом дедлайны со
+// временем, потом «до конца дня», и в самом хвосте — карточки без времени.
+function timeKey(item) {
+  if (item.plannedStartMin >= 0) return item.plannedStartMin;
+  if (item.deadline) {
+    if (!item.deadlineHasTime) return 24 * 60;
+    const d = new Date(item.deadline);
+    return d.getHours() * 60 + d.getMinutes();
+  }
+  return 100000;
+}
+
+async function sortByTime() {
+  const order = [...items.value]
+    .sort((a, b) => timeKey(a) - timeKey(b) || (b.priority || 0) - (a.priority || 0))
+    .map((i) => i.id);
   try {
     await reorderWorkItems(date.value, order);
     await load();
@@ -480,8 +532,13 @@ function slotLabel(item) {
       :items="items"
       :note="day?.note || ''"
       :focus="day?.focus || ''"
+      :date="date"
+      :is-today="isToday"
       @open="openFromOverview"
       @add="addItem"
+      @move="moveItem"
+      @sort="sortByTime"
+      @refresh="load"
     />
 
     <div v-else class="ws-body" :class="{ narrow: isNarrow }">
@@ -495,6 +552,13 @@ function slotLabel(item) {
             @click="filter = f.key"
           >
             {{ f.label }}
+          </button>
+          <button
+            class="ws-filter sort"
+            title="Выстроить карточки по времени"
+            @click="sortByTime"
+          >
+            🕐 по времени
           </button>
         </div>
 
@@ -555,7 +619,7 @@ function slotLabel(item) {
               >
                 🚧 {{ blockersOf(item) }}
               </span>
-              <span v-if="slotLabel(item)" class="ws-meta-chip">🕐 {{ slotLabel(item) }}</span>
+              <span v-if="slotLabel(item)" class="ws-meta-chip time">{{ slotLabel(item) }}</span>
               <span v-if="item.deadline" class="ws-meta-chip" :class="{ bad: isOverdue(item) }">
                 ⏳ {{ itemDeadline(item) }}
               </span>
@@ -587,6 +651,9 @@ function slotLabel(item) {
         <button v-if="day?.google?.connected && items.length" class="ws-add-inline" @click="syncAll">
           📅 Синхронизировать день с Google
         </button>
+
+        <!-- Задачи с главного экрана: закрыть или утащить в день, не уходя отсюда -->
+        <MainTasksPanel class="ws-main-tasks" :date="date" @added="load" />
       </aside>
 
       <main class="ws-editor" v-show="!isNarrow || mobileEditor">
@@ -938,6 +1005,21 @@ function slotLabel(item) {
   color: #cfe0ff;
 }
 
+.ws-filter.sort {
+  margin-left: auto;
+  border-style: dashed;
+}
+
+.ws-filter.sort:hover {
+  border-color: #e07b39;
+  border-style: solid;
+  color: #ffd9b0;
+}
+
+.ws-main-tasks {
+  margin-top: 6px;
+}
+
 .ws-card {
   display: flex;
   gap: 9px;
@@ -1035,6 +1117,18 @@ function slotLabel(item) {
 .ws-meta-chip.bad {
   color: #ff9ba0;
   border-color: #6b2b2e;
+}
+
+/* Время в списке читается как время, а не как ещё один серый значок */
+.ws-meta-chip.time {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: #ffd9b0;
+  background: rgba(224, 123, 57, 0.14);
+  border-color: rgba(224, 123, 57, 0.4);
+  padding: 1px 8px;
 }
 
 /* Блокер связанной задачи виден прямо на карточке дня */

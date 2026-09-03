@@ -1,22 +1,28 @@
 <script setup>
-import { computed } from "vue";
+import { ref, computed, watch, onMounted, onBeforeUnmount } from "vue";
+import confetti from "canvas-confetti";
 import MarkdownView from "./MarkdownView.vue";
+import MainTasksPanel from "./MainTasksPanel.vue";
+import { AUTUMN_COLORS } from "@/composables/useAutumn.js";
 
-// Общий вид дня: все карточки разом, без редактирования — чтобы всё было
-// перед глазами. Клик по карточке уводит в рабочий вид.
+// Общий вид дня: все карточки разом. Отсюда день не только читают, но и
+// разгребают — карточку можно перетащить в другой статус, закрыть одним
+// нажатием и выстроить всё по времени.
 const props = defineProps({
   items: { type: Array, default: () => [] },
   note: { type: String, default: "" },
   focus: { type: String, default: "" },
+  date: { type: String, default: "" },
+  isToday: { type: Boolean, default: false },
 });
-const emit = defineEmits(["open", "add"]);
+const emit = defineEmits(["open", "add", "move", "sort", "refresh"]);
 
 const STATUS_META = {
-  todo: { label: "План", color: "#5b616e", icon: "" },
-  doing: { label: "В работе", color: "#ffd666", icon: "▶" },
-  paused: { label: "Пауза", color: "#4aa8ff", icon: "‖" },
-  done: { label: "Готово", color: "#63c94f", icon: "✓" },
-  dropped: { label: "Отменено", color: "#e5484d", icon: "✕" },
+  todo: { label: "План", color: "#5b616e" },
+  doing: { label: "В работе", color: "#ffd666" },
+  paused: { label: "Пауза", color: "#4aa8ff" },
+  done: { label: "Готово", color: "#63c94f" },
+  dropped: { label: "Отменено", color: "#e5484d" },
 };
 
 // Порядок колонок: сначала то, чем занят, потом план, в конце закрытое.
@@ -29,33 +35,36 @@ const GROUPS = [
 ];
 
 // Колонки статусов держим на месте, даже когда пустые — так доска не прыгает
-// при переносе карточек. Скрываем только «Отменено», если там пусто.
+// при переносе карточек. «Отменено» прячем, пока там пусто, но на время
+// перетаскивания показываем: в колонку, которой нет, нечего и бросить.
 const groups = computed(() =>
   GROUPS.map((g) => ({ ...g, items: props.items.filter((i) => i.status === g.key) })).filter(
-    (g) => g.key !== "dropped" || g.items.length,
+    (g) => g.key !== "dropped" || g.items.length || !!drag.value,
   ),
 );
 
-function statusOf(item) {
-  return STATUS_META[item.status] || STATUS_META.todo;
+const done = computed(() => props.items.filter((i) => i.status === "done").length);
+const total = computed(() => props.items.filter((i) => i.status !== "dropped").length);
+const percent = computed(() => (total.value ? Math.round((done.value / total.value) * 100) : 0));
+const left = computed(() => Math.max(0, total.value - done.value));
+
+// --- Время ---
+
+// Часы тикают сами: «через 20 минут» на карточке, которая не обновляется,
+// врёт уже через минуту после открытия страницы.
+const nowMin = ref(minutesNow());
+let clock = null;
+
+function minutesNow() {
+  const d = new Date();
+  return d.getHours() * 60 + d.getMinutes();
 }
 
-function checkProgress(item) {
-  const total = item.checks?.length || 0;
-  if (!total) return null;
-  const done = item.checks.filter((c) => c.done).length;
-  return { total, done, percent: Math.round((done / total) * 100) };
-}
+const DAY_FROM = 6 * 60; // шкалу начинаем с шести утра: ночь на ней — пустое место
+const DAY_TO = 24 * 60;
 
-// Короткая выжимка полотна — без markdown-разметки, только суть.
-function excerpt(item) {
-  const text = (item.body || "")
-    .replace(/```[\s\S]*?```/g, " ")
-    .replace(/[#>*_`~\-]/g, " ")
-    .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
-    .replace(/\s+/g, " ")
-    .trim();
-  return text.length > 180 ? text.slice(0, 180) + "…" : text;
+function fmt(min) {
+  return `${String(Math.floor(min / 60)).padStart(2, "0")}:${String(min % 60).padStart(2, "0")}`;
 }
 
 function humanMinutes(minutes) {
@@ -66,6 +75,53 @@ function humanMinutes(minutes) {
   if (h) return `${h} ч`;
   return `${m} м`;
 }
+
+function trackPos(min) {
+  return Math.max(0, Math.min(100, ((min - DAY_FROM) / (DAY_TO - DAY_FROM)) * 100));
+}
+
+function computeTime(item) {
+  const start = item.plannedStartMin;
+  if (start == null || start < 0) return null;
+  const end = item.plannedEndMin > start ? item.plannedEndMin : null;
+  const closed = item.status === "done" || item.status === "dropped";
+  const till = end ?? start;
+
+  let tone = "";
+  let rel = "";
+  if (props.isToday && !closed) {
+    const now = nowMin.value;
+    if (now >= start && now <= till) {
+      tone = "live";
+      rel = "идёт сейчас";
+    } else if (now < start) {
+      const diff = start - now;
+      if (diff <= 60) tone = "soon";
+      rel =
+        diff < 60
+          ? `через ${diff} мин`
+          : `через ${humanMinutes(Math.round(diff / 5) * 5)}`;
+    } else {
+      tone = "late";
+      const diff = now - till;
+      rel = diff < 60 ? `${diff} мин назад` : `${Math.floor(diff / 60)} ч назад`;
+    }
+  }
+
+  return {
+    start: fmt(start),
+    end: end ? fmt(end) : "",
+    dur: end ? humanMinutes(end - start) : "",
+    rel,
+    tone,
+    left: trackPos(start),
+    width: Math.max(1.5, trackPos(end ?? start + 15) - trackPos(start)),
+  };
+}
+
+const timeMap = computed(() => new Map(props.items.map((i) => [i.id, computeTime(i)])));
+const timeOf = (item) => timeMap.value.get(item.id);
+const nowPos = computed(() => trackPos(nowMin.value));
 
 function deadlineLabel(item) {
   if (!item.deadline) return "";
@@ -78,12 +134,24 @@ function isOverdue(item) {
   return new Date(item.deadline) < new Date();
 }
 
-function slotLabel(item) {
-  if (item.plannedStartMin < 0) return "";
-  const fmt = (m) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
-  return item.plannedEndMin > item.plannedStartMin
-    ? `${fmt(item.plannedStartMin)}–${fmt(item.plannedEndMin)}`
-    : fmt(item.plannedStartMin);
+// --- Карточка ---
+
+function checkProgress(item) {
+  const total = item.checks?.length || 0;
+  if (!total) return null;
+  const doneCount = item.checks.filter((c) => c.done).length;
+  return { total, done: doneCount, percent: Math.round((doneCount / total) * 100) };
+}
+
+// Короткая выжимка полотна — без markdown-разметки, только суть.
+function excerpt(item) {
+  const text = (item.body || "")
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/[#>*_`~\-]/g, " ")
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/\s+/g, " ")
+    .trim();
+  return text.length > 160 ? text.slice(0, 160) + "…" : text;
 }
 
 const blockersTotal = computed(() =>
@@ -92,6 +160,256 @@ const blockersTotal = computed(() =>
     0,
   ),
 );
+
+// --- Награда за закрытие ---
+
+const soundOn = ref(localStorage.getItem("wsCheerSound") !== "0");
+watch(soundOn, (v) => localStorage.setItem("wsCheerSound", v ? "1" : "0"));
+
+const popped = ref(new Set());
+const allDoneBanner = ref(false);
+let audio = null;
+
+// Два коротких синуса вместо файла: звук закрытия должен быть мгновенным и
+// ничего не весить, а не тянуться сетью в тот момент, когда его ждут.
+function chime(high = false) {
+  if (!soundOn.value) return;
+  try {
+    audio = audio || new (window.AudioContext || window.webkitAudioContext)();
+    const base = high ? [660, 990, 1320] : [880, 1320];
+    base.forEach((freq, i) => {
+      const at = audio.currentTime + i * 0.09;
+      const osc = audio.createOscillator();
+      const gain = audio.createGain();
+      osc.type = "sine";
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0, at);
+      gain.gain.linearRampToValueAtTime(0.09, at + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, at + 0.5);
+      osc.connect(gain).connect(audio.destination);
+      osc.start(at);
+      osc.stop(at + 0.55);
+    });
+  } catch {
+    // Звук — приятный бонус, а не условие работы страницы.
+  }
+}
+
+function burst(el, big = false) {
+  const rect = el?.getBoundingClientRect();
+  const origin = rect
+    ? {
+        x: (rect.left + rect.width / 2) / window.innerWidth,
+        y: (rect.top + rect.height / 2) / window.innerHeight,
+      }
+    : { y: 0.55 };
+  confetti({
+    particleCount: big ? 160 : 70,
+    spread: big ? 100 : 66,
+    startVelocity: big ? 42 : 30,
+    scalar: big ? 1.1 : 0.9,
+    ticks: big ? 200 : 140,
+    colors: AUTUMN_COLORS,
+    origin,
+  });
+}
+
+function celebrate(id, el) {
+  burst(el);
+  chime();
+  const next = new Set(popped.value);
+  next.add(id);
+  popped.value = next;
+  setTimeout(() => {
+    const rest = new Set(popped.value);
+    rest.delete(id);
+    popped.value = rest;
+  }, 700);
+}
+
+// Полностью закрытый день отмечаем один раз, а не на каждой перерисовке.
+let dayWasClosed = null;
+watch(
+  [done, total],
+  ([d, t]) => {
+    const closed = t > 0 && d === t;
+    if (dayWasClosed === null) {
+      dayWasClosed = closed;
+      return;
+    }
+    if (closed && !dayWasClosed) {
+      allDoneBanner.value = true;
+      burst(null, true);
+      chime(true);
+      setTimeout(() => (allDoneBanner.value = false), 6000);
+    }
+    dayWasClosed = closed;
+  },
+  { immediate: true },
+);
+
+function toggleDone(item, event) {
+  event.stopPropagation();
+  const next = item.status === "done" ? "todo" : "done";
+  if (next === "done") celebrate(item.id, event.currentTarget.closest(".ovw-card"));
+  emit("move", { id: item.id, status: next, beforeId: null });
+}
+
+// --- Перетаскивание ---
+
+// Свой драг на pointer-событиях, а не HTML5 drag-and-drop: последний не
+// существует для пальца, а доску открывают и с телефона.
+const board = ref(null);
+const drag = ref(null);
+let pending = null;
+
+function pointerDown(event, item) {
+  if (event.button > 0) return;
+  if (event.target.closest?.(".ovw-nodrag")) return;
+  const card = event.currentTarget;
+  const rect = card.getBoundingClientRect();
+  pending = {
+    item,
+    card,
+    dead: false,
+    startX: event.clientX,
+    startY: event.clientY,
+    dx: event.clientX - rect.left,
+    dy: event.clientY - rect.top,
+    width: rect.width,
+    touch: event.pointerType === "touch",
+    at: Date.now(),
+    hold: null,
+  };
+  // Пальцем страницу ещё и листают, поэтому там драг начинается с удержания.
+  if (pending.touch) {
+    const started = pending;
+    started.hold = setTimeout(() => {
+      if (pending === started) beginDrag(started.startX, started.startY);
+    }, 260);
+  }
+  window.addEventListener("pointermove", pointerMove);
+  window.addEventListener("pointerup", pointerUp);
+  window.addEventListener("pointercancel", pointerUp);
+  window.addEventListener("touchmove", blockScroll, { passive: false });
+}
+
+function blockScroll(event) {
+  if (drag.value) event.preventDefault();
+}
+
+function beginDrag(x, y) {
+  if (!pending || pending.dead || drag.value) return;
+  clearTimeout(pending.hold);
+  const item = pending.item;
+  drag.value = {
+    id: item.id,
+    title: item.title,
+    emoji: item.emoji,
+    color: item.color || "#1767fd",
+    width: Math.min(300, pending.width),
+    dx: Math.min(pending.dx, 280),
+    dy: Math.min(pending.dy, 40),
+    from: item.status,
+    over: null,
+    beforeId: null,
+    x,
+    y,
+  };
+  document.body.style.userSelect = "none";
+  navigator.vibrate?.(12);
+}
+
+function pointerMove(event) {
+  if (!pending || pending.dead) return;
+  const dist = Math.hypot(event.clientX - pending.startX, event.clientY - pending.startY);
+  if (!drag.value) {
+    // Палец поехал раньше, чем сработало удержание, — это скролл, не драг.
+    if (pending.touch) {
+      if (dist > 10) {
+        clearTimeout(pending.hold);
+        pending.dead = true;
+      }
+      return;
+    }
+    if (dist < 6) return;
+    beginDrag(event.clientX, event.clientY);
+    if (!drag.value) return;
+  }
+  drag.value.x = event.clientX;
+  drag.value.y = event.clientY;
+  updateTarget(event.clientX, event.clientY);
+  edgeScroll(event.clientX);
+}
+
+function updateTarget(x, y) {
+  const under = document.elementFromPoint(x, y);
+  const column = under?.closest?.("[data-status]");
+  if (!column) {
+    drag.value.over = null;
+    drag.value.beforeId = null;
+    return;
+  }
+  drag.value.over = column.dataset.status;
+  const cards = Array.from(column.querySelectorAll(".ovw-card[data-id]")).filter(
+    (c) => c.dataset.id !== drag.value.id,
+  );
+  let before = null;
+  for (const card of cards) {
+    const rect = card.getBoundingClientRect();
+    if (y < rect.top + rect.height / 2) {
+      before = card.dataset.id;
+      break;
+    }
+  }
+  drag.value.beforeId = before;
+}
+
+function edgeScroll(x) {
+  const el = board.value;
+  if (!el || el.scrollWidth <= el.clientWidth) return;
+  const rect = el.getBoundingClientRect();
+  if (x < rect.left + 70) el.scrollLeft -= 16;
+  else if (x > rect.right - 70) el.scrollLeft += 16;
+}
+
+function pointerUp(event) {
+  window.removeEventListener("pointermove", pointerMove);
+  window.removeEventListener("pointerup", pointerUp);
+  window.removeEventListener("pointercancel", pointerUp);
+  window.removeEventListener("touchmove", blockScroll);
+  document.body.style.userSelect = "";
+
+  const started = pending;
+  pending = null;
+  if (started?.hold) clearTimeout(started.hold);
+
+  const state = drag.value;
+  drag.value = null;
+  if (!state) {
+    const moved = Math.hypot(event.clientX - started?.startX, event.clientY - started?.startY);
+    if (started && !started.dead && moved < 8 && Date.now() - started.at < 900) {
+      emit("open", started.item.id);
+    }
+    return;
+  }
+  if (!state.over) return;
+  if (state.over === "done" && state.from !== "done") celebrate(state.id, started?.card);
+  emit("move", { id: state.id, status: state.over, beforeId: state.beforeId });
+}
+
+onMounted(() => {
+  clock = setInterval(() => (nowMin.value = minutesNow()), 30000);
+});
+
+onBeforeUnmount(() => {
+  clearInterval(clock);
+  window.removeEventListener("pointermove", pointerMove);
+  window.removeEventListener("pointerup", pointerUp);
+  window.removeEventListener("pointercancel", pointerUp);
+  window.removeEventListener("touchmove", blockScroll);
+  document.body.style.userSelect = "";
+});
 </script>
 
 <template>
@@ -101,84 +419,198 @@ const blockersTotal = computed(() =>
       <MarkdownView v-if="note" :text="note" class="ovw-note" />
     </div>
 
+    <div class="ovw-bar">
+      <div class="ovw-ring" :style="{ '--p': percent }">
+        <svg viewBox="0 0 44 44">
+          <circle class="ovw-ring-bg" cx="22" cy="22" r="18" />
+          <circle
+            class="ovw-ring-fg"
+            cx="22"
+            cy="22"
+            r="18"
+            :stroke-dasharray="`${(percent / 100) * 113} 113`"
+          />
+        </svg>
+        <span>{{ percent }}<i>%</i></span>
+      </div>
+
+      <div class="ovw-bar-text">
+        <b>{{ done }} из {{ total }}</b>
+        <span v-if="left">осталось {{ left }} — доведём до нуля</span>
+        <span v-else-if="total" class="ok">день закрыт целиком 🍂</span>
+        <span v-else>карточек пока нет</span>
+      </div>
+
+      <div class="ovw-bar-actions">
+        <button class="ovw-tool" title="Выстроить карточки по времени" @click="emit('sort')">
+          🕐 По времени
+        </button>
+        <button class="ovw-tool" @click="emit('add')">＋ Задача</button>
+        <button
+          class="ovw-tool icon"
+          :class="{ off: !soundOn }"
+          :title="soundOn ? 'Звук закрытия включён' : 'Звук закрытия выключен'"
+          @click="soundOn = !soundOn"
+        >
+          {{ soundOn ? "🔔" : "🔕" }}
+        </button>
+      </div>
+    </div>
+
+    <div v-if="allDoneBanner" class="ovw-alldone">🎃 Всё закрыто. День твой.</div>
+
     <div v-if="blockersTotal" class="ovw-alert">
       🚧 Открытых блокеров сегодня: <b>{{ blockersTotal }}</b>
     </div>
 
-    <div v-if="!items.length" class="ovw-empty">
-      <p>На этот день пока ничего нет.</p>
-      <button class="ovw-add" @click="emit('add')">+ Создать задачу</button>
-    </div>
+    <p class="ovw-hint">
+      Перетащите карточку в другую колонку — на телефоне удержите её пальцем.
+    </p>
 
-    <div v-if="items.length" class="ovw-board">
-      <section v-for="g in groups" :key="g.key" class="ovw-col">
+    <div class="ovw-board" ref="board">
+      <section
+        v-for="g in groups"
+        :key="g.key"
+        class="ovw-col"
+        :class="{ hot: drag?.over === g.key }"
+        :data-status="g.key"
+      >
         <div class="ovw-col-head" :style="{ '--status': STATUS_META[g.key].color }">
           <span class="ovw-col-dot"></span>
           {{ g.title }}
           <span class="ovw-col-count">{{ g.items.length }}</span>
         </div>
 
-        <div v-if="!g.items.length" class="ovw-col-empty">пусто</div>
-        <article
-          v-for="item in g.items"
-          :key="item.id"
-          class="ovw-card"
-          :class="{ muted: item.status === 'done' || item.status === 'dropped' }"
-          :style="{ '--accent': item.color || '#1767fd' }"
-          @click="emit('open', item.id)"
-        >
-          <div class="ovw-card-top">
-            <span class="ovw-card-title">
-              <span v-if="item.emoji" class="ovw-card-emoji">{{ item.emoji }}</span>{{ item.title }}
-            </span>
-            <span v-if="item.priority" class="ovw-card-prio">{{ "!".repeat(item.priority) }}</span>
-          </div>
+        <div v-if="!g.items.length && drag?.over !== g.key" class="ovw-col-empty">
+          {{ g.key === "done" ? "сюда — закрытое" : "пусто" }}
+        </div>
 
-          <div v-if="item.tags?.length" class="ovw-card-tags">
-            <span
-              v-for="t in item.tags"
-              :key="t.id"
-              class="ovw-tag"
-              :style="{ borderColor: t.color, color: t.color }"
-            >
-              {{ t.name }}
-            </span>
-          </div>
+        <template v-for="item in g.items" :key="item.id">
+          <div v-if="drag?.over === g.key && drag.beforeId === item.id" class="ovw-slot"></div>
 
-          <p v-if="excerpt(item)" class="ovw-card-excerpt">{{ excerpt(item) }}</p>
-
-          <div v-if="checkProgress(item)" class="ovw-card-checks">
-            <div class="ovw-card-bar">
-              <div class="ovw-card-bar-fill" :style="{ width: checkProgress(item).percent + '%' }"></div>
-            </div>
-            <span class="ovw-card-bar-label">
-              {{ checkProgress(item).done }}/{{ checkProgress(item).total }}
-            </span>
-          </div>
-
-          <div
-            v-for="t in (item.tasks || []).filter((x) => x.openBlockers > 0)"
-            :key="t.id"
-            class="ovw-card-blocked"
+          <article
+            class="ovw-card"
+            :class="{
+              muted: item.status === 'done' || item.status === 'dropped',
+              ghosted: drag?.id === item.id,
+              pop: popped.has(item.id),
+              live: timeOf(item)?.tone === 'live',
+              late: timeOf(item)?.tone === 'late',
+            }"
+            :style="{ '--accent': item.color || '#1767fd' }"
+            :data-id="item.id"
+            @pointerdown="pointerDown($event, item)"
           >
-            🚧 {{ t.title }} — {{ t.openBlockers }}
-          </div>
+            <div class="ovw-card-top">
+              <button
+                class="ovw-check ovw-nodrag"
+                :class="{ on: item.status === 'done' }"
+                :title="item.status === 'done' ? 'Вернуть в план' : 'Закрыть карточку'"
+                @click="toggleDone(item, $event)"
+              >
+                <span v-if="item.status === 'done'">✓</span>
+              </button>
+              <span class="ovw-card-title">
+                <span v-if="item.emoji" class="ovw-card-emoji">{{ item.emoji }}</span
+                >{{ item.title }}
+              </span>
+              <span v-if="item.priority" class="ovw-card-prio">{{ "!".repeat(item.priority) }}</span>
+            </div>
 
-          <div class="ovw-card-meta">
-            <span v-if="slotLabel(item)" class="ovw-chip">🕐 {{ slotLabel(item) }}</span>
-            <span v-if="deadlineLabel(item)" class="ovw-chip" :class="{ bad: isOverdue(item) }">
-              ⏳ {{ deadlineLabel(item) }}
-            </span>
-            <span v-if="item.estimateMinutes" class="ovw-chip">
-              {{ humanMinutes(item.estimateMinutes) }}
-            </span>
-            <span v-if="item.links?.length" class="ovw-chip">🌐 {{ item.links.length }}</span>
-            <span v-if="item.notes?.length" class="ovw-chip">🗒 {{ item.notes.length }}</span>
-            <span v-if="item.files?.length" class="ovw-chip">📎 {{ item.files.length }}</span>
-            <span v-if="item.tasks?.length" class="ovw-chip">🔗 {{ item.tasks.length }}</span>
-          </div>
-        </article>
+            <div v-if="timeOf(item)" class="ovw-when" :class="timeOf(item).tone">
+              <div class="ovw-when-row">
+                <span class="ovw-when-time">{{ timeOf(item).start }}</span>
+                <template v-if="timeOf(item).end">
+                  <span class="ovw-when-dash">→</span>
+                  <span class="ovw-when-time end">{{ timeOf(item).end }}</span>
+                </template>
+                <span v-if="timeOf(item).dur" class="ovw-when-dur">{{ timeOf(item).dur }}</span>
+                <span v-if="timeOf(item).rel" class="ovw-when-rel">{{ timeOf(item).rel }}</span>
+              </div>
+              <div class="ovw-track">
+                <div
+                  class="ovw-track-seg"
+                  :style="{ left: timeOf(item).left + '%', width: timeOf(item).width + '%' }"
+                ></div>
+                <div v-if="isToday" class="ovw-track-now" :style="{ left: nowPos + '%' }"></div>
+              </div>
+            </div>
+
+            <div v-if="item.tags?.length" class="ovw-card-tags">
+              <span
+                v-for="t in item.tags"
+                :key="t.id"
+                class="ovw-tag"
+                :style="{ borderColor: t.color, color: t.color }"
+              >
+                {{ t.name }}
+              </span>
+            </div>
+
+            <p v-if="excerpt(item)" class="ovw-card-excerpt">{{ excerpt(item) }}</p>
+
+            <div v-if="checkProgress(item)" class="ovw-card-checks">
+              <div class="ovw-card-bar">
+                <div
+                  class="ovw-card-bar-fill"
+                  :style="{ width: checkProgress(item).percent + '%' }"
+                ></div>
+              </div>
+              <span class="ovw-card-bar-label">
+                {{ checkProgress(item).done }}/{{ checkProgress(item).total }}
+              </span>
+            </div>
+
+            <div
+              v-for="t in (item.tasks || []).filter((x) => x.openBlockers > 0)"
+              :key="t.id"
+              class="ovw-card-blocked"
+            >
+              🚧 {{ t.title }} — {{ t.openBlockers }}
+            </div>
+
+            <div class="ovw-card-meta">
+              <span v-if="deadlineLabel(item)" class="ovw-chip due" :class="{ bad: isOverdue(item) }">
+                ⏳ {{ deadlineLabel(item) }}
+              </span>
+              <span v-if="item.estimateMinutes" class="ovw-chip">
+                {{ humanMinutes(item.estimateMinutes) }}
+              </span>
+              <span v-if="item.links?.length" class="ovw-chip">🌐 {{ item.links.length }}</span>
+              <span v-if="item.notes?.length" class="ovw-chip">🗒 {{ item.notes.length }}</span>
+              <span v-if="item.files?.length" class="ovw-chip">📎 {{ item.files.length }}</span>
+              <span v-if="item.tasks?.length" class="ovw-chip">🔗 {{ item.tasks.length }}</span>
+            </div>
+          </article>
+        </template>
+
+        <div v-if="drag?.over === g.key && drag.beforeId === null" class="ovw-slot"></div>
       </section>
+
+      <!-- Задачи с главного экрана: другая сущность, поэтому своя колонка -->
+      <MainTasksPanel
+        v-if="date"
+        class="ovw-col side"
+        :date="date"
+        @added="emit('refresh')"
+      />
+    </div>
+
+    <div v-if="!items.length" class="ovw-empty">
+      <p>Карточек на этот день пока нет.</p>
+      <button class="ovw-add" @click="emit('add')">+ Создать задачу</button>
+    </div>
+
+    <div
+      v-if="drag"
+      class="ovw-ghost"
+      :style="{
+        width: drag.width + 'px',
+        transform: `translate(${drag.x - drag.dx}px, ${drag.y - drag.dy}px) rotate(-2deg)`,
+        '--accent': drag.color,
+      }"
+    >
+      <span v-if="drag.emoji">{{ drag.emoji }} </span>{{ drag.title }}
     </div>
   </div>
 </template>
@@ -187,7 +619,7 @@ const blockersTotal = computed(() =>
 .ovw {
   display: flex;
   flex-direction: column;
-  gap: 22px;
+  gap: 14px;
   padding-bottom: 40px;
 }
 
@@ -211,6 +643,135 @@ const blockersTotal = computed(() =>
   line-height: 1.7;
 }
 
+/* --- Полоса прогресса дня --- */
+
+.ovw-bar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  background: linear-gradient(120deg, #1d1f27, #1a1b22);
+  border: 1px solid #2a2d38;
+  border-radius: 14px;
+  padding: 10px 14px;
+}
+
+.ovw-ring {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+}
+
+.ovw-ring svg {
+  width: 44px;
+  height: 44px;
+  transform: rotate(-90deg);
+}
+
+.ovw-ring-bg {
+  fill: none;
+  stroke: #2a2d38;
+  stroke-width: 4;
+}
+
+.ovw-ring-fg {
+  fill: none;
+  stroke: #63c94f;
+  stroke-width: 4;
+  stroke-linecap: round;
+  transition: stroke-dasharray 0.5s ease;
+}
+
+.ovw-ring span {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  color: #e8eaf2;
+}
+
+.ovw-ring span i {
+  font-size: 8px;
+  font-style: normal;
+  color: #8f95a6;
+}
+
+.ovw-bar-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.ovw-bar-text b {
+  color: #f0f2f7;
+  font-size: 15px;
+}
+
+.ovw-bar-text span {
+  color: #8f95a6;
+  font-size: 12px;
+}
+
+.ovw-bar-text span.ok {
+  color: #8fd97c;
+}
+
+.ovw-bar-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.ovw-tool {
+  background: #22242d;
+  border: 1px solid #333747;
+  color: #cfd3e0;
+  border-radius: 9px;
+  padding: 7px 12px;
+  font-size: 12.5px;
+  min-height: 34px;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+
+.ovw-tool:hover {
+  border-color: #e07b39;
+  color: #ffd9b0;
+}
+
+.ovw-tool.icon {
+  padding: 7px 10px;
+}
+
+.ovw-tool.off {
+  color: #6e7382;
+}
+
+.ovw-alldone {
+  background: linear-gradient(90deg, rgba(99, 201, 79, 0.2), rgba(224, 123, 57, 0.12) 70%);
+  border: 1px solid rgba(99, 201, 79, 0.45);
+  border-radius: 12px;
+  padding: 12px 16px;
+  color: #d8f5cd;
+  font-size: 15px;
+  font-weight: 600;
+  text-align: center;
+  animation: allDone 0.5s ease;
+}
+
+@keyframes allDone {
+  from {
+    transform: scale(0.94);
+    opacity: 0;
+  }
+}
+
 .ovw-alert {
   background: linear-gradient(90deg, rgba(229, 72, 77, 0.18), transparent 70%);
   border: 1px solid #6b2b2e;
@@ -221,10 +782,16 @@ const blockersTotal = computed(() =>
   font-size: 13px;
 }
 
+.ovw-hint {
+  margin: -4px 0 0;
+  color: #5b6070;
+  font-size: 11.5px;
+}
+
 .ovw-empty {
   color: #7a7f8e;
   text-align: center;
-  padding: 60px 20px;
+  padding: 40px 20px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -246,11 +813,12 @@ const blockersTotal = computed(() =>
   font-size: 13px;
 }
 
-/* Доска: статусы — колонками по горизонтали, карточки идут вниз под ними */
+/* --- Доска --- */
+
 .ovw-board {
   display: grid;
   grid-auto-flow: column;
-  grid-auto-columns: minmax(260px, 1fr);
+  grid-auto-columns: minmax(268px, 1fr);
   gap: 14px;
   align-items: start;
   overflow-x: auto;
@@ -262,6 +830,15 @@ const blockersTotal = computed(() =>
   flex-direction: column;
   gap: 10px;
   min-width: 0;
+  border-radius: 14px;
+  transition: background 0.15s, box-shadow 0.15s;
+}
+
+/* Колонка под курсором с карточкой подсвечивается целиком — так видно, куда
+   именно упадёт карточка, ещё до того как отпустишь. */
+.ovw-col.hot {
+  background: rgba(224, 123, 57, 0.07);
+  box-shadow: inset 0 0 0 1px rgba(224, 123, 57, 0.35);
 }
 
 .ovw-col-head {
@@ -306,18 +883,29 @@ const blockersTotal = computed(() =>
   border-radius: 12px;
 }
 
+.ovw-slot {
+  height: 44px;
+  border: 1px dashed rgba(224, 123, 57, 0.7);
+  background: rgba(224, 123, 57, 0.08);
+  border-radius: 12px;
+}
+
+/* --- Карточка --- */
+
 .ovw-card {
   position: relative;
   background: linear-gradient(160deg, #1e2129, #1a1c23);
   border: 1px solid #262a36;
   border-radius: 14px;
-  padding: 14px 15px 13px 17px;
-  cursor: pointer;
+  padding: 12px 13px 11px 16px;
+  cursor: grab;
   display: flex;
   flex-direction: column;
   gap: 9px;
   overflow: hidden;
-  transition: border-color 0.16s, transform 0.16s, box-shadow 0.16s;
+  /* touch-action не трогаем: колонки на телефоне листаются свайпом прямо по
+     карточкам, а драг начинается с удержания и сам гасит прокрутку. */
+  transition: border-color 0.16s, transform 0.16s, box-shadow 0.16s, opacity 0.2s;
 }
 
 .ovw-card::before {
@@ -336,14 +924,82 @@ const blockersTotal = computed(() =>
   box-shadow: 0 8px 22px rgba(0, 0, 0, 0.35);
 }
 
+.ovw-card:active {
+  cursor: grabbing;
+}
+
 .ovw-card.muted {
   opacity: 0.55;
+}
+
+.ovw-card.ghosted {
+  opacity: 0.25;
+  transform: none;
+}
+
+/* Карточку закрыли — она коротко «выдыхает» и зеленеет. Ради этого момента
+   всё и делается. */
+.ovw-card.pop {
+  animation: pop 0.62s cubic-bezier(0.2, 1.4, 0.4, 1);
+  border-color: #63c94f;
+  box-shadow: 0 0 24px rgba(99, 201, 79, 0.35);
+}
+
+@keyframes pop {
+  0% {
+    transform: scale(1);
+  }
+  35% {
+    transform: scale(1.05);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.ovw-card.live {
+  border-color: rgba(255, 214, 102, 0.6);
+  box-shadow: 0 0 0 1px rgba(255, 214, 102, 0.15);
+}
+
+.ovw-card.late {
+  border-color: rgba(229, 72, 77, 0.45);
 }
 
 .ovw-card-top {
   display: flex;
   align-items: flex-start;
-  gap: 8px;
+  gap: 9px;
+}
+
+.ovw-check {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  margin-top: 1px;
+  border-radius: 50%;
+  border: 2px solid #4d5262;
+  background: transparent;
+  color: #101219;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.14s, background 0.14s, border-color 0.14s, box-shadow 0.14s;
+}
+
+.ovw-check:hover {
+  border-color: #63c94f;
+  transform: scale(1.16);
+  box-shadow: 0 0 12px rgba(99, 201, 79, 0.4);
+}
+
+.ovw-check.on {
+  background: #63c94f;
+  border-color: #63c94f;
 }
 
 .ovw-card-title {
@@ -353,6 +1009,11 @@ const blockersTotal = computed(() =>
   line-height: 1.35;
   overflow-wrap: anywhere;
   flex: 1;
+}
+
+.ovw-card.muted .ovw-card-title {
+  text-decoration: line-through;
+  color: #9aa0b1;
 }
 
 .ovw-card-emoji {
@@ -365,6 +1026,117 @@ const blockersTotal = computed(() =>
   font-size: 12px;
   flex-shrink: 0;
 }
+
+/* --- Время на карточке --- */
+
+.ovw-when {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  background: #15161c;
+  border: 1px solid #24262f;
+  border-radius: 10px;
+  padding: 6px 9px 7px;
+}
+
+.ovw-when.live {
+  background: rgba(255, 214, 102, 0.08);
+  border-color: rgba(255, 214, 102, 0.35);
+}
+
+.ovw-when.soon {
+  border-color: rgba(224, 123, 57, 0.4);
+}
+
+.ovw-when.late {
+  background: rgba(229, 72, 77, 0.07);
+  border-color: rgba(229, 72, 77, 0.32);
+}
+
+.ovw-when-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.ovw-when-time {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 16px;
+  font-weight: 700;
+  color: #f0f2f7;
+  letter-spacing: 0.02em;
+  line-height: 1;
+}
+
+.ovw-when-time.end {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #9aa0b1;
+}
+
+.ovw-when-dash {
+  color: #5b6070;
+  font-size: 11px;
+}
+
+.ovw-when-dur {
+  color: #7a7f8e;
+  font-size: 11px;
+}
+
+.ovw-when-rel {
+  margin-left: auto;
+  font-size: 11px;
+  color: #8f95a6;
+  white-space: nowrap;
+}
+
+.ovw-when.live .ovw-when-rel {
+  color: #ffd666;
+  font-weight: 600;
+}
+
+.ovw-when.soon .ovw-when-rel {
+  color: #e8b04b;
+}
+
+.ovw-when.late .ovw-when-rel {
+  color: #ff9ba0;
+}
+
+/* Полоска суток с 6:00 до полуночи: карточка сразу показывает, куда она
+   попадает в дне, а не только «во сколько». */
+.ovw-track {
+  position: relative;
+  height: 4px;
+  background: #22242d;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.ovw-track-seg {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-radius: 3px;
+  background: linear-gradient(90deg, var(--accent), #e8b04b);
+}
+
+.ovw-when.live .ovw-track-seg {
+  background: linear-gradient(90deg, #ffd666, #ff9d3d);
+}
+
+.ovw-track-now {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  width: 2px;
+  background: #fff;
+  box-shadow: 0 0 6px rgba(255, 255, 255, 0.8);
+}
+
+/* --- Остальное на карточке --- */
 
 .ovw-card-tags {
   display: flex;
@@ -403,6 +1175,7 @@ const blockersTotal = computed(() =>
 .ovw-card-bar-fill {
   height: 100%;
   background: linear-gradient(90deg, #1767fd, #63c94f);
+  transition: width 0.3s;
 }
 
 .ovw-card-bar-label {
@@ -437,15 +1210,43 @@ const blockersTotal = computed(() =>
   padding: 1px 8px;
 }
 
+.ovw-chip.due {
+  color: #cfd3e0;
+}
+
 .ovw-chip.bad {
   color: #ff9ba0;
   border-color: #6b2b2e;
+  background: rgba(229, 72, 77, 0.12);
+}
+
+/* --- Призрак под курсором --- */
+
+.ovw-ghost {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 3000;
+  pointer-events: none;
+  background: #21242e;
+  border: 1px solid var(--accent);
+  border-left: 3px solid var(--accent);
+  border-radius: 12px;
+  padding: 10px 12px;
+  color: #f0f2f7;
+  font-size: 13.5px;
+  font-weight: 600;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.55);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: 0.96;
 }
 
 /* На узком экране колонки листаются свайпом с прилипанием */
 @media (max-width: 760px) {
   .ovw-board {
-    grid-auto-columns: 82vw;
+    grid-auto-columns: 86vw;
     scroll-snap-type: x mandatory;
     gap: 10px;
   }
@@ -454,6 +1255,13 @@ const blockersTotal = computed(() =>
   }
   .ovw-day {
     padding: 13px 15px;
+  }
+  .ovw-bar-actions {
+    margin-left: 0;
+    width: 100%;
+  }
+  .ovw-tool {
+    flex: 1;
   }
 }
 </style>
