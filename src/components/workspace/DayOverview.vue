@@ -669,6 +669,74 @@ onBeforeUnmount(() => {
           {{ EMPTY_HINT[g.key] || "пусто" }}
         </div>
 
+        <!-- Подзадачи с главной страницы: не карточки дня, но сегодня их срок,
+             поэтому стоят вверху колонки своего статуса и выделены. Ниже них
+             карточки дня свободно двигаются между собой. -->
+        <article
+          v-for="sub in g.subs"
+          :key="'sub-' + sub.id"
+          class="ovw-sub"
+          :class="{
+            muted: sub.done,
+            pop: popped.has(sub.id),
+            ghosted: drag?.id === sub.id,
+            'due-soon': subUrgency(sub)?.tone === 'soon',
+            'due-over': subUrgency(sub)?.tone === 'over',
+          }"
+          :style="{ '--accent': sub.parentColor || sub.color || '#e07b39' }"
+          :data-sub-id="sub.id"
+          @pointerdown="pointerDown($event, sub, 'sub')"
+        >
+          <div class="ovw-sub-flags">
+            <span class="ovw-sub-flag">с главной</span>
+            <span v-if="sub.parentIsGlobal" class="ovw-sub-flag global">глобальная</span>
+            <span
+              class="ovw-sub-flag due"
+              :class="{ soon: subUrgency(sub)?.tone === 'soon', bad: subUrgency(sub)?.tone === 'over' }"
+            >
+              ⏳ {{ subUrgency(sub)?.label || subTime(sub) }}
+            </span>
+          </div>
+
+          <div class="ovw-sub-parent">
+            <span v-if="sub.parentSticker" class="ovw-sub-sticker">{{ sub.parentSticker }}</span>
+            {{ sub.parentTitle }}
+            <span class="ovw-sub-arrow">→</span>
+          </div>
+
+          <div class="ovw-sub-top">
+            <button
+              class="ovw-check ovw-nodrag"
+              :class="{ on: sub.done }"
+              :title="sub.done ? 'Открыть заново' : 'Закрыть подзадачу'"
+              @click="toggleSub(sub, $event)"
+            >
+              <span v-if="sub.done">✓</span>
+            </button>
+            <span class="ovw-sub-title">{{ sub.title }}</span>
+            <button
+              class="ovw-sub-move ovw-nodrag"
+              title="Сделать карточкой этого дня"
+              @click="subToDay(sub, $event)"
+            >
+              ＋
+            </button>
+          </div>
+
+          <div v-if="sub.statusName || sub.openBlockers || sub.checksTotal" class="ovw-sub-meta">
+            <span
+              v-if="sub.statusName"
+              class="ovw-sub-status"
+              :style="{ borderColor: sub.statusColor, color: sub.statusColor }"
+            >
+              {{ sub.statusName }}
+            </span>
+            <span v-if="sub.checksTotal" class="ovw-sub-status">
+              ☑ {{ sub.checksDone }}/{{ sub.checksTotal }}
+            </span>
+            <span v-if="sub.openBlockers" class="ovw-sub-blockers">🚧 {{ sub.openBlockers }}</span>
+          </div>
+        </article>
         <template v-for="item in g.items" :key="item.id">
           <div
             v-if="drag?.kind === 'item' && drag.over === g.key && drag.beforeId === item.id"
@@ -782,70 +850,6 @@ onBeforeUnmount(() => {
           class="ovw-slot"
         ></div>
 
-        <!-- Подзадачи с главной страницы: не карточки дня, но сегодня их срок,
-             поэтому стоят в колонке своего статуса — только выделены. -->
-        <article
-          v-for="sub in g.subs"
-          :key="'sub-' + sub.id"
-          class="ovw-sub"
-          :class="{
-            muted: sub.done,
-            pop: popped.has(sub.id),
-            ghosted: drag?.id === sub.id,
-            'due-soon': subUrgency(sub)?.tone === 'soon',
-            'due-over': subUrgency(sub)?.tone === 'over',
-          }"
-          :style="{ '--accent': sub.parentColor || sub.color || '#e07b39' }"
-          :data-sub-id="sub.id"
-          @pointerdown="pointerDown($event, sub, 'sub')"
-        >
-          <div class="ovw-sub-flags">
-            <span class="ovw-sub-flag">с главной</span>
-            <span v-if="sub.parentIsGlobal" class="ovw-sub-flag global">глобальная</span>
-            <span
-              class="ovw-sub-flag due"
-              :class="{ soon: subUrgency(sub)?.tone === 'soon', bad: subUrgency(sub)?.tone === 'over' }"
-            >
-              ⏳ {{ subUrgency(sub)?.label || subTime(sub) }}
-            </span>
-          </div>
-
-          <div class="ovw-sub-parent">
-            <span v-if="sub.parentSticker" class="ovw-sub-sticker">{{ sub.parentSticker }}</span>
-            {{ sub.parentTitle }}
-            <span class="ovw-sub-arrow">→</span>
-          </div>
-
-          <div class="ovw-sub-top">
-            <button
-              class="ovw-check ovw-nodrag"
-              :class="{ on: sub.done }"
-              :title="sub.done ? 'Открыть заново' : 'Закрыть подзадачу'"
-              @click="toggleSub(sub, $event)"
-            >
-              <span v-if="sub.done">✓</span>
-            </button>
-            <span class="ovw-sub-title">{{ sub.title }}</span>
-            <button
-              class="ovw-sub-move ovw-nodrag"
-              title="Сделать карточкой этого дня"
-              @click="subToDay(sub, $event)"
-            >
-              ＋
-            </button>
-          </div>
-
-          <div v-if="sub.statusName || sub.openBlockers" class="ovw-sub-meta">
-            <span
-              v-if="sub.statusName"
-              class="ovw-sub-status"
-              :style="{ borderColor: sub.statusColor, color: sub.statusColor }"
-            >
-              {{ sub.statusName }}
-            </span>
-            <span v-if="sub.openBlockers" class="ovw-sub-blockers">🚧 {{ sub.openBlockers }}</span>
-          </div>
-        </article>
       </section>
     </div>
 

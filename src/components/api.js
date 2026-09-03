@@ -333,6 +333,24 @@ export async function updateTaskAPI(id, patch) {
   });
 }
 
+// Чеклист задачи или подзадачи. Список приходит и уходит целиком: чего нет в
+// нём — того нет и в задаче.
+export async function fetchTaskChecks(taskId) {
+  const response = await authorizedFetch(`${API_BASE_URL}/api/v1/tasks/${taskId}/checks`);
+  return response.json();
+}
+
+export async function saveTaskChecks(taskId, checks) {
+  const response = await authorizedFetch(`${API_BASE_URL}/api/v1/tasks/${taskId}/checks`, {
+    method: "PUT",
+    body: JSON.stringify({ checks }),
+  });
+  if (!response.ok) {
+    throw new Error((await response.json().catch(() => ({}))).error || "не удалось сохранить чеклист");
+  }
+  return response.json();
+}
+
 // journey map api
 export async function fetchJourneyMonth(month, year) {
   const response = await authorizedFetch(

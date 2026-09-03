@@ -1,7 +1,13 @@
 <script setup>
 import { ref, computed, watch, onBeforeUnmount } from "vue";
 import TaskLogPanel from "@/components/tasklog/TaskLogPanel.vue";
-import { updateTaskAPI, checkTask, createWorkItem } from "@/components/api.js";
+import {
+  updateTaskAPI,
+  checkTask,
+  createWorkItem,
+  fetchTaskChecks,
+  saveTaskChecks,
+} from "@/components/api.js";
 
 // Подзадача с главной страницы, открытая из доски дня. Здесь её правят там же,
 // где увидели: название, срок, статус, блокеры и лента — не уходя на главную.
@@ -31,6 +37,7 @@ watch(
     title.value = props.sub.title || "";
     deadline.value = toInput(props.sub.deadline);
     error.value = "";
+    loadChecks();
   },
   { immediate: true },
 );
@@ -49,7 +56,78 @@ watch([title, deadline], () => {
 
 onBeforeUnmount(() => {
   clearTimeout(saveTimer);
+  clearTimeout(checksTimer);
   if (savePending) save();
+});
+
+// --- Чеклист ---
+
+const checks = ref([]);
+const newCheck = ref("");
+const checksLoading = ref(false);
+let checksTimer = null;
+
+async function loadChecks() {
+  checksLoading.value = true;
+  try {
+    checks.value = (await fetchTaskChecks(props.sub.id)) || [];
+  } catch {
+    checks.value = [];
+  } finally {
+    checksLoading.value = false;
+  }
+}
+
+// Чеклист уходит целиком и тоже сам: галочку ставят на ходу, подтверждать её
+// кнопкой — лишний шаг ровно там, где его меньше всего ждут.
+function scheduleChecksSave() {
+  clearTimeout(checksTimer);
+  checksTimer = setTimeout(() => pushChecks({ adopt: false }), 500);
+}
+
+// adopt — забрать ответ сервера себе. Нужно, когда появились новые пункты и им
+// выданы id; при правке текста ответ игнорируем, иначе он затрёт то, что
+// человек допечатал, пока запрос летел.
+async function pushChecks({ adopt = true } = {}) {
+  clearTimeout(checksTimer);
+  try {
+    const saved = await saveTaskChecks(
+      props.sub.id,
+      checks.value.map((c) => ({ id: c.id, text: c.text, done: c.done })),
+    );
+    if (adopt) checks.value = saved;
+    emit("changed");
+  } catch (e) {
+    error.value = e.message || "не удалось сохранить чеклист";
+  }
+}
+
+function addCheck() {
+  const text = newCheck.value.trim();
+  if (!text) return;
+  checks.value.push({ id: null, text, done: false });
+  newCheck.value = "";
+  pushChecks();
+}
+
+function removeCheck(index) {
+  checks.value.splice(index, 1);
+  pushChecks();
+}
+
+function moveCheck(index, delta) {
+  const to = index + delta;
+  if (to < 0 || to >= checks.value.length) return;
+  const [row] = checks.value.splice(index, 1);
+  checks.value.splice(to, 0, row);
+  pushChecks();
+}
+
+const checkProgress = computed(() => {
+  const total = checks.value.length;
+  if (!total) return null;
+  const done = checks.value.filter((c) => c.done).length;
+  return { total, done, percent: Math.round((done / total) * 100) };
 });
 
 function toInput(value) {
@@ -192,6 +270,44 @@ function human(minutes) {
           <span v-else-if="dirty" class="msp-dim">правки уйдут сами</span>
           <span v-else class="msp-dim">правки сохраняются сами</span>
         </div>
+      </section>
+
+      <!-- Чеклист: мелкие шаги, которые не тянут на отдельную подзадачу -->
+      <section class="msp-checks">
+        <div class="msp-checks-head">
+          <span>☑ Чеклист</span>
+          <span v-if="checkProgress" class="msp-dim">
+            {{ checkProgress.done }}/{{ checkProgress.total }}
+          </span>
+        </div>
+
+        <div v-if="checkProgress" class="msp-bar">
+          <div class="msp-bar-fill" :style="{ width: checkProgress.percent + '%' }"></div>
+        </div>
+
+        <div v-for="(c, i) in checks" :key="c.id || 'new-' + i" class="msp-check">
+          <input type="checkbox" v-model="c.done" @change="scheduleChecksSave" />
+          <input
+            v-model="c.text"
+            class="msp-check-text"
+            :class="{ done: c.done }"
+            @input="scheduleChecksSave"
+          />
+          <button class="msp-x" title="Выше" @click="moveCheck(i, -1)">↑</button>
+          <button class="msp-x" title="Ниже" @click="moveCheck(i, 1)">↓</button>
+          <button class="msp-x" title="Удалить" @click="removeCheck(i)">✕</button>
+        </div>
+
+        <div v-if="!checks.length && !checksLoading" class="msp-dim">
+          Пунктов пока нет — они пригодятся, когда шаг мелкий для подзадачи.
+        </div>
+
+        <input
+          v-model="newCheck"
+          class="msp-input"
+          placeholder="+ пункт (Enter)"
+          @keydown.enter.prevent="addCheck"
+        />
       </section>
 
       <!-- Статус, блокеры, решения и вся лента — та же панель, что и на главной -->
@@ -381,6 +497,78 @@ function human(minutes) {
 .msp-dim {
   color: #7a7f8e;
   font-size: 12px;
+}
+
+.msp-checks {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  background: #16171d;
+  border: 1px solid #262a36;
+  border-radius: 12px;
+  padding: 12px;
+}
+
+.msp-checks-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: #b7bccb;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.msp-bar {
+  height: 4px;
+  background: #22242d;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.msp-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #e07b39, #63c94f);
+  transition: width 0.3s;
+}
+
+.msp-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.msp-check-text {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid transparent;
+  color: #e8eaf2;
+  font-size: 13px;
+  padding: 3px 2px;
+  outline: none;
+}
+
+.msp-check-text:focus {
+  border-bottom-color: #6e4aff;
+}
+
+.msp-check-text.done {
+  color: #7a7f8e;
+  text-decoration: line-through;
+}
+
+.msp-x {
+  background: none;
+  border: none;
+  color: #5b6070;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 2px 4px;
+}
+
+.msp-x:hover {
+  color: #cfd3e0;
 }
 
 .msp-dim.ok {
