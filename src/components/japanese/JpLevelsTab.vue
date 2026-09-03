@@ -1,7 +1,7 @@
 <script setup>
 import { ref, computed, onMounted } from "vue";
 import { fetchJpDecks } from "@/components/japaneseApi.js";
-import { JLPT_LEVELS, JLPT_NOTE } from "./jlptReference.js";
+import { JLPT_LEVELS, JLPT_NOTE, JLPT_SOURCES, JLPT_HOURS_NOTE } from "./jlptReference.js";
 
 // Справочник по уровням: что спрашивают, сколько знать, какая грамматика.
 // Чистая справка, без изучения — сюда заходят, чтобы понять, куда идёшь.
@@ -11,6 +11,7 @@ import { JLPT_LEVELS, JLPT_NOTE } from "./jlptReference.js";
 
 const decks = ref([]);
 const open = ref(5); // N5 раскрыт сразу: с него начинают
+const showSources = ref(false);
 const openGrammar = ref({});
 
 onMounted(async () => {
@@ -64,6 +65,16 @@ const LEVEL_COLORS = {
     <section class="jp-card">
       <h3>Уровни JLPT</h3>
       <p class="jp-muted">{{ JLPT_NOTE }}</p>
+      <button class="jp-btn jp-btn-sm" style="margin-top: 8px" @click="showSources = !showSources">
+        {{ showSources ? "Скрыть" : "Откуда эти числа" }}
+      </button>
+      <div v-if="showSources" class="jpl-sources">
+        <div v-for="src in JLPT_SOURCES" :key="src.what" class="jpl-source">
+          <b>{{ src.what }}</b>
+          <span class="jp-muted">{{ src.where }} — {{ src.trust }}</span>
+        </div>
+        <p class="jp-muted" style="margin: 8px 0 0">{{ JLPT_HOURS_NOTE }}</p>
+      </div>
     </section>
 
     <section v-for="level in JLPT_LEVELS" :key="level.code" class="jp-card jpl-level">
@@ -121,7 +132,9 @@ const LEVEL_COLORS = {
           <h4>Грамматика</h4>
           <p class="jp-muted" style="margin-top: 0">
             {{ level.kanjiNew }} новых кандзи на этом уровне, всего к нему —
-            {{ level.kanjiTotal }}.
+            {{ level.kanjiTotal }}.<template v-if="level.kanjiJoyo">
+              В сетке дзёё из них видно {{ level.kanjiJoyo }}: остальные в список 2136 не
+              входят.</template>
           </p>
           <div v-for="group in level.grammar" :key="group.title" class="jpl-group">
             <button class="jpl-group-head" @click="toggleGrammar(level.code, group.title)">
@@ -214,6 +227,22 @@ const LEVEL_COLORS = {
   flex-direction: column;
   gap: 5px;
   font-size: 12px;
+}
+
+.jpl-sources {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid #2a2d38;
+}
+
+.jpl-source {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12.5px;
 }
 
 .jpl-block {
