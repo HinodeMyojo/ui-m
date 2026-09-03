@@ -3,7 +3,7 @@ import { ref, computed, watch, onMounted, onBeforeUnmount } from "vue";
 import confetti from "canvas-confetti";
 import MarkdownView from "./MarkdownView.vue";
 import { AUTUMN_COLORS } from "@/composables/useAutumn.js";
-import { checkTask, createWorkItem } from "@/components/api.js";
+import { checkTask, createWorkItem, setTaskLogStatus } from "@/components/api.js";
 
 // Общий вид дня: все карточки разом. Отсюда день не только читают, но и
 // разгребают — карточку можно перетащить в другой статус, закрыть одним
@@ -16,6 +16,8 @@ const props = defineProps({
   isToday: { type: Boolean, default: false },
   // Подзадачи с главной страницы с дедлайном около этого дня (окно ±сутки).
   mainSubtasks: { type: Array, default: () => [] },
+  // Статусы главной страницы с колонкой доски у каждого — по ним переносим.
+  taskStatuses: { type: Array, default: () => [] },
 });
 const emit = defineEmits(["open", "add", "move", "sort", "refresh"]);
 
@@ -108,6 +110,45 @@ async function toggleSub(sub, event) {
     const rest = new Set(subBusy.value);
     rest.delete(sub.id);
     subBusy.value = rest;
+  }
+}
+
+// Перенос подзадачи между колонками — это смена её статуса на главной. Какой
+// именно статус подставить, знает сервер: он же и разложил статусы по
+// колонкам, а называться «В работе» у пользователя может что угодно.
+function statusForColumn(column) {
+  return props.taskStatuses.find((st) => st.column === column) || null;
+}
+
+async function moveSub(sub, column, card) {
+  if (column === "dropped") {
+    subError.value = "подзадачу с главной нельзя отменить — только закрыть или вернуть в план";
+    return;
+  }
+  const status = statusForColumn(column);
+  if (!status) {
+    subError.value = `на главной нет статуса для колонки «${STATUS_META[column].label}»`;
+    return;
+  }
+
+  const wasDone = sub.done;
+  const nowDone = column === "done";
+  sub.column = column;
+  sub.done = nowDone;
+  sub.statusId = status.id;
+  sub.statusName = status.name;
+  sub.statusColor = status.color;
+  if (nowDone && !wasDone) celebrate(sub.id, card);
+
+  subError.value = "";
+  try {
+    // Галочка и статус — разные вещи: в «Сделано» подзадача должна и закрыться.
+    if (nowDone !== wasDone) await checkTask(sub.id, nowDone);
+    await setTaskLogStatus({ taskId: sub.id, statusId: status.id, entryDate: props.date });
+    emit("refresh");
+  } catch (e) {
+    subError.value = e.message || "не удалось сменить статус подзадачи";
+    emit("refresh");
   }
 }
 
@@ -349,13 +390,15 @@ const board = ref(null);
 const drag = ref(null);
 let pending = null;
 
-function pointerDown(event, item) {
+// kind: "item" — карточка дня, "sub" — подзадача с главной страницы.
+function pointerDown(event, item, kind = "item") {
   if (event.button > 0) return;
   if (event.target.closest?.(".ovw-nodrag")) return;
   const card = event.currentTarget;
   const rect = card.getBoundingClientRect();
   pending = {
     item,
+    kind,
     card,
     dead: false,
     startX: event.clientX,
@@ -388,15 +431,17 @@ function beginDrag(x, y) {
   if (!pending || pending.dead || drag.value) return;
   clearTimeout(pending.hold);
   const item = pending.item;
+  const sub = pending.kind === "sub";
   drag.value = {
     id: item.id,
+    kind: pending.kind,
     title: item.title,
-    emoji: item.emoji,
-    color: item.color || "#1767fd",
+    emoji: sub ? "" : item.emoji,
+    color: (sub ? item.parentColor || item.color : item.color) || "#1767fd",
     width: Math.min(300, pending.width),
     dx: Math.min(pending.dx, 280),
     dy: Math.min(pending.dy, 40),
-    from: item.status,
+    from: sub ? item.column : item.status,
     over: null,
     beforeId: null,
     x,
@@ -474,13 +519,19 @@ function pointerUp(event) {
   drag.value = null;
   if (!state) {
     const moved = Math.hypot(event.clientX - started?.startX, event.clientY - started?.startY);
-    if (started && !started.dead && moved < 8 && Date.now() - started.at < 900) {
+    // Подзадача с главной по клику не раскрывается: карточки дня у неё нет.
+    if (started?.kind === "item" && !started.dead && moved < 8 && Date.now() - started.at < 900) {
       emit("open", started.item.id);
     }
     return;
   }
   if (!state.over) return;
-  if (state.over === "done" && state.from !== "done") celebrate(state.id, started?.card);
+  if (state.kind === "sub") {
+    // Внутри своей же колонки подзадаче двигаться некуда: порядка у неё нет.
+    if (state.over !== state.from) moveSub(started.item, state.over, started?.card);
+    return;
+  }
+  if (state.over === "done") celebrate(state.id, started?.card);
   emit("move", { id: state.id, status: state.over, beforeId: state.beforeId });
 }
 
@@ -577,7 +628,10 @@ onBeforeUnmount(() => {
         </div>
 
         <template v-for="item in g.items" :key="item.id">
-          <div v-if="drag?.over === g.key && drag.beforeId === item.id" class="ovw-slot"></div>
+          <div
+            v-if="drag?.kind === 'item' && drag.over === g.key && drag.beforeId === item.id"
+            class="ovw-slot"
+          ></div>
 
           <article
             class="ovw-card"
@@ -675,7 +729,10 @@ onBeforeUnmount(() => {
           </article>
         </template>
 
-        <div v-if="drag?.over === g.key && drag.beforeId === null" class="ovw-slot"></div>
+        <div
+          v-if="drag?.kind === 'item' && drag.over === g.key && drag.beforeId === null"
+          class="ovw-slot"
+        ></div>
 
         <!-- Подзадачи с главной страницы: не карточки дня, но сегодня их срок,
              поэтому стоят в колонке своего статуса — только выделены. -->
@@ -683,8 +740,10 @@ onBeforeUnmount(() => {
           v-for="sub in g.subs"
           :key="'sub-' + sub.id"
           class="ovw-sub"
-          :class="{ muted: sub.done, pop: popped.has(sub.id) }"
+          :class="{ muted: sub.done, pop: popped.has(sub.id), ghosted: drag?.id === sub.id }"
           :style="{ '--accent': sub.parentColor || sub.color || '#e07b39' }"
+          :data-sub-id="sub.id"
+          @pointerdown="pointerDown($event, sub, 'sub')"
         >
           <div class="ovw-sub-flags">
             <span class="ovw-sub-flag">с главной</span>
@@ -700,7 +759,7 @@ onBeforeUnmount(() => {
 
           <div class="ovw-sub-top">
             <button
-              class="ovw-check"
+              class="ovw-check ovw-nodrag"
               :class="{ on: sub.done }"
               :title="sub.done ? 'Открыть заново' : 'Закрыть подзадачу'"
               @click="toggleSub(sub, $event)"
@@ -709,7 +768,7 @@ onBeforeUnmount(() => {
             </button>
             <span class="ovw-sub-title">{{ sub.title }}</span>
             <button
-              class="ovw-sub-move"
+              class="ovw-sub-move ovw-nodrag"
               title="Сделать карточкой этого дня"
               @click="subToDay(sub, $event)"
             >
@@ -1361,6 +1420,7 @@ onBeforeUnmount(() => {
    рамка, штриховка и ярлык «с главной» отличают её с одного взгляда. */
 .ovw-sub {
   position: relative;
+  cursor: grab;
   background: linear-gradient(160deg, rgba(224, 123, 57, 0.11), rgba(26, 28, 35, 0.9));
   border: 1px dashed rgba(224, 123, 57, 0.45);
   border-radius: 14px;
@@ -1386,8 +1446,16 @@ onBeforeUnmount(() => {
   border-color: rgba(224, 123, 57, 0.8);
 }
 
+.ovw-sub:active {
+  cursor: grabbing;
+}
+
 .ovw-sub.muted {
   opacity: 0.5;
+}
+
+.ovw-sub.ghosted {
+  opacity: 0.25;
 }
 
 .ovw-sub.pop {

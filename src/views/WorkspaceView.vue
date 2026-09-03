@@ -535,6 +535,7 @@ function slotLabel(item) {
       :date="date"
       :is-today="isToday"
       :main-subtasks="day?.mainSubtasks || []"
+      :task-statuses="day?.taskStatuses || []"
       @open="openFromOverview"
       @add="addItem"
       @move="moveItem"
