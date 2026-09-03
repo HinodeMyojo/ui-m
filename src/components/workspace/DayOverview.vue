@@ -19,7 +19,7 @@ const props = defineProps({
   // Статусы главной страницы с колонкой доски у каждого — по ним переносим.
   taskStatuses: { type: Array, default: () => [] },
 });
-const emit = defineEmits(["open", "add", "move", "sort", "refresh"]);
+const emit = defineEmits(["open", "open-sub", "add", "move", "sort", "refresh"]);
 
 const STATUS_META = {
   todo: { label: "План", color: "#5b616e" },
@@ -180,6 +180,7 @@ const left = computed(() => Math.max(0, total.value - done.value));
 // Часы тикают сами: «через 20 минут» на карточке, которая не обновляется,
 // врёт уже через минуту после открытия страницы.
 const nowMin = ref(minutesNow());
+const nowTs = ref(Date.now());
 let clock = null;
 
 function minutesNow() {
@@ -260,6 +261,21 @@ function isOverdue(item) {
   if (!item.deadline || item.status === "done" || item.status === "dropped") return false;
   return new Date(item.deadline) < new Date();
 }
+
+// Последний час до срока карточка показывает собой, а не строкой мелким
+// шрифтом: рамка греется, счётчик идёт в минутах и тикает вместе с часами.
+function urgencyOf(deadline, closed) {
+  if (!deadline || closed) return null;
+  const left = Math.round((new Date(deadline).getTime() - nowTs.value) / 60000);
+  if (left < 0) return { tone: "over", label: `просрочено на ${humanMinutes(-left) || "минуту"}` };
+  if (left <= 60) return { tone: "soon", label: left < 1 ? "меньше минуты" : `осталось ${left} мин` };
+  return null;
+}
+
+const itemUrgency = (item) =>
+  urgencyOf(item.deadline, item.status === "done" || item.status === "dropped");
+
+const subUrgency = (sub) => urgencyOf(sub.deadline, sub.done);
 
 // --- Карточка ---
 
@@ -543,9 +559,8 @@ function pointerUp(event) {
   drag.value = null;
   if (!state) {
     const moved = Math.hypot(event.clientX - started?.startX, event.clientY - started?.startY);
-    // Подзадача с главной по клику не раскрывается: карточки дня у неё нет.
-    if (started?.kind === "item" && !started.dead && moved < 8 && Date.now() - started.at < 900) {
-      emit("open", started.item.id);
+    if (started && !started.dead && moved < 8 && Date.now() - started.at < 900) {
+      emit(started.kind === "sub" ? "open-sub" : "open", started.item.id);
     }
     return;
   }
@@ -560,7 +575,10 @@ function pointerUp(event) {
 }
 
 onMounted(() => {
-  clock = setInterval(() => (nowMin.value = minutesNow()), 30000);
+  clock = setInterval(() => {
+    nowMin.value = minutesNow();
+    nowTs.value = Date.now();
+  }, 30000);
 });
 
 onBeforeUnmount(() => {
@@ -665,6 +683,8 @@ onBeforeUnmount(() => {
               pop: popped.has(item.id),
               live: timeOf(item)?.tone === 'live',
               late: timeOf(item)?.tone === 'late',
+              'due-soon': itemUrgency(item)?.tone === 'soon',
+              'due-over': itemUrgency(item)?.tone === 'over',
             }"
             :style="{ '--accent': item.color || '#1767fd' }"
             :data-id="item.id"
@@ -739,8 +759,12 @@ onBeforeUnmount(() => {
             </div>
 
             <div class="ovw-card-meta">
-              <span v-if="deadlineLabel(item)" class="ovw-chip due" :class="{ bad: isOverdue(item) }">
-                ⏳ {{ deadlineLabel(item) }}
+              <span
+                v-if="deadlineLabel(item)"
+                class="ovw-chip due"
+                :class="{ bad: isOverdue(item), soon: itemUrgency(item)?.tone === 'soon' }"
+              >
+                ⏳ {{ itemUrgency(item)?.label || deadlineLabel(item) }}
               </span>
               <span v-if="item.estimateMinutes" class="ovw-chip">
                 {{ humanMinutes(item.estimateMinutes) }}
@@ -764,7 +788,13 @@ onBeforeUnmount(() => {
           v-for="sub in g.subs"
           :key="'sub-' + sub.id"
           class="ovw-sub"
-          :class="{ muted: sub.done, pop: popped.has(sub.id), ghosted: drag?.id === sub.id }"
+          :class="{
+            muted: sub.done,
+            pop: popped.has(sub.id),
+            ghosted: drag?.id === sub.id,
+            'due-soon': subUrgency(sub)?.tone === 'soon',
+            'due-over': subUrgency(sub)?.tone === 'over',
+          }"
           :style="{ '--accent': sub.parentColor || sub.color || '#e07b39' }"
           :data-sub-id="sub.id"
           @pointerdown="pointerDown($event, sub, 'sub')"
@@ -772,7 +802,12 @@ onBeforeUnmount(() => {
           <div class="ovw-sub-flags">
             <span class="ovw-sub-flag">с главной</span>
             <span v-if="sub.parentIsGlobal" class="ovw-sub-flag global">глобальная</span>
-            <span class="ovw-sub-flag due">⏳ {{ subTime(sub) }}</span>
+            <span
+              class="ovw-sub-flag due"
+              :class="{ soon: subUrgency(sub)?.tone === 'soon', bad: subUrgency(sub)?.tone === 'over' }"
+            >
+              ⏳ {{ subUrgency(sub)?.label || subTime(sub) }}
+            </span>
           </div>
 
           <div class="ovw-sub-parent">
@@ -1435,6 +1470,65 @@ onBeforeUnmount(() => {
 .ovw-chip.bad {
   color: #ff9ba0;
   border-color: #6b2b2e;
+  background: rgba(229, 72, 77, 0.12);
+}
+
+/* --- Горящий срок --- */
+
+/* Последний час до дедлайна и просрочка: карточку должно быть видно с другого
+   конца доски, поэтому греется рамка целиком, а не один чип. */
+.ovw-card.due-soon,
+.ovw-sub.due-soon {
+  border-color: rgba(255, 214, 102, 0.75);
+  border-style: solid;
+  animation: due-pulse 2.4s ease-in-out infinite;
+}
+
+.ovw-card.due-over,
+.ovw-sub.due-over {
+  border-color: rgba(229, 72, 77, 0.8);
+  border-style: solid;
+  box-shadow: 0 0 0 1px rgba(229, 72, 77, 0.25), 0 0 22px rgba(229, 72, 77, 0.22);
+}
+
+.ovw-card.muted.due-over,
+.ovw-sub.muted.due-over {
+  box-shadow: none;
+}
+
+@keyframes due-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 1px rgba(255, 214, 102, 0.18), 0 0 14px rgba(255, 214, 102, 0.14);
+  }
+  50% {
+    box-shadow: 0 0 0 1px rgba(255, 214, 102, 0.4), 0 0 26px rgba(255, 214, 102, 0.34);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ovw-card.due-soon,
+  .ovw-sub.due-soon {
+    animation: none;
+    box-shadow: 0 0 0 1px rgba(255, 214, 102, 0.35);
+  }
+}
+
+.ovw-chip.due.soon {
+  color: #ffd666;
+  border-color: rgba(255, 214, 102, 0.45);
+  background: rgba(255, 214, 102, 0.1);
+}
+
+.ovw-sub-flag.due.soon {
+  color: #ffd666;
+  border-color: rgba(255, 214, 102, 0.45);
+  background: rgba(255, 214, 102, 0.1);
+}
+
+.ovw-sub-flag.due.bad {
+  color: #ff9ba0;
+  border-color: rgba(229, 72, 77, 0.5);
   background: rgba(229, 72, 77, 0.12);
 }
 

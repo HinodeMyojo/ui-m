@@ -10,6 +10,7 @@ import GooglePanel from "@/components/workspace/GooglePanel.vue";
 import SearchModal from "@/components/workspace/SearchModal.vue";
 import SportTodayCard from "@/components/workspace/SportTodayCard.vue";
 import MainTasksPanel from "@/components/workspace/MainTasksPanel.vue";
+import MainSubtaskPanel from "@/components/workspace/MainSubtaskPanel.vue";
 import RoadmapWidget from "@/components/roadmap/RoadmapWidget.vue";
 import DisciplineChecklist from "@/components/discipline/DisciplineChecklist.vue";
 import {
@@ -48,11 +49,21 @@ const disciplineMonth = ref(null);
 // правка в ней же по кнопке. Раньше это были три режима страницы, и дорога от
 // доски к карточке и обратно каждый раз шла через переключатель.
 const drawerOpen = ref(false);
-const drawerMode = ref("view"); // view | edit
+const drawerMode = ref("view"); // view | edit — для карточки дня
+const drawerKind = ref("item"); // item | sub — карточка дня или подзадача с главной
+const selectedSubId = ref(null);
 
 function openItem(itemId, mode = "view") {
   selectedId.value = itemId;
+  drawerKind.value = "item";
   drawerMode.value = mode;
+  drawerOpen.value = true;
+}
+
+// Подзадача с главной правится там же, где её увидели, — в том же ящике.
+function openSub(subId) {
+  selectedSubId.value = subId;
+  drawerKind.value = "sub";
   drawerOpen.value = true;
 }
 
@@ -132,6 +143,7 @@ async function load({ keepSelection = true } = {}) {
 
 watch(date, () => {
   selectedId.value = null;
+  selectedSubId.value = null;
   drawerOpen.value = false;
   load({ keepSelection: false });
   if (disciplineOpen.value) loadDiscipline();
@@ -140,6 +152,11 @@ watch(date, () => {
 const items = computed(() => day.value?.items || []);
 
 const selected = computed(() => items.value.find((i) => i.id === selectedId.value) || null);
+const selectedSub = computed(
+  () => (day.value?.mainSubtasks || []).find((s) => s.id === selectedSubId.value) || null,
+);
+// Что именно показывает ящик: пока сущность на месте, он открыт.
+const drawerItem = computed(() => (drawerKind.value === "sub" ? selectedSub.value : selected.value));
 const totals = computed(() => day.value?.totals || {});
 const carryCount = computed(() =>
   (day.value?.carry || []).reduce((sum, d) => sum + d.items.length, 0),
@@ -427,6 +444,7 @@ function humanMinutes(minutes) {
       :main-subtasks="day?.mainSubtasks || []"
       :task-statuses="day?.taskStatuses || []"
       @open="openItem"
+      @open-sub="openSub"
       @add="addItem"
       @move="moveItem"
       @sort="sortByTime"
@@ -437,26 +455,37 @@ function humanMinutes(minutes) {
          Внутри — рабочий вид, из него по кнопке правка; связанные задачи,
          статусы и блокеры живут там же. -->
     <transition name="ws-fade">
-      <div v-if="drawerOpen && selected" class="ws-scrim" @click="closeDrawer"></div>
+      <div v-if="drawerOpen && drawerItem" class="ws-scrim" @click="closeDrawer"></div>
     </transition>
 
     <transition name="ws-slide">
-      <aside v-if="drawerOpen && selected" class="ws-drawer">
+      <aside v-if="drawerOpen && drawerItem" class="ws-drawer">
         <div class="ws-drawer-bar">
           <button class="ws-drawer-close" title="Закрыть · Esc" @click="closeDrawer">✕</button>
           <button
-            v-if="drawerMode === 'edit'"
+            v-if="drawerKind === 'item' && drawerMode === 'edit'"
             class="ws-drawer-mode"
             @click="drawerMode = 'view'"
           >
             ‹ Рабочий вид
           </button>
-          <span v-else class="ws-drawer-hint">карточка дня</span>
+          <span v-else class="ws-drawer-hint">
+            {{ drawerKind === "sub" ? "подзадача с главной" : "карточка дня" }}
+          </span>
         </div>
 
         <div class="ws-drawer-body">
+          <MainSubtaskPanel
+            v-if="drawerKind === 'sub'"
+            :key="'sub-' + selectedSub.id"
+            :sub="selectedSub"
+            :date="date"
+            :compact="isNarrow"
+            @changed="load"
+            @close="closeDrawer"
+          />
           <WorkItemView
-            v-if="drawerMode === 'view'"
+            v-else-if="drawerMode === 'view'"
             :key="'view-' + selected.id"
             :item="selected"
             :date="date"
