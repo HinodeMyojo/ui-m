@@ -2,6 +2,7 @@
 import { ref, computed, onMounted, onBeforeUnmount, nextTick } from "vue";
 import JpKanaKeyboard from "./JpKanaKeyboard.vue";
 import JpTraceCanvas from "./JpTraceCanvas.vue";
+import JpKanjiSheet from "./JpKanjiSheet.vue";
 import {
   startJpSession,
   answerJpCard,
@@ -61,6 +62,7 @@ const verdict = ref(null); // "right" | "close" | "wrong"
 const sending = ref(false);
 const hintOpen = ref(false); // разбор раскрыт прямо сейчас
 const hintUsed = ref(false); // разбор открывали на этой карточке
+const sheetChar = ref(""); // знак, раскрытый листом поверх сессии
 
 const startedAt = ref(0);
 const shownAt = ref(0);
@@ -308,6 +310,15 @@ function openHint() {
   hintUsed.value = true;
 }
 
+// Тап по знаку в разборе открывает его целиком: как пишется, из каких ключей
+// сложен и как выглядит в живой фразе. Это подсказка того же рода, что и сам
+// разбор, поэтому она так же снимает «Легко».
+function openSheet(char) {
+  if (!char) return;
+  sheetChar.value = char;
+  hintUsed.value = true;
+}
+
 // Ответ с подсказкой — это не «вспомнил»: интервал должен вырасти меньше,
 // иначе карточка вернётся тогда, когда её уже нет в голове.
 const goodRating = computed(() =>
@@ -510,13 +521,19 @@ onBeforeUnmount(stopTicker);
         </div>
 
         <div v-if="hintOpen && phase === PHASE.ASK" class="jps-break">
-          <div v-for="p in breakdown" :key="p.char" class="jps-break-row">
+          <button
+            v-for="p in breakdown"
+            :key="p.char"
+            class="jps-break-row"
+            @click="openSheet(p.char)"
+          >
             <span class="jps-break-char">{{ p.char }}</span>
             <span class="jps-break-body">
               <span class="jps-break-meaning">{{ p.meaning }}</span>
               <span v-if="p.readings" class="jps-break-readings">{{ p.readings }}</span>
             </span>
-          </div>
+            <span class="jps-break-more">✎</span>
+          </button>
         </div>
 
         <!-- Разбор после ответа -->
@@ -549,13 +566,19 @@ onBeforeUnmount(stopTicker);
                именно здесь, и это последняя возможность увидеть, из чего
                сложены слово или знак. -->
           <div v-if="breakdown.length" class="jps-break">
-            <div v-for="p in breakdown" :key="p.char" class="jps-break-row">
+            <button
+              v-for="p in breakdown"
+              :key="p.char"
+              class="jps-break-row"
+              @click="openSheet(p.char)"
+            >
               <span class="jps-break-char">{{ p.char }}</span>
               <span class="jps-break-body">
                 <span class="jps-break-meaning">{{ p.meaning }}</span>
                 <span v-if="p.readings" class="jps-break-readings">{{ p.readings }}</span>
               </span>
-            </div>
+              <span class="jps-break-more">✎</span>
+            </button>
           </div>
           <div v-if="card.mnemonic" class="jps-mnemonic">{{ card.mnemonic }}</div>
         </div>
@@ -662,6 +685,8 @@ onBeforeUnmount(stopTicker);
         <p v-if="error" class="jps-err">{{ error }}</p>
       </div>
     </template>
+
+    <JpKanjiSheet v-if="sheetChar" :char="sheetChar" @close="sheetChar = ''" />
   </div>
 </template>
 
@@ -855,10 +880,30 @@ onBeforeUnmount(stopTicker);
   display: flex;
   align-items: center;
   gap: 10px;
+  width: 100%;
   text-align: left;
+  border: 1px solid transparent;
   border-radius: 10px;
   background: var(--m-card-2, #22242d);
+  color: inherit;
+  font: inherit;
   padding: 6px 10px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.jps-break-row:active {
+  border-color: var(--m-line, #262933);
+  background: #2b2e39;
+}
+
+/* Значок «есть что посмотреть»: без него строка выглядит подписью, и никто
+   не догадается по ней тапнуть. */
+.jps-break-more {
+  margin-left: auto;
+  flex-shrink: 0;
+  font-size: 13px;
+  color: var(--m-muted, #7a7f8e);
 }
 
 .jps-break-char {

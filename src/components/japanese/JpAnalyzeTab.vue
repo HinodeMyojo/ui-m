@@ -8,6 +8,7 @@ import {
   speakJapanese,
 } from "@/components/japaneseApi.js";
 import JpStrokeOrder from "./JpStrokeOrder.vue";
+import JpSentenceList from "./JpSentenceList.vue";
 import JpTraceCanvas from "./JpTraceCanvas.vue";
 
 // Разбор текста. Второй сценарий из спеки целиком: читает Нечаеву или мангу,
@@ -281,22 +282,7 @@ function say(kana) {
            чем разбор на ключи, поэтому они выше порядка черт. -->
       <div v-if="detail.sentences?.length" class="jp-field">
         <label>Примеры</label>
-        <div class="jpa-sentences">
-          <div v-for="ex in detail.sentences" :key="ex.text" class="jpa-sentence">
-            <div class="jpa-sentence-row">
-              <span class="jpa-sentence-text">{{ ex.text }}</span>
-              <button
-                v-if="canSpeak"
-                class="jpa-say"
-                :aria-label="`Произнести «${ex.text}»`"
-                @click="say(ex.text)"
-              >
-                🔊
-              </button>
-            </div>
-            <div class="jpa-sentence-tr">{{ ex.translationRu || ex.translationEn }}</div>
-          </div>
-        </div>
+        <JpSentenceList :sentences="detail.sentences" />
       </div>
 
       <template v-if="detail.strokePaths?.length">
@@ -322,7 +308,12 @@ function say(kana) {
           :char="detail.char"
           @done="onTraced"
         />
-        <JpStrokeOrder v-else :paths="detail.strokePaths" :size="180" />
+        <JpStrokeOrder
+          v-else
+          :paths="detail.strokePaths"
+          :groups="detail.strokeGroups || []"
+          :size="180"
+        />
       </template>
     </section>
   </div>
@@ -477,38 +468,6 @@ function say(kana) {
 }
 
 /* --- Карточка знака --- */
-
-.jpa-sentences {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.jpa-sentence {
-  padding: 9px 11px;
-  border-radius: 10px;
-  background: #22242d;
-  border: 1px solid #2a2d38;
-}
-
-.jpa-sentence-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.jpa-sentence-text {
-  flex: 1;
-  min-width: 0;
-  font-size: 18px;
-  line-height: 1.45;
-}
-
-.jpa-sentence-tr {
-  margin-top: 4px;
-  font-size: 12.5px;
-  color: #7a7f8e;
-}
 
 .jpa-detail {
   display: flex;

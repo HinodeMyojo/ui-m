@@ -1,6 +1,6 @@
 <script setup>
-import { ref, watch, nextTick, onBeforeUnmount } from "vue";
-import { JP_STROKE_BOX } from "@/components/japaneseApi.js";
+import { ref, computed, watch, nextTick, onBeforeUnmount } from "vue";
+import { JP_STROKE_BOX, JP_GROUP_COLORS } from "@/components/japaneseApi.js";
 
 // Порядок черт по данным KanjiVG. Черты приходят готовыми путями в квадрате
 // 109×109 и уже в порядке написания — рисовать их нужно по одной, иначе это
@@ -12,7 +12,45 @@ import { JP_STROKE_BOX } from "@/components/japaneseApi.js";
 const props = defineProps({
   paths: { type: Array, default: () => [] },
   size: { type: Number, default: 200 },
+  // Разбиение черт по составляющим: [{ char, meaningRu, strokes: [0,1,2] }].
+  // Черты каждой части рисуются своим цветом — так «語 это 言 плюс 吾» видно
+  // на самом знаке, а не только списком под ним.
+  groups: { type: Array, default: () => [] },
 });
+
+// Цвет по чертам нужен там, где есть граница между частями. Одна
+// составляющая на весь знак — это сам знак, красить его незачем; а вот одна
+// составляющая на часть черт (у 強 размечен только 弓) границу как раз
+// показывает, и цвет там по делу.
+const colored = computed(() => {
+  if (props.groups.length > 1) return true;
+  if (props.groups.length === 1) {
+    return (props.groups[0].strokes?.length || 0) < props.paths.length;
+  }
+  return false;
+});
+
+const strokeColors = computed(() => {
+  const out = new Array(props.paths.length).fill("");
+  if (!colored.value) return out;
+  props.groups.forEach((g, gi) => {
+    const color = JP_GROUP_COLORS[gi % JP_GROUP_COLORS.length];
+    (g.strokes || []).forEach((n) => {
+      if (n >= 0 && n < out.length) out[n] = color;
+    });
+  });
+  return out;
+});
+
+const legend = computed(() =>
+  colored.value
+    ? props.groups.map((g, gi) => ({
+        char: g.char,
+        meaning: g.meaningRu || "",
+        color: JP_GROUP_COLORS[gi % JP_GROUP_COLORS.length],
+      }))
+    : [],
+);
 
 const svg = ref(null);
 const lengths = ref([]);
@@ -87,11 +125,20 @@ onBeforeUnmount(stop);
         class="jso-stroke"
         :class="{ 'is-next': i === shown }"
         :style="{
+          stroke: strokeColors[i] || undefined,
           strokeDasharray: lengths[i] || 'none',
           strokeDashoffset: i < shown ? 0 : lengths[i] || 0,
         }"
       />
     </svg>
+
+    <!-- Подпись к цветам: без неё раскраска — просто пёстрый знак. -->
+    <div v-if="legend.length" class="jso-legend">
+      <span v-for="p in legend" :key="p.char" class="jso-legend-part">
+        <b :style="{ color: p.color }">{{ p.char }}</b>
+        <template v-if="p.meaning"> {{ p.meaning }}</template>
+      </span>
+    </div>
 
     <div class="jso-tools">
       <button class="jp-btn jp-btn-sm" @click="play">▶ По чертам</button>
@@ -130,8 +177,32 @@ onBeforeUnmount(stop);
   transition: stroke-dashoffset 360ms linear;
 }
 
-/* Черта, которая рисуется прямо сейчас, подсвечена: за ней и следят. */
+/* Черта, которая рисуется прямо сейчас, подсвечена: за ней и следят.
+   У раскрашенного знака цвет черты занят составляющей, поэтому текущую
+   выделяет толщина — иначе подсветка съела бы разбор. */
 .jso-stroke.is-next {
   stroke: #a58bff;
+  stroke-width: 4.8;
+}
+
+.jso-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: center;
+}
+
+.jso-legend-part {
+  font-size: 12px;
+  color: #cfd3e0;
+  background: #22242d;
+  border: 1px solid #2a2d38;
+  border-radius: 8px;
+  padding: 3px 8px;
+}
+
+.jso-legend-part b {
+  font-size: 15px;
+  margin-right: 3px;
 }
 </style>
