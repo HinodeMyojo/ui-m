@@ -95,22 +95,39 @@ async function loadPending(chunk = pendingChunk.value) {
 }
 
 // Копируем вместе с просьбой: иначе её приходится дописывать руками каждый раз.
+//
+// navigator.clipboard живёт только в защищённом контексте, а сайт открывается
+// по обычному http — там его просто нет. Поэтому основной путь здесь старый:
+// выделить текст в поле и попросить браузер скопировать выделенное. Он же
+// работает и на телефоне.
 async function copyPending() {
   const body = `${PROMPT}
 
 ${pending.value?.text || ""}`;
+  error.value = "";
+
+  const area = document.querySelector(".jps-pending-text");
+  if (area) {
+    area.focus();
+    area.select();
+    // На iOS select() у readonly-поля срабатывает не всегда, а setSelectionRange
+    // работает везде.
+    area.setSelectionRange?.(0, body.length);
+    try {
+      if (document.execCommand("copy")) {
+        copied.value = true;
+        return;
+      }
+    } catch {
+      // Идём дальше, к современному буферу.
+    }
+  }
+
   try {
     await navigator.clipboard.writeText(body);
     copied.value = true;
   } catch {
-    // Буфер обмена закрыт (не тот протокол, отказ в разрешении) — выделяем
-    // текст, дальше пользователь скопирует сам.
-    const area = document.querySelector(".jps-pending-text");
-    if (area) {
-      area.focus();
-      area.select();
-    }
-    error.value = "браузер не дал доступ к буферу — текст выделен, скопируй сам";
+    error.value = "браузер не дал доступ к буферу — текст выделен, скопируй руками";
   }
 }
 
