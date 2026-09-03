@@ -1,6 +1,14 @@
 <script setup>
 import { ref, onMounted } from "vue";
-import { fetchJpSettings, saveJpSettings } from "@/components/japaneseApi.js";
+import {
+  fetchJpSettings,
+  saveJpSettings,
+  importJpTranslations,
+  canSpeakJapanese,
+  primeJapaneseVoice,
+  speakJapanese,
+  japaneseVoiceName,
+} from "@/components/japaneseApi.js";
 
 // Настройки раздела. Всё, кроме темпа новых: его подбирает система, и ручку
 // «столько-то в день» здесь не заводим намеренно — она мгновенно превращается
@@ -50,7 +58,57 @@ async function save() {
   }
 }
 
-onMounted(load);
+// --- Русские значения, переведённые вручную ---
+//
+// Свободного источника русских значений кандзи нет, а ключей к платному
+// переводчику нет у нас. Поэтому перевод приходит текстом, кусками: скопировал
+// кусок из файла, получил перевод в чате, вставил ответ сюда.
+
+const translation = ref("");
+const translationBusy = ref(false);
+const translationResult = ref(null);
+
+async function loadTranslations() {
+  if (!translation.value.trim()) return;
+  translationBusy.value = true;
+  translationResult.value = null;
+  error.value = "";
+  try {
+    translationResult.value = await importJpTranslations(translation.value);
+    translation.value = "";
+  } catch (e) {
+    error.value = e.message || "перевод не загрузился";
+  } finally {
+    translationBusy.value = false;
+  }
+}
+
+// --- Проверка озвучки ---
+//
+// Синтезатор есть не в каждой системе, и японский голос в нём — тем более.
+// Молча показывать кнопку, которая ничего не произносит, нельзя: непонятно,
+// сломано приложение или нет голоса.
+
+const speechReady = ref(canSpeakJapanese());
+const voice = ref("");
+
+function refreshVoice() {
+  primeJapaneseVoice();
+  speechReady.value = canSpeakJapanese();
+  voice.value = japaneseVoiceName();
+}
+
+function testSpeech() {
+  refreshVoice();
+  speakJapanese("にほんご");
+}
+
+onMounted(() => {
+  load();
+  refreshVoice();
+  // Голоса в системе подъезжают не сразу — перечитываем чуть позже.
+  setTimeout(refreshVoice, 1200);
+});
 </script>
 
 <template>
@@ -152,6 +210,60 @@ onMounted(load);
           одна сессия минимум, три или 15 минут средний, пять или полчаса максимум. Уже стоящую
           отметку не понижает.
         </p>
+      </section>
+
+      <section class="jp-card">
+        <h3>Озвучка</h3>
+        <p class="jp-muted">
+          Произношение читает синтезатор системы — он уже стоит на устройстве, платить не за что
+          и сеть не нужна. Кнопка 🔊 есть в разборе, в карточке знака и в сессии после ответа.
+        </p>
+        <div class="jp-row" style="margin-top: 10px">
+          <button class="jp-btn is-primary" @click="testSpeech">🔊 Проверить</button>
+          <span v-if="!speechReady" class="jp-muted">синтезатора в этом браузере нет</span>
+          <span v-else-if="voice" class="jp-muted">голос: {{ voice }}</span>
+          <span v-else class="jp-muted">
+            японского голоса в системе не нашлось — произнесёт тем, что есть
+          </span>
+        </div>
+        <p v-if="speechReady && !voice" class="jp-muted" style="margin-top: 8px">
+          На Android японский голос ставится в «Настройки → Язык и ввод → Синтез речи → Google →
+          Установить голосовые данные → 日本語». На iPhone — «Настройки → Универсальный доступ →
+          Устный контент → Голоса → 日本語».
+        </p>
+      </section>
+
+      <section class="jp-card">
+        <h3>Русские значения кандзи</h3>
+        <p class="jp-muted">
+          Свободного источника русских значений кандзи не существует: KANJIDIC2 даёт английские,
+          и они пока подставлены как есть. Переведённые куски вставляются сюда — строки вида
+          «знак, табуляция, значения через запятую». Комментарии и разделители можно не вычищать.
+        </p>
+        <textarea
+          v-model="translation"
+          class="jp-textarea"
+          style="margin-top: 10px"
+          placeholder="語&#9;язык, речь, слово"
+        ></textarea>
+        <div class="jp-row" style="margin-top: 8px">
+          <button
+            class="jp-btn is-primary"
+            :disabled="translationBusy || !translation.trim()"
+            @click="loadTranslations"
+          >
+            Загрузить
+          </button>
+          <span v-if="translationResult" class="jp-muted">
+            обновлено {{ translationResult.updated }}<template v-if="translationResult.skipped">
+              · пропущено {{ translationResult.skipped }}</template
+            >
+            · осталось без перевода {{ translationResult.leftUntranslated }}
+          </span>
+        </div>
+        <div v-if="translationResult?.unknown?.length" class="jp-muted" style="margin-top: 6px">
+          Не нашлись в справочнике: {{ translationResult.unknown.join(" ") }}
+        </div>
       </section>
 
       <div class="jp-row">

@@ -9,6 +9,12 @@ const MobileTabBar = defineAsyncComponent(
   () => import("@/components/mobile/MobileTabBar.vue"),
 );
 
+// Осенний вайб — отдельный слой поверх всего сайта, страницы о нём не знают.
+// Грузим лениво: это canvas и требуха анимации, первому экрану они не нужны.
+const AutumnLayer = defineAsyncComponent(
+  () => import("@/components/autumn/AutumnLayer.vue"),
+);
+
 const route = useRoute();
 
 // Экраны, которые занимают телефон целиком: вход, читалка (там своя панель и
@@ -29,6 +35,8 @@ const showTabBar = computed(() => {
     <RouterView />
   </div>
   <MobileTabBar v-if="showTabBar" />
+  <!-- Печать резюме — единственный экран без вайба: листья попадут в PDF. -->
+  <AutumnLayer v-if="!route.path.endsWith('/print')" />
 </template>
 
 <style>

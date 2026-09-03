@@ -60,6 +60,7 @@ export const fetchJpKanji = (char) => request(`/kanji/${encodeURIComponent(char)
 export const analyzeJpText = (text) => post("/analyze", { text });
 export const fetchJpGrid = () => request("/grid");
 export const fetchJpAchievements = () => request("/achievements");
+export const importJpTranslations = (text) => post("/translations", { text });
 export const fetchJpSettings = () => request("/settings");
 export const saveJpSettings = (body) => put("/settings", body);
 
@@ -141,6 +142,15 @@ export function canSpeakJapanese() {
   return !!globalThis.speechSynthesis;
 }
 
+// Имя найденного японского голоса — для проверки в настройках. Пусто значит,
+// что японского голоса в системе нет: синтезатор произнесёт кану чем придётся,
+// и звучать это будет странно, но молчать он не станет.
+export function japaneseVoiceName() {
+  primeJapaneseVoice();
+  if (!jaVoice) jaVoice = pickJapaneseVoice();
+  return jaVoice?.name || "";
+}
+
 // speakJapanese произносит кану. Возвращает false, если синтезатора нет —
 // кнопку в таком случае показывать незачем.
 export function speakJapanese(kana) {
@@ -151,6 +161,25 @@ export function speakJapanese(kana) {
   if (!jaVoice) jaVoice = pickJapaneseVoice();
 
   synth.cancel(); // повторный тап перебивает предыдущее, а не встаёт в очередь
+  say(synth, text);
+
+  // Первый тап нередко попадает в момент, когда список голосов ещё пуст:
+  // браузер наполняет его лениво. Если японского голоса не было, пробуем ещё
+  // раз, когда список приедет — иначе первое нажатие всегда впустую.
+  if (!jaVoice) {
+    setTimeout(() => {
+      const found = pickJapaneseVoice();
+      if (found && !jaVoice) {
+        jaVoice = found;
+        synth.cancel();
+        say(synth, text);
+      }
+    }, 250);
+  }
+  return true;
+}
+
+function say(synth, text) {
   const u = new SpeechSynthesisUtterance(text);
   u.lang = "ja-JP";
   if (jaVoice) u.voice = jaVoice;
@@ -158,7 +187,6 @@ export function speakJapanese(kana) {
   // сколько успеет проговорить синтезатор.
   u.rate = 0.85;
   synth.speak(u);
-  return true;
 }
 
 // Что произносить у карточки: у слова — его чтение, у кандзи — то чтение,

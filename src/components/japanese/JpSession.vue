@@ -252,6 +252,15 @@ const meaning = computed(() => (card.value?.meaningsRu || []).slice(0, 3).join("
 // знака, а не слово.
 const speakable = computed(() => (canSpeakJapanese() ? speakableOf(card.value) : ""));
 
+// До ответа звук доступен там, где чтение не является ответом: выбор значения
+// и различение похожих спрашивают смысл, и подсказать чтением там нечего.
+// В «пропуске» звучит вся фраза — но уже с вырезанным словом.
+const speakableNow = computed(() => {
+  if (!speakable.value || phase.value !== PHASE.ASK) return "";
+  const m = card.value?.mechanic;
+  return m === JP_MECH_MEANING || m === JP_MECH_TELL_APART ? speakable.value : "";
+});
+
 function say() {
   speakJapanese(speakable.value);
 }
@@ -397,6 +406,10 @@ onBeforeUnmount(stopTicker);
         </div>
         <div v-if="card.mechanic === JP_MECH_READING" class="jps-hint jps-hint-sm">
           главное чтение
+        </div>
+
+        <div v-if="speakableNow" class="jps-say">
+          <button class="jps-say-btn" @click="say">🔊 Как звучит</button>
         </div>
 
         <!-- Разбор после ответа -->
