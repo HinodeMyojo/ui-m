@@ -19,7 +19,6 @@ import {
   setWorkItemStatus,
   reorderWorkItems,
   exchangeGoogleCode,
-  syncWorkDayToGoogle,
   fetchDisciplineMonth,
   disciplineLogicalToday,
 } from "@/components/api.js";
@@ -38,49 +37,30 @@ const carryOpen = ref(false);
 const googleOpen = ref(false);
 const searchOpen = ref(false);
 const noteOpen = ref(false);
+const mainOpen = ref(false);
 const disciplineOpen = ref(false);
 const sportOpen = ref(false);
 const roadmapOpen = ref(false);
 const disciplineMonth = ref(null);
-const filter = ref("all");
 
-// Режимы страницы: рабочий (только заполненное), правка, общий (все задачи разом).
-const VIEW_MODES = [
-  { key: "work", label: "Рабочий", hint: "только то, что заполнено" },
-  { key: "edit", label: "Правка", hint: "все поля и настройки карточки" },
-  { key: "all", label: "Общий", hint: "все задачи дня перед глазами" },
-];
-const viewMode = ref(localStorage.getItem("workspaceViewMode") || "work");
+// День — это доска. Карточка не уводит на отдельный экран, а выдвигает панель
+// справа: рабочий вид со всем хозяйством, включая блокеры связанных задач, и
+// правка в ней же по кнопке. Раньше это были три режима страницы, и дорога от
+// доски к карточке и обратно каждый раз шла через переключатель.
+const drawerOpen = ref(false);
+const drawerMode = ref("view"); // view | edit
 
-function setViewMode(key) {
-  viewMode.value = key;
-  localStorage.setItem("workspaceViewMode", key);
-}
-
-// Из общего вида карточка открывается в рабочем.
-function openFromOverview(itemId) {
+function openItem(itemId, mode = "view") {
   selectedId.value = itemId;
-  setViewMode("work");
-  if (isNarrow.value) mobileEditor.value = true;
+  drawerMode.value = mode;
+  drawerOpen.value = true;
 }
+
+function closeDrawer() {
+  drawerOpen.value = false;
+}
+
 const isNarrow = ref(window.innerWidth < 900);
-const mobileEditor = ref(false);
-const dragId = ref(null);
-
-const STATUS_META = {
-  todo: { label: "План", color: "#5b616e" },
-  doing: { label: "В работе", color: "#ffd666" },
-  paused: { label: "Пауза", color: "#4aa8ff" },
-  done: { label: "Готово", color: "#63c94f" },
-  dropped: { label: "Отменено", color: "#e5484d" },
-};
-
-const FILTERS = [
-  { key: "all", label: "Все" },
-  { key: "open", label: "Открытые" },
-  { key: "doing", label: "В работе" },
-  { key: "done", label: "Готовые" },
-];
 
 let dayNoteTimer = null;
 
@@ -105,7 +85,11 @@ function onHotkey(e) {
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
     e.preventDefault();
     searchOpen.value = true;
+    return;
   }
+  // Esc закрывает панель карточки — но только если поверх неё нет модалки.
+  const modalOpen = carryOpen.value || googleOpen.value || searchOpen.value;
+  if (e.key === "Escape" && drawerOpen.value && !modalOpen) closeDrawer();
 }
 
 // Google возвращает нас сюда с ?code=… — сразу меняем его на токены.
@@ -148,20 +132,12 @@ async function load({ keepSelection = true } = {}) {
 
 watch(date, () => {
   selectedId.value = null;
-  mobileEditor.value = false;
+  drawerOpen.value = false;
   load({ keepSelection: false });
   if (disciplineOpen.value) loadDiscipline();
 });
 
 const items = computed(() => day.value?.items || []);
-
-const visibleItems = computed(() => {
-  const list = items.value;
-  if (filter.value === "open") return list.filter((i) => i.status !== "done" && i.status !== "dropped");
-  if (filter.value === "doing") return list.filter((i) => i.status === "doing");
-  if (filter.value === "done") return list.filter((i) => i.status === "done");
-  return list;
-});
 
 const selected = computed(() => items.value.find((i) => i.id === selectedId.value) || null);
 const totals = computed(() => day.value?.totals || {});
@@ -188,52 +164,14 @@ function goToday() {
 
 // --- Карточки ---
 
+// Новая карточка сразу открывается в правке: у неё пока нет даже названия.
 async function addItem() {
   try {
     const { id } = await createWorkItem({ date: date.value, title: "" });
     await load({ keepSelection: false });
-    selectedId.value = id;
-    if (isNarrow.value) mobileEditor.value = true;
+    openItem(id, "edit");
     await nextTick();
     document.querySelector(".wie-title")?.focus();
-  } catch (e) {
-    error.value = e.message;
-  }
-}
-
-function selectItem(item) {
-  selectedId.value = item.id;
-  if (isNarrow.value) mobileEditor.value = true;
-}
-
-// Клик по кружку статуса гоняет карточку по кругу «план → в работе → готово».
-async function cycleStatus(item, event) {
-  event.stopPropagation();
-  const order = ["todo", "doing", "done"];
-  const next = order[(order.indexOf(item.status) + 1) % order.length] || "todo";
-  try {
-    await setWorkItemStatus(item.id, { status: next, closeTasks: false });
-    await load();
-  } catch (e) {
-    error.value = e.message;
-  }
-}
-
-function onDragStart(item) {
-  dragId.value = item.id;
-}
-
-async function onDrop(target) {
-  if (!dragId.value || dragId.value === target.id) return;
-  const order = items.value.map((i) => i.id);
-  const from = order.indexOf(dragId.value);
-  const to = order.indexOf(target.id);
-  if (from < 0 || to < 0) return;
-  order.splice(to, 0, ...order.splice(from, 1));
-  dragId.value = null;
-  try {
-    await reorderWorkItems(date.value, order);
-    await load();
   } catch (e) {
     error.value = e.message;
   }
@@ -350,17 +288,6 @@ async function loadDiscipline() {
 
 // --- Прочее ---
 
-async function syncAll() {
-  try {
-    const result = await syncWorkDayToGoogle(date.value);
-    error.value = "";
-    await load();
-    alert(`Отправлено в Google Calendar: ${result.synced}`);
-  } catch (e) {
-    error.value = e.message;
-  }
-}
-
 function openFromSearch({ date: foundDate, itemId }) {
   searchOpen.value = false;
   pendingSelect.value = itemId;
@@ -369,7 +296,8 @@ function openFromSearch({ date: foundDate, itemId }) {
   } else {
     load();
   }
-  if (isNarrow.value) mobileEditor.value = true;
+  drawerMode.value = "view";
+  drawerOpen.value = true;
 }
 
 function humanMinutes(minutes) {
@@ -381,38 +309,6 @@ function humanMinutes(minutes) {
   return `${m} м`;
 }
 
-function itemDeadline(item) {
-  if (!item.deadline) return "";
-  const d = new Date(item.deadline);
-  if (!item.deadlineHasTime) return "до конца дня";
-  return d.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
-}
-
-function isOverdue(item) {
-  if (!item.deadline || item.status === "done" || item.status === "dropped") return false;
-  return new Date(item.deadline) < new Date();
-}
-
-// Блокеры живут на связанных задачах, но мешают именно этой карточке —
-// поэтому поднимаем их на неё.
-function blockersOf(item) {
-  return (item.tasks || []).reduce((sum, t) => sum + (t.openBlockers || 0), 0);
-}
-
-function blockersHint(item) {
-  return (item.tasks || [])
-    .filter((t) => t.openBlockers > 0)
-    .map((t) => `${t.title} — ${t.openBlockers}`)
-    .join("\n");
-}
-
-function slotLabel(item) {
-  if (item.plannedStartMin < 0) return "";
-  const fmt = (m) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
-  return item.plannedEndMin > item.plannedStartMin
-    ? `${fmt(item.plannedStartMin)}–${fmt(item.plannedEndMin)}`
-    : fmt(item.plannedStartMin);
-}
 </script>
 
 <template>
@@ -428,19 +324,6 @@ function slotLabel(item) {
         <button v-if="!isToday" class="ws-btn ghost" @click="goToday">Сегодня</button>
       </div>
 
-      <div class="ws-modes">
-        <button
-          v-for="m in VIEW_MODES"
-          :key="m.key"
-          class="ws-mode"
-          :class="{ on: viewMode === m.key }"
-          :title="m.hint"
-          @click="setViewMode(m.key)"
-        >
-          {{ m.label }}
-        </button>
-      </div>
-
       <div class="ws-actions">
         <button class="ws-btn" @click="searchOpen = true" title="Ctrl+K">🔍 Поиск</button>
         <button class="ws-btn" :class="{ hot: carryCount }" @click="carryOpen = true">
@@ -453,6 +336,9 @@ function slotLabel(item) {
         <button class="ws-btn" :class="{ hot: roadmapOpen }" @click="roadmapOpen = !roadmapOpen">
           🗺️ Чтение
         </button>
+        <button class="ws-btn" :class="{ hot: mainOpen }" @click="mainOpen = !mainOpen">
+          📌 С главной
+        </button>
         <button class="ws-btn" @click="googleOpen = true">
           📅 Google<span v-if="day?.google?.connected" class="ws-dot-ok"></span>
         </button>
@@ -464,9 +350,7 @@ function slotLabel(item) {
     <div v-if="error" class="ws-error">{{ error }}</div>
 
     <section class="ws-strip">
-      <!-- В общем виде цель дня показывает сам DayOverview, не дублируем -->
       <input
-        v-if="viewMode !== 'all'"
         v-model="dayFocus"
         class="ws-focus"
         placeholder="🎯 Главная цель дня…"
@@ -514,7 +398,13 @@ function slotLabel(item) {
       <RoadmapWidget />
     </section>
 
-    <section v-if="viewMode !== 'all'" class="ws-daynote">
+    <!-- Задачи с главной целиком: на доске из них видны только подзадачи,
+         у которых сегодня срок. -->
+    <section v-if="mainOpen" class="ws-discipline">
+      <MainTasksPanel :date="date" @added="load" />
+    </section>
+
+    <section class="ws-daynote">
       <button class="ws-daynote-toggle" @click="noteOpen = !noteOpen">
         {{ noteOpen ? "▾" : "▸" }} Холст дня
         <span v-if="!noteOpen && dayNote" class="ws-dim">— есть записи</span>
@@ -527,168 +417,71 @@ function slotLabel(item) {
       />
     </section>
 
+    <div v-if="loading" class="ws-empty">Загружаю…</div>
+
     <DayOverview
-      v-if="viewMode === 'all'"
+      v-else
       :items="items"
-      :note="day?.note || ''"
-      :focus="day?.focus || ''"
       :date="date"
       :is-today="isToday"
       :main-subtasks="day?.mainSubtasks || []"
       :task-statuses="day?.taskStatuses || []"
-      @open="openFromOverview"
+      @open="openItem"
       @add="addItem"
       @move="moveItem"
       @sort="sortByTime"
       @refresh="load"
     />
 
-    <div v-else class="ws-body" :class="{ narrow: isNarrow }">
-      <aside class="ws-list" v-show="!isNarrow || !mobileEditor">
-        <div class="ws-filters">
+    <!-- Карточка дня: выдвигается справа поверх доски, доска остаётся на месте.
+         Внутри — рабочий вид, из него по кнопке правка; связанные задачи,
+         статусы и блокеры живут там же. -->
+    <transition name="ws-fade">
+      <div v-if="drawerOpen && selected" class="ws-scrim" @click="closeDrawer"></div>
+    </transition>
+
+    <transition name="ws-slide">
+      <aside v-if="drawerOpen && selected" class="ws-drawer">
+        <div class="ws-drawer-bar">
+          <button class="ws-drawer-close" title="Закрыть · Esc" @click="closeDrawer">✕</button>
           <button
-            v-for="f in FILTERS"
-            :key="f.key"
-            class="ws-filter"
-            :class="{ on: filter === f.key }"
-            @click="filter = f.key"
+            v-if="drawerMode === 'edit'"
+            class="ws-drawer-mode"
+            @click="drawerMode = 'view'"
           >
-            {{ f.label }}
+            ‹ Рабочий вид
           </button>
-          <button
-            class="ws-filter sort"
-            title="Выстроить карточки по времени"
-            @click="sortByTime"
-          >
-            🕐 по времени
-          </button>
+          <span v-else class="ws-drawer-hint">карточка дня</span>
         </div>
 
-        <div v-if="loading" class="ws-empty">Загружаю…</div>
-        <div v-else-if="!visibleItems.length" class="ws-empty">
-          <p>Пока пусто.</p>
-          <button class="ws-btn primary" @click="addItem">Создать первую задачу</button>
-          <button v-if="carryCount" class="ws-btn" @click="carryOpen = true">
-            Забрать {{ carryCount }} из прошлых дней
-          </button>
+        <div class="ws-drawer-body">
+          <WorkItemView
+            v-if="drawerMode === 'view'"
+            :key="'view-' + selected.id"
+            :item="selected"
+            :date="date"
+            :compact="isNarrow"
+            @changed="load"
+            @edit="drawerMode = 'edit'"
+            @close="closeDrawer"
+          />
+          <WorkItemEditor
+            v-else
+            :key="'edit-' + selected.id"
+            :item="selected"
+            :date="date"
+            :skills="day?.skills || []"
+            :activities="day?.activities || []"
+            :all-tags="day?.tags || []"
+            :google="day?.google || {}"
+            :compact="isNarrow"
+            @changed="load"
+            @deleted="() => { closeDrawer(); load({ keepSelection: false }); }"
+            @close="closeDrawer"
+          />
         </div>
-
-        <article
-          v-for="item in visibleItems"
-          :key="item.id"
-          class="ws-card"
-          :class="{
-            on: item.id === selectedId,
-            done: item.status === 'done',
-            dropped: item.status === 'dropped',
-            blocked: blockersOf(item) > 0,
-          }"
-          :style="{ borderLeftColor: blockersOf(item) ? '#e5484d' : item.color || '#1767fd' }"
-          draggable="true"
-          @dragstart="onDragStart(item)"
-          @dragover.prevent
-          @drop="onDrop(item)"
-          @click="selectItem(item)"
-        >
-          <button
-            class="ws-card-status"
-            :style="{
-              borderColor: STATUS_META[item.status]?.color,
-              background: item.status === 'done' ? STATUS_META.done.color : 'transparent',
-              color: item.status === 'done' ? '#101219' : STATUS_META[item.status]?.color,
-            }"
-            :title="STATUS_META[item.status]?.label"
-            @click="cycleStatus(item, $event)"
-          >
-            <span v-if="item.status === 'done'">✓</span>
-            <span v-else-if="item.status === 'doing'">▶</span>
-            <span v-else-if="item.status === 'paused'">‖</span>
-            <span v-else-if="item.status === 'dropped'">✕</span>
-          </button>
-
-          <div class="ws-card-main">
-            <div class="ws-card-title">
-              <span v-if="item.emoji" class="ws-card-emoji">{{ item.emoji }}</span>
-              {{ item.title }}
-              <span v-if="item.priority" class="ws-card-prio">{{ "!".repeat(item.priority) }}</span>
-            </div>
-
-            <div class="ws-card-meta">
-              <span
-                v-if="blockersOf(item)"
-                class="ws-meta-chip blocker"
-                :title="blockersHint(item)"
-              >
-                🚧 {{ blockersOf(item) }}
-              </span>
-              <span v-if="slotLabel(item)" class="ws-meta-chip time">{{ slotLabel(item) }}</span>
-              <span v-if="item.deadline" class="ws-meta-chip" :class="{ bad: isOverdue(item) }">
-                ⏳ {{ itemDeadline(item) }}
-              </span>
-              <span v-if="item.estimateMinutes" class="ws-meta-chip">
-                {{ humanMinutes(item.estimateMinutes) }}
-              </span>
-              <span v-if="item.checks?.length" class="ws-meta-chip">
-                ☑ {{ item.checks.filter((c) => c.done).length }}/{{ item.checks.length }}
-              </span>
-              <span v-if="item.tasks?.length" class="ws-meta-chip">🔗 {{ item.tasks.length }}</span>
-              <span v-if="item.links?.length" class="ws-meta-chip">🌐 {{ item.links.length }}</span>
-              <span v-if="item.notes?.length" class="ws-meta-chip">🗒 {{ item.notes.length }}</span>
-              <span v-if="item.files?.length" class="ws-meta-chip">📎 {{ item.files.length }}</span>
-              <span v-if="item.googleEventId" class="ws-meta-chip cal">📅</span>
-              <span v-if="item.otherDates?.length" class="ws-meta-chip link" title="Карточка есть и в других днях">
-                ⧉ {{ item.otherDates.length }}
-              </span>
-            </div>
-
-            <div v-if="item.tags?.length" class="ws-card-tags">
-              <span v-for="t in item.tags" :key="t.id" class="ws-tag" :style="{ borderColor: t.color }">
-                {{ t.name }}
-              </span>
-            </div>
-          </div>
-        </article>
-
-        <button v-if="visibleItems.length" class="ws-add-inline" @click="addItem">+ ещё задача</button>
-        <button v-if="day?.google?.connected && items.length" class="ws-add-inline" @click="syncAll">
-          📅 Синхронизировать день с Google
-        </button>
-
-        <!-- Задачи с главного экрана: закрыть или утащить в день, не уходя отсюда -->
-        <MainTasksPanel class="ws-main-tasks" :date="date" @added="load" />
       </aside>
-
-      <main class="ws-editor" v-show="!isNarrow || mobileEditor">
-        <WorkItemView
-          v-if="selected && viewMode === 'work'"
-          :key="'view-' + selected.id"
-          :item="selected"
-          :date="date"
-          :compact="isNarrow"
-          @changed="load"
-          @edit="setViewMode('edit')"
-          @close="mobileEditor = false"
-        />
-        <WorkItemEditor
-          v-else-if="selected"
-          :key="'edit-' + selected.id"
-          :item="selected"
-          :date="date"
-          :skills="day?.skills || []"
-          :activities="day?.activities || []"
-          :all-tags="day?.tags || []"
-          :google="day?.google || {}"
-          :compact="isNarrow"
-          @changed="load"
-          @deleted="() => { mobileEditor = false; load({ keepSelection: false }); }"
-          @close="mobileEditor = false"
-        />
-        <div v-else class="ws-editor-empty">
-          <p>Выберите карточку слева или создайте новую.</p>
-          <button class="ws-btn primary" @click="addItem">+ Задача</button>
-        </div>
-      </main>
-    </div>
+    </transition>
 
     <CarryModal
       v-if="carryOpen"
@@ -765,37 +558,6 @@ function slotLabel(item) {
 
 .ws-icon:hover {
   border-color: #6e4aff;
-}
-
-.ws-modes {
-  display: flex;
-  gap: 2px;
-  background: #16171d;
-  border: 1px solid #2a2d38;
-  border-radius: 10px;
-  padding: 3px;
-}
-
-.ws-mode {
-  background: transparent;
-  border: none;
-  color: #8f95a6;
-  border-radius: 7px;
-  padding: 6px 15px;
-  cursor: pointer;
-  font-size: 12.5px;
-  min-height: 32px;
-  transition: background 0.15s, color 0.15s;
-}
-
-.ws-mode:hover {
-  color: #cfd3e0;
-}
-
-.ws-mode.on {
-  background: #1767fd;
-  color: #fff;
-  font-weight: 600;
 }
 
 .ws-actions {
@@ -958,261 +720,14 @@ function slotLabel(item) {
   font-size: 11.5px;
 }
 
-.ws-body {
-  display: grid;
-  grid-template-columns: minmax(280px, 380px) 1fr;
-  gap: 12px;
-  align-items: start;
-  flex: 1;
-  min-height: 0;
-}
-
-.ws-body.narrow {
-  grid-template-columns: 1fr;
-}
-
-.ws-list {
-  display: flex;
-  flex-direction: column;
-  gap: 7px;
-  max-height: calc(100vh - 150px);
-  overflow-y: auto;
-  padding-right: 4px;
-}
-
-.ws-filters {
-  display: flex;
-  gap: 4px;
-  position: sticky;
-  top: 0;
-  background: #18191f;
-  padding-bottom: 5px;
-  z-index: 2;
-}
-
-.ws-filter {
-  background: transparent;
-  border: 1px solid #2f3340;
-  color: #8f95a6;
-  border-radius: 20px;
-  padding: 4px 11px;
-  cursor: pointer;
-  font-size: 11.5px;
-  min-height: 30px;
-}
-
-.ws-filter.on {
-  background: #1767fd22;
-  border-color: #1767fd;
-  color: #cfe0ff;
-}
-
-.ws-filter.sort {
-  margin-left: auto;
-  border-style: dashed;
-}
-
-.ws-filter.sort:hover {
-  border-color: #e07b39;
-  border-style: solid;
-  color: #ffd9b0;
-}
-
-.ws-main-tasks {
-  margin-top: 6px;
-}
-
-.ws-card {
-  display: flex;
-  gap: 9px;
-  background: #1b1d24;
-  border: 1px solid #262a36;
-  border-left: 3px solid #1767fd;
-  border-radius: 10px;
-  padding: 10px 11px;
-  cursor: pointer;
-  transition: border-color 0.15s, background 0.15s;
-}
-
-.ws-card:hover {
-  background: #1f222b;
-}
-
-.ws-card.on {
-  border-color: #1767fd;
-  background: #1c2030;
-}
-
 .ws-card.done .ws-card-title,
-.ws-card.dropped .ws-card-title {
-  color: #6e7382;
-  text-decoration: line-through;
-}
 
 /* Цвет глифа задаётся инлайном: на прозрачном кружке — цвет статуса,
    на залитом «готово» — тёмный. */
-.ws-card-status {
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  border: 2px solid #5b616e;
-  background: transparent;
-  cursor: pointer;
-  font-size: 12px;
-  font-weight: 700;
-  flex-shrink: 0;
-  margin-top: 1px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  line-height: 1;
-  padding: 0;
-  transition: transform 0.12s;
-}
-
-.ws-card-status:hover {
-  transform: scale(1.12);
-}
-
-.ws-card-main {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  min-width: 0;
-  flex: 1;
-}
-
-.ws-card-title {
-  color: #e8eaf2;
-  font-size: 14px;
-  font-weight: 500;
-  line-height: 1.35;
-  overflow-wrap: anywhere;
-}
-
-.ws-card-emoji {
-  margin-right: 4px;
-}
-
-.ws-card-prio {
-  color: #e5484d;
-  font-weight: 700;
-  margin-left: 5px;
-  font-size: 12px;
-}
-
-.ws-card-meta {
-  display: flex;
-  gap: 5px;
-  flex-wrap: wrap;
-}
-
-.ws-meta-chip {
-  font-size: 10.5px;
-  color: #8f95a6;
-  background: #16171d;
-  border: 1px solid #262a36;
-  border-radius: 20px;
-  padding: 1px 7px;
-}
-
-.ws-meta-chip.bad {
-  color: #ff9ba0;
-  border-color: #6b2b2e;
-}
 
 /* Время в списке читается как время, а не как ещё один серый значок */
-.ws-meta-chip.time {
-  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  color: #ffd9b0;
-  background: rgba(224, 123, 57, 0.14);
-  border-color: rgba(224, 123, 57, 0.4);
-  padding: 1px 8px;
-}
 
 /* Блокер связанной задачи виден прямо на карточке дня */
-.ws-meta-chip.blocker {
-  color: #fff;
-  font-weight: 700;
-  background: #e5484d;
-  border-color: #ff6b6f;
-}
-
-.ws-card.blocked {
-  background: linear-gradient(90deg, rgba(229, 72, 77, 0.15), #1b1d24 60%);
-  border-color: #4a2225;
-}
-
-.ws-card.blocked:hover {
-  background: linear-gradient(90deg, rgba(229, 72, 77, 0.22), #1f222b 60%);
-}
-
-.ws-card.blocked.on {
-  background: linear-gradient(90deg, rgba(229, 72, 77, 0.26), #1c2030 60%);
-  border-color: #e5484d;
-}
-
-.ws-meta-chip.cal {
-  border-color: #1767fd66;
-}
-
-.ws-meta-chip.link {
-  color: #a98bff;
-  border-color: #6e4aff55;
-}
-
-.ws-card-tags {
-  display: flex;
-  gap: 4px;
-  flex-wrap: wrap;
-}
-
-.ws-tag {
-  font-size: 10.5px;
-  color: #cfd3e0;
-  border: 1px solid #6e4aff;
-  border-radius: 20px;
-  padding: 1px 8px;
-}
-
-.ws-add-inline {
-  background: transparent;
-  border: 1px dashed #3a3f52;
-  color: #8f95a6;
-  border-radius: 10px;
-  padding: 9px;
-  cursor: pointer;
-  font-size: 12.5px;
-}
-
-.ws-add-inline:hover {
-  border-color: #6e4aff;
-  color: #cfd3e0;
-}
-
-.ws-editor {
-  background: #16171d;
-  border: 1px solid #262a36;
-  border-radius: 12px;
-  max-height: calc(100vh - 150px);
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-}
-
-.ws-editor-empty {
-  padding: 60px 20px;
-  text-align: center;
-  color: #7a7f8e;
-  font-size: 13px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
-}
 
 .ws-empty {
   color: #7a7f8e;
@@ -1225,6 +740,118 @@ function slotLabel(item) {
   gap: 8px;
 }
 
+/* --- Выдвижная панель карточки --- */
+
+/* Карточка открывается поверх доски, а не вместо неё: видно, из какой колонки
+   она пришла, и закрыть её можно куда угодно — Esc, крестик, тёмный фон. */
+.ws-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 2200;
+  width: min(620px, 100vw);
+  background: #16171d;
+  border-left: 1px solid #2a2d38;
+  box-shadow: -18px 0 46px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Своя шапка у ящика: панели карточки закрывающей кнопки не имели — на
+   прежней раскладке они просто всегда лежали справа и закрывать было нечего. */
+.ws-drawer-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-bottom: 1px solid #262a36;
+  background: #1b1d24;
+  flex-shrink: 0;
+}
+
+.ws-drawer-close {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  border: 1px solid #2f3340;
+  background: #22242d;
+  color: #cfd3e0;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.ws-drawer-close:hover {
+  border-color: #e5484d;
+  color: #ff9ba0;
+}
+
+.ws-drawer-mode {
+  background: none;
+  border: 1px solid #2f3340;
+  border-radius: 8px;
+  color: #cfd3e0;
+  font-size: 12px;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+
+.ws-drawer-mode:hover {
+  border-color: #6e4aff;
+}
+
+.ws-drawer-hint {
+  color: #5b6070;
+  font-size: 11.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.ws-drawer-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.ws-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 2100;
+  background: rgba(8, 9, 13, 0.55);
+}
+
+.ws-slide-enter-active,
+.ws-slide-leave-active {
+  transition: transform 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.ws-slide-enter-from,
+.ws-slide-leave-to {
+  transform: translateX(100%);
+}
+
+.ws-fade-enter-active,
+.ws-fade-leave-active {
+  transition: opacity 0.22s;
+}
+
+.ws-fade-enter-from,
+.ws-fade-leave-to {
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ws-slide-enter-active,
+  .ws-slide-leave-active,
+  .ws-fade-enter-active,
+  .ws-fade-leave-active {
+    transition: none;
+  }
+}
+
 @media (max-width: 900px) {
   .ws {
     padding: 10px 10px 30px;
@@ -1235,12 +862,6 @@ function slotLabel(item) {
   .ws-date h1 {
     font-size: 17px;
   }
-  .ws-modes {
-    width: 100%;
-  }
-  .ws-mode {
-    flex: 1;
-  }
   .ws-actions {
     width: 100%;
     overflow-x: auto;
@@ -1250,12 +871,9 @@ function slotLabel(item) {
   .ws-actions .ws-btn {
     flex-shrink: 0;
   }
-  .ws-list,
-  .ws-editor {
-    max-height: none;
-  }
-  .ws-editor {
-    min-height: calc(100vh - 120px);
+  .ws-drawer {
+    width: 100%;
+    border-left: none;
   }
 }
 </style>

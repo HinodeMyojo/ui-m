@@ -619,7 +619,7 @@ const totalSpent = computed(
 <template>
   <div class="wie" :class="{ compact }">
     <div class="wie-top">
-      <button v-if="compact" class="wie-back" @click="emit('close')">‹ К списку</button>
+      <button v-if="compact" class="wie-back" @click="emit('close')">‹ К доске</button>
       <div class="wie-emoji-wrap">
         <input v-model="form.emoji" class="wie-emoji" maxlength="4" placeholder="🙂" />
         <div class="wie-emoji-pop">

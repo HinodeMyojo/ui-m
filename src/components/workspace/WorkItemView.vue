@@ -184,7 +184,7 @@ function toggleLog(taskId) {
   <article class="wiv" :class="{ compact }">
     <header class="wiv-hero" :style="{ '--accent': item.color || '#1767fd' }">
       <div class="wiv-hero-top">
-        <button v-if="compact" class="wiv-back" @click="emit('close')">‹ К списку</button>
+        <button v-if="compact" class="wiv-back" @click="emit('close')">‹ К доске</button>
         <span class="wiv-status-chip" :style="{ borderColor: status.color, color: status.color }">
           {{ status.label }}
         </span>
