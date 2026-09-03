@@ -20,6 +20,7 @@ import {
   JP_RATING_HARD,
   JP_RATING_GOOD,
   JP_RATING_EASY,
+  jpKatakanaToHiragana,
   canSpeakJapanese,
   primeJapaneseVoice,
   speakJapanese,
@@ -58,6 +59,8 @@ const typed = ref(""); // введённое чтение (механика 2)
 const tiles = ref([]); // собранные плитки (механика 3)
 const verdict = ref(null); // "right" | "close" | "wrong"
 const sending = ref(false);
+const hintOpen = ref(false); // разбор раскрыт прямо сейчас
+const hintUsed = ref(false); // разбор открывали на этой карточке
 
 const startedAt = ref(0);
 const shownAt = ref(0);
@@ -126,6 +129,8 @@ function ask() {
   typed.value = "";
   tiles.value = [];
   verdict.value = null;
+  hintOpen.value = false;
+  hintUsed.value = false;
   shownAt.value = Date.now();
   phase.value = PHASE.ASK;
 }
@@ -155,6 +160,14 @@ function pickOption(i) {
   if (phase.value !== PHASE.ASK) return;
   picked.value = i;
   reveal(i === card.value.correctIndex ? "right" : "wrong");
+}
+
+// «Не знаю» — честный ответ, а не поражение. Без него признаться можно только
+// ткнув заведомо неверный вариант, и тогда в памяти остаётся именно он.
+// Для FSRS это то же «again», что и ошибка: карточку надо переспросить.
+function giveUp() {
+  if (phase.value !== PHASE.ASK) return;
+  reveal("idk");
 }
 
 function toggleTile(ch) {
@@ -192,9 +205,13 @@ function reveal(v) {
   // Арена — про скорость: спрашивать после ответа ещё и уверенность значит
   // отдать половину минуты кнопкам.
   if (isArena.value) {
-    rate(v === "wrong" ? JP_RATING_AGAIN : JP_RATING_GOOD);
+    rate(v === "right" || v === "close" ? JP_RATING_GOOD : JP_RATING_AGAIN);
   }
 }
+
+// Ошибка и «не знаю» ведут себя одинаково: ответ показан, уверенность
+// спрашивать не о чем.
+const failed = computed(() => verdict.value === "wrong" || verdict.value === "idk");
 
 // --- Отправка ---
 
@@ -248,17 +265,91 @@ async function finish() {
 
 const meaning = computed(() => (card.value?.meaningsRu || []).slice(0, 3).join(", "));
 
+// Разбор карточки по знакам. У слова это его иероглифы с чтениями (приходят с
+// карточкой), у кандзи — ключи, из которых он сложен. Показывается одинаково:
+// вопрос «из чего это состоит» на обеих карточках один и тот же.
+const breakdown = computed(() => {
+  const c = card.value;
+  if (!c) return [];
+  if (c.breakdown?.length) {
+    return c.breakdown.map((p) => ({
+      char: p.char,
+      meaning: (p.meaningsRu || []).join(", "),
+      readings: readingsLine(p),
+    }));
+  }
+  return (c.components || []).map((p) => ({
+    char: p.char,
+    meaning: p.meaningRu,
+    readings: "",
+  }));
+});
+
+function readingsLine(part) {
+  const rows = [];
+  if (part.onReadings?.length) rows.push(`он ${part.onReadings.join(", ")}`);
+  if (part.kunReadings?.length) rows.push(`кун ${part.kunReadings.join(", ")}`);
+  return rows.join(" · ");
+}
+
+// Механики, где разбор и есть ответ: в сборке из ключей и обводке спрашивают
+// ровно состав знака, в различении похожих — сам знак, а в пропуске состав
+// знака указывает на то единственное слово из четырёх, где этот знак стоит.
+// Во всех остальных разбор до ответа — это то, ради чего слово и разбирают:
+// 為替 держится в голове как «делать» плюс «менять», а не как две картинки.
+const HINT_BLOCKED = [JP_MECH_BUILD, JP_MECH_TRACE, JP_MECH_TELL_APART, JP_MECH_CLOZE];
+
+const canHint = computed(
+  () => breakdown.value.length > 0 && !HINT_BLOCKED.includes(card.value?.mechanic),
+);
+
+function openHint() {
+  hintOpen.value = !hintOpen.value;
+  hintUsed.value = true;
+}
+
+// Ответ с подсказкой — это не «вспомнил»: интервал должен вырасти меньше,
+// иначе карточка вернётся тогда, когда её уже нет в голове.
+const goodRating = computed(() =>
+  hintUsed.value || verdict.value === "close" ? JP_RATING_HARD : JP_RATING_GOOD,
+);
+
+const verdictLabel = computed(() => {
+  if (verdict.value === "idk") return "Не знаю — вот ответ";
+  if (verdict.value === "wrong") return "Неверно";
+  if (verdict.value === "close") return "Тоже чтение";
+  return hintUsed.value ? "Верно, с подсказкой" : "Верно";
+});
+
 // Что можно произнести на этой карточке. У ключа звучания нет: это часть
 // знака, а не слово.
 const speakable = computed(() => (canSpeakJapanese() ? speakableOf(card.value) : ""));
 
-// До ответа звук доступен там, где чтение не является ответом: выбор значения
-// и различение похожих спрашивают смысл, и подсказать чтением там нечего.
-// В «пропуске» звучит вся фраза — но уже с вырезанным словом.
+// До ответа звук закрыт только там, где чтение и есть ответ: ввод чтения и
+// выбор «он или кун». В пропуске звучало бы не предложение, а чтение знака —
+// то есть подсказка, какое слово вырезано. Во всём остальном звук нужен именно
+// до ответа: знак, которого ни разу не слышал, остаётся картинкой.
+const SILENT_MECHANICS = [JP_MECH_READING, JP_MECH_READING_IN_WORD, JP_MECH_CLOZE];
+
 const speakableNow = computed(() => {
   if (!speakable.value || phase.value !== PHASE.ASK) return "";
-  const m = card.value?.mechanic;
-  return m === JP_MECH_MEANING || m === JP_MECH_TELL_APART ? speakable.value : "";
+  return SILENT_MECHANICS.includes(card.value?.mechanic) ? "" : speakable.value;
+});
+
+// Чтение над знаком — та же фуригана, что в книге: слово, которое не
+// прочитать, остаётся картинкой, и вслух его не повторишь. Стоит целиком над
+// словом, а не по знакам: разбить чтение по иероглифам нечем — 為替 читается
+// かわせ целиком, и «か» к 為 привязать не выйдет (фуриганы в справочнике нет).
+//
+// Скрыто ровно там же, где и звук, и только до ответа: на механиках, где
+// чтение и есть ответ, оно бы его и выдало.
+const readingNow = computed(() => {
+  const c = card.value;
+  if (!c) return "";
+  if (phase.value === PHASE.ASK && SILENT_MECHANICS.includes(c.mechanic)) return "";
+  // Оны в справочнике записаны катаканой. Читает он кану любую, но учит
+  // чтения хираганой — как в WaniKani, чей метод модуль и повторяет.
+  return c.reading || jpKatakanaToHiragana(c.mainReading || "");
 });
 
 function say() {
@@ -384,10 +475,12 @@ onBeforeUnmount(stopTicker);
 
         <div
           v-else-if="!(phase === PHASE.ASK && card.mechanic === JP_MECH_TRACE)"
-          class="jps-char"
-          :class="{ 'is-word': card.itemType === 'word' }"
+          class="jps-char-box"
         >
-          {{ card.char }}
+          <div v-if="readingNow" class="jps-furigana">{{ readingNow }}</div>
+          <div class="jps-char" :class="{ 'is-word': card.itemType === 'word' }">
+            {{ card.char }}
+          </div>
         </div>
 
         <div v-if="card.mechanic === JP_MECH_READING_IN_WORD" class="jps-hint jps-hint-sm">
@@ -408,15 +501,27 @@ onBeforeUnmount(stopTicker);
           главное чтение
         </div>
 
-        <div v-if="speakableNow" class="jps-say">
-          <button class="jps-say-btn" @click="say">🔊 Как звучит</button>
+        <!-- Звук и разбор — до ответа, а не после него. -->
+        <div v-if="speakableNow || canHint" class="jps-tools">
+          <button v-if="speakableNow" class="jps-say-btn" @click="say">🔊 Как звучит</button>
+          <button v-if="canHint" class="jps-say-btn" @click="openHint">
+            {{ hintOpen ? "🧩 Скрыть разбор" : "🧩 Разобрать по знакам" }}
+          </button>
+        </div>
+
+        <div v-if="hintOpen && phase === PHASE.ASK" class="jps-break">
+          <div v-for="p in breakdown" :key="p.char" class="jps-break-row">
+            <span class="jps-break-char">{{ p.char }}</span>
+            <span class="jps-break-body">
+              <span class="jps-break-meaning">{{ p.meaning }}</span>
+              <span v-if="p.readings" class="jps-break-readings">{{ p.readings }}</span>
+            </span>
+          </div>
         </div>
 
         <!-- Разбор после ответа -->
         <div v-if="phase === PHASE.REVEAL" class="jps-answer" :class="`is-${verdict}`">
-          <div class="jps-answer-head">
-            {{ verdict === "right" ? "Верно" : verdict === "close" ? "Тоже чтение" : "Неверно" }}
-          </div>
+          <div class="jps-answer-head">{{ verdictLabel }}</div>
           <div class="jps-answer-body">
             <template v-if="card.mechanic === JP_MECH_READING">
               {{ card.mainReading }}
@@ -440,10 +545,17 @@ onBeforeUnmount(stopTicker);
           <div v-if="speakable" class="jps-say">
             <button class="jps-say-btn" @click="say">🔊 {{ speakable }}</button>
           </div>
-          <div v-if="card.components?.length" class="jps-parts">
-            <span v-for="c in card.components" :key="c.char" class="jps-part">
-              <b>{{ c.char }}</b> {{ c.meaningRu }}
-            </span>
+          <!-- Разбор после ответа показывается всегда: карточку закрывают
+               именно здесь, и это последняя возможность увидеть, из чего
+               сложены слово или знак. -->
+          <div v-if="breakdown.length" class="jps-break">
+            <div v-for="p in breakdown" :key="p.char" class="jps-break-row">
+              <span class="jps-break-char">{{ p.char }}</span>
+              <span class="jps-break-body">
+                <span class="jps-break-meaning">{{ p.meaning }}</span>
+                <span v-if="p.readings" class="jps-break-readings">{{ p.readings }}</span>
+              </span>
+            </div>
           </div>
           <div v-if="card.mnemonic" class="jps-mnemonic">{{ card.mnemonic }}</div>
         </div>
@@ -516,11 +628,15 @@ onBeforeUnmount(stopTicker);
               Готово
             </button>
           </template>
+
+          <!-- «Не знаю» есть на любой механике: это ответ, а не отказ от него,
+               и он должен быть под рукой, а не через промах по вариантам. -->
+          <button class="jps-idk" @click="giveUp">Не знаю</button>
         </template>
 
         <!-- Оценки. При ошибке уверенность не спрашиваем — она уже известна. -->
         <div v-else class="jps-rates">
-          <template v-if="verdict === 'wrong'">
+          <template v-if="failed">
             <button class="jps-rate is-again" :disabled="sending" @click="rate(JP_RATING_AGAIN)">
               Дальше
             </button>
@@ -529,15 +645,11 @@ onBeforeUnmount(stopTicker);
             <button class="jps-rate is-hard" :disabled="sending" @click="rate(JP_RATING_HARD)">
               Трудно
             </button>
-            <button
-              class="jps-rate is-good"
-              :disabled="sending"
-              @click="rate(verdict === 'close' ? JP_RATING_HARD : JP_RATING_GOOD)"
-            >
+            <button class="jps-rate is-good" :disabled="sending" @click="rate(goodRating)">
               Хорошо
             </button>
             <button
-              v-if="verdict === 'right'"
+              v-if="verdict === 'right' && !hintUsed"
               class="jps-rate is-easy"
               :disabled="sending"
               @click="rate(JP_RATING_EASY)"
@@ -624,6 +736,9 @@ onBeforeUnmount(stopTicker);
   gap: 10px;
   text-align: center;
   min-height: 0;
+  /* Раскрытый разбор — это ещё три-четыре строки: пусть прокручивается вопрос,
+     а не выдавливаются кнопки ответа из нижней трети. */
+  overflow-y: auto;
 }
 
 .jps-kind {
@@ -639,6 +754,21 @@ onBeforeUnmount(stopTicker);
   padding: 2px 7px;
   border-radius: 999px;
   background: rgba(110, 74, 255, 0.18);
+  color: #a58bff;
+}
+
+.jps-char-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+/* Чтение стоит над словом и заметно мельче его: читают знак, а кана — подпись
+   к нему. */
+.jps-furigana {
+  font-size: 20px;
+  letter-spacing: 2px;
   color: #a58bff;
 }
 
@@ -695,6 +825,10 @@ onBeforeUnmount(stopTicker);
   border-color: rgba(229, 72, 77, 0.5);
 }
 
+.jps-answer.is-idk {
+  border-color: rgba(255, 214, 102, 0.5);
+}
+
 .jps-answer-head {
   font-size: 11px;
   font-weight: 700;
@@ -708,29 +842,61 @@ onBeforeUnmount(stopTicker);
   font-weight: 600;
 }
 
-.jps-parts {
+/* Разбор по знакам: строка на знак, сам знак крупный и слева — его ищут
+   глазами, а не читают. */
+.jps-break {
+  width: 100%;
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
   gap: 6px;
-  justify-content: center;
 }
 
-.jps-part {
+.jps-break-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-align: left;
+  border-radius: 10px;
+  background: var(--m-card-2, #22242d);
+  padding: 6px 10px;
+}
+
+.jps-break-char {
+  flex-shrink: 0;
+  min-width: 34px;
+  text-align: center;
+  font-size: 28px;
+  line-height: 1.1;
+}
+
+.jps-break-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.jps-break-meaning {
+  font-size: 14px;
+  color: #cfd3e0;
+}
+
+.jps-break-readings {
   font-size: 12px;
   color: var(--m-muted, #7a7f8e);
-  background: var(--m-card-2, #22242d);
-  border-radius: 8px;
-  padding: 3px 8px;
-}
-
-.jps-part b {
-  color: #cfd3e0;
-  font-size: 14px;
-  margin-right: 3px;
 }
 
 .jps-say {
   display: flex;
+  justify-content: center;
+}
+
+/* Звук и разбор стоят рядом: обе кнопки про «помоги разобраться», и разносить
+   их по экрану значит прятать вторую. */
+.jps-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
   justify-content: center;
 }
 
@@ -897,6 +1063,23 @@ onBeforeUnmount(stopTicker);
   background: var(--m-accent, #6e4aff);
   border-color: var(--m-accent, #6e4aff);
   color: #fff;
+}
+
+/* «Не знаю» не спорит с вариантами за внимание: это выход, а не ответ, к
+   которому подталкивают. */
+.jps-idk {
+  min-height: 44px;
+  border-radius: 12px;
+  border: 1px solid var(--m-line, #262933);
+  background: transparent;
+  color: var(--m-muted, #7a7f8e);
+  font-size: 14px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.jps-idk:active {
+  background: var(--m-card-2, #22242d);
 }
 
 .jps-rates {
