@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, watch } from "vue";
+import { ref, computed, watch, onBeforeUnmount } from "vue";
 import TaskLogPanel from "@/components/tasklog/TaskLogPanel.vue";
 import { updateTaskAPI, checkTask, createWorkItem } from "@/components/api.js";
 
@@ -18,17 +18,39 @@ const busy = ref(false);
 const error = ref("");
 const saved = ref(false);
 
+let saveTimer = null;
+let savePending = false;
+let skipNextSave = false;
+
 // Правка идёт от карточки: пока панель открыта на этой подзадаче, чужие
 // перезагрузки дня не должны затирать то, что человек уже набрал.
 watch(
   () => props.sub.id,
   () => {
+    skipNextSave = true;
     title.value = props.sub.title || "";
     deadline.value = toInput(props.sub.deadline);
     error.value = "";
   },
   { immediate: true },
 );
+
+// Кнопки «Сохранить» здесь нет, как и в карточке дня: правка уходит сама через
+// паузу — иначе смену срока приходится подтверждать, и её легко потерять.
+watch([title, deadline], () => {
+  if (skipNextSave) {
+    skipNextSave = false;
+    return;
+  }
+  savePending = true;
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(save, 700);
+});
+
+onBeforeUnmount(() => {
+  clearTimeout(saveTimer);
+  if (savePending) save();
+});
 
 function toInput(value) {
   if (!value) return "";
@@ -44,6 +66,8 @@ const dirty = computed(
 );
 
 async function save() {
+  clearTimeout(saveTimer);
+  savePending = false;
   if (!title.value.trim()) {
     error.value = "без названия подзадача не сохранится";
     return;
@@ -162,11 +186,11 @@ function human(minutes) {
         </label>
 
         <div class="msp-form-foot">
-          <button class="msp-save" :disabled="busy || !dirty" @click="save">
-            {{ saved ? "Сохранено" : "Сохранить" }}
-          </button>
           <span v-if="error" class="msp-error">{{ error }}</span>
-          <span v-else-if="dirty" class="msp-dim">есть несохранённые правки</span>
+          <span v-else-if="busy" class="msp-dim">сохраняю…</span>
+          <span v-else-if="saved" class="msp-dim ok">сохранено</span>
+          <span v-else-if="dirty" class="msp-dim">правки уйдут сами</span>
+          <span v-else class="msp-dim">правки сохраняются сами</span>
         </div>
       </section>
 
@@ -349,23 +373,6 @@ function human(minutes) {
   flex-wrap: wrap;
 }
 
-.msp-save {
-  background: #1767fd;
-  border: 1px solid #1767fd;
-  color: #fff;
-  border-radius: 8px;
-  padding: 8px 16px;
-  font-size: 13px;
-  cursor: pointer;
-}
-
-.msp-save:disabled {
-  background: #22242d;
-  border-color: #2f3340;
-  color: #7a7f8e;
-  cursor: default;
-}
-
 .msp-error {
   color: #ff9ba0;
   font-size: 12px;
@@ -374,6 +381,10 @@ function human(minutes) {
 .msp-dim {
   color: #7a7f8e;
   font-size: 12px;
+}
+
+.msp-dim.ok {
+  color: #a8e59a;
 }
 
 .msp.compact .msp-head {
