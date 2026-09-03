@@ -55,6 +55,10 @@ export const addJpKanjiByText = (id, text) => post(`/decks/${id}/kanji-text`, { 
 
 export const fetchJpKanji = (char) => request(`/kanji/${encodeURIComponent(char)}`);
 
+// Слово целиком: разбор по знакам и примеры фраз. Тянется по тапу, а не
+// приезжает с карточкой: примеры нужны не на каждом слове.
+export const fetchJpWord = (text) => request(`/word/${encodeURIComponent(text)}`);
+
 // Разбор вставленной строки целиком: какие в ней кандзи и слова и что из
 // этого уже учится. Первый знак строки — не разбор.
 export const analyzeJpText = (text) => post("/analyze", { text });

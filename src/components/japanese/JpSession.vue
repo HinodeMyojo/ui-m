@@ -3,6 +3,8 @@ import { ref, computed, onMounted, onBeforeUnmount, nextTick } from "vue";
 import JpKanaKeyboard from "./JpKanaKeyboard.vue";
 import JpTraceCanvas from "./JpTraceCanvas.vue";
 import JpKanjiSheet from "./JpKanjiSheet.vue";
+import JpWordSheet from "./JpWordSheet.vue";
+import { jpPlay } from "./jpSound.js";
 import {
   startJpSession,
   answerJpCard,
@@ -63,6 +65,10 @@ const sending = ref(false);
 const hintOpen = ref(false); // разбор раскрыт прямо сейчас
 const hintUsed = ref(false); // разбор открывали на этой карточке
 const sheetChar = ref(""); // знак, раскрытый листом поверх сессии
+const sheetWord = ref(""); // слово, раскрытое листом поверх сессии
+// Карточки, с которыми покончено: те, что не вернутся в этой сессии. По ним
+// считается шкала — см. progressPct.
+const doneIds = ref(new Set());
 
 const startedAt = ref(0);
 const shownAt = ref(0);
@@ -72,6 +78,17 @@ let ticker = null;
 const card = computed(() => queue.value[index.value] || null);
 const isArena = computed(() => props.kind === "arena");
 const total = computed(() => queue.value.length);
+
+// Шкала считается по закрытым карточкам, а не по позиции в очереди. Провал
+// возвращает карточку в конец, очередь растёт ровно с той же скоростью, что и
+// позиция, — и доля index/total стоит на месте всю сессию. Карточек в счёте
+// столько, сколько их всего разных: повтор той же карточки очередь удлиняет,
+// а работы не добавляет.
+const uniqueTotal = computed(() => new Set(queue.value.map((c) => c.cardId)).size);
+
+const progressPct = computed(() =>
+  uniqueTotal.value ? Math.round((doneIds.value.size / uniqueTotal.value) * 100) : 0,
+);
 const plannedSec = computed(() => session.value?.plannedSec || props.sec || 360);
 const leftSec = computed(() => Math.max(0, plannedSec.value - elapsed.value));
 
@@ -100,6 +117,7 @@ async function begin(nextRound = 1) {
     round.value = data?.round || nextRound;
     queue.value = data?.cards || [];
     index.value = 0;
+    doneIds.value = new Set();
     if (!queue.value.length) {
       phase.value = PHASE.EMPTY;
       return;
@@ -201,9 +219,18 @@ function checkReading() {
   return others.some((r) => jpNormalizeReading(r) === value) ? "close" : "wrong";
 }
 
+// Звук по результату. Ответ с подсказкой звучит как «почти» — он и
+// засчитывается как трудный; «не знаю» звучит как ошибка, потому что ею и
+// является.
+function soundFor(v) {
+  if (v === "wrong" || v === "idk") return "wrong";
+  return v === "close" || hintUsed.value ? "close" : "right";
+}
+
 function reveal(v) {
   verdict.value = v;
   phase.value = PHASE.REVEAL;
+  jpPlay(soundFor(v));
   // Арена — про скорость: спрашивать после ответа ещё и уверенность значит
   // отдать половину минуты кнопкам.
   if (isArena.value) {
@@ -232,7 +259,12 @@ async function rate(rating) {
     });
     // Провал возвращает карточку в конец этой же сессии — так и задумано,
     // ошибку надо переспросить, пока она свежая.
-    if (answer?.againInSession) queue.value.push({ ...current });
+    if (answer?.againInSession) {
+      queue.value.push({ ...current });
+      doneIds.value.delete(current.cardId); // вернулась — значит ещё не закрыта
+    } else {
+      doneIds.value = new Set(doneIds.value).add(current.cardId);
+    }
     advance();
   } catch (e) {
     error.value = e.message || "ответ не сохранился";
@@ -254,6 +286,7 @@ function advance() {
 async function finish() {
   stopTicker();
   phase.value = PHASE.LOADING;
+  jpPlay("done");
   try {
     result.value = await finishJpSession(session.value.sessionId, {
       durationSec: Math.round((Date.now() - startedAt.value) / 1000),
@@ -319,6 +352,16 @@ function openSheet(char) {
   hintUsed.value = true;
 }
 
+// Примеры к слову. До ответа это подсказка посильнее разбора — в переводе
+// фразы значение слова видно прямо, — поэтому «Легко» после неё не даётся.
+function openWordSheet() {
+  if (!card.value) return;
+  sheetWord.value = card.value.char;
+  if (phase.value === PHASE.ASK) hintUsed.value = true;
+}
+
+const isWordCard = computed(() => card.value?.itemType === "word");
+
 // Ответ с подсказкой — это не «вспомнил»: интервал должен вырасти меньше,
 // иначе карточка вернётся тогда, когда её уже нет в голове.
 const goodRating = computed(() =>
@@ -381,10 +424,7 @@ onBeforeUnmount(stopTicker);
     <header class="jps-top">
       <button class="jps-close" aria-label="Выйти" @click="emit('exit')">✕</button>
       <div class="jps-progress">
-        <div
-          class="jps-progress-fill"
-          :style="{ width: total ? `${(index / total) * 100}%` : '0%' }"
-        />
+        <div class="jps-progress-fill" :style="{ width: `${progressPct}%` }" />
       </div>
       <span class="jps-time" :class="{ 'is-up': timeUp }">{{ timeLabel }}</span>
     </header>
@@ -513,11 +553,12 @@ onBeforeUnmount(stopTicker);
         </div>
 
         <!-- Звук и разбор — до ответа, а не после него. -->
-        <div v-if="speakableNow || canHint" class="jps-tools">
+        <div v-if="speakableNow || canHint || isWordCard" class="jps-tools">
           <button v-if="speakableNow" class="jps-say-btn" @click="say">🔊 Как звучит</button>
           <button v-if="canHint" class="jps-say-btn" @click="openHint">
             {{ hintOpen ? "🧩 Скрыть разбор" : "🧩 Разобрать по знакам" }}
           </button>
+          <button v-if="isWordCard" class="jps-say-btn" @click="openWordSheet">📖 Примеры</button>
         </div>
 
         <div v-if="hintOpen && phase === PHASE.ASK" class="jps-break">
@@ -559,8 +600,11 @@ onBeforeUnmount(stopTicker);
 
           <!-- Звук только после ответа: до него он подсказывал бы чтение,
                а на механике ввода чтения — прямо выдавал ответ. -->
-          <div v-if="speakable" class="jps-say">
-            <button class="jps-say-btn" @click="say">🔊 {{ speakable }}</button>
+          <div v-if="speakable || isWordCard" class="jps-tools">
+            <button v-if="speakable" class="jps-say-btn" @click="say">🔊 {{ speakable }}</button>
+            <button v-if="isWordCard" class="jps-say-btn" @click="openWordSheet">
+              📖 Примеры
+            </button>
           </div>
           <!-- Разбор после ответа показывается всегда: карточку закрывают
                именно здесь, и это последняя возможность увидеть, из чего
@@ -687,6 +731,7 @@ onBeforeUnmount(stopTicker);
     </template>
 
     <JpKanjiSheet v-if="sheetChar" :char="sheetChar" @close="sheetChar = ''" />
+    <JpWordSheet v-if="sheetWord" :text="sheetWord" @close="sheetWord = ''" />
   </div>
 </template>
 

@@ -9,6 +9,7 @@ import {
 } from "@/components/japaneseApi.js";
 import JpStrokeOrder from "./JpStrokeOrder.vue";
 import JpSentenceList from "./JpSentenceList.vue";
+import JpWordSheet from "./JpWordSheet.vue";
 import JpTraceCanvas from "./JpTraceCanvas.vue";
 
 // Разбор текста. Второй сценарий из спеки целиком: читает Нечаеву или мангу,
@@ -32,6 +33,7 @@ const error = ref("");
 
 const detail = ref(null);
 const detailLoading = ref(false);
+const wordSheet = ref(""); // слово, раскрытое листом с примерами
 
 async function analyze() {
   if (!text.value.trim()) return;
@@ -133,7 +135,12 @@ function say(kana) {
       <section v-if="result.words.length" class="jp-card">
         <h3>Слова — {{ result.words.length }}</h3>
         <div class="jpa-list">
-          <div v-for="w in result.words" :key="w.text + w.reading" class="jpa-word">
+          <div
+            v-for="w in result.words"
+            :key="w.text + w.reading"
+            class="jpa-word is-clickable"
+            @click="wordSheet = w.text"
+          >
             <div class="jpa-word-head">
               <span class="jpa-word-text">{{ w.text }}</span>
               <span class="jpa-word-reading">{{ w.reading }}</span>
@@ -141,7 +148,7 @@ function say(kana) {
                 v-if="canSpeak && w.reading"
                 class="jpa-say"
                 :aria-label="`Произнести ${w.text}`"
-                @click="say(w.reading)"
+                @click.stop="say(w.reading)"
               >
                 🔊
               </button>
@@ -316,6 +323,7 @@ function say(kana) {
         />
       </template>
     </section>
+    <JpWordSheet v-if="wordSheet" :text="wordSheet" @close="wordSheet = ''" />
   </div>
 </template>
 
@@ -339,6 +347,17 @@ function say(kana) {
   border-radius: 10px;
   background: #22242d;
   border: 1px solid #2a2d38;
+}
+
+/* Слово открывает свой лист с примерами: по нему тапают чаще, чем по кандзи,
+   потому что читают именно словами. */
+.jpa-word.is-clickable {
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.jpa-word.is-clickable:active {
+  background: #2b2e39;
 }
 
 .jpa-word-head {

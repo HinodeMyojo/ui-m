@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted } from "vue";
+import { ref, watch, onMounted } from "vue";
 import {
   fetchJpSettings,
   saveJpSettings,
@@ -10,6 +10,7 @@ import {
   speakJapanese,
   japaneseVoiceName,
 } from "@/components/japaneseApi.js";
+import { jpSoundEnabled, setJpSoundEnabled, jpPlay } from "./jpSound.js";
 
 // Настройки раздела. Всё, кроме темпа новых: его подбирает система, и ручку
 // «столько-то в день» здесь не заводим намеренно — она мгновенно превращается
@@ -23,6 +24,14 @@ const SESSION_PRESETS = [
 ];
 
 const form = ref(null);
+// Звук живёт на устройстве, поэтому он не в form и не уезжает на сервер.
+// Переключение сразу проигрывает пример: иначе непонятно, что именно включил.
+const sound = ref(jpSoundEnabled());
+watch(sound, (on) => {
+  setJpSoundEnabled(on);
+  if (on) jpPlay("right");
+});
+
 const loading = ref(true);
 const saving = ref(false);
 const error = ref("");
@@ -229,6 +238,12 @@ onMounted(() => {
         <label class="jp-check" style="margin-top: 8px">
           <input v-model="form.showRomaji" type="checkbox" />
           Показывать ромадзи
+        </label>
+        <!-- Звук хранится на устройстве, а не на сервере: в метро он нужен, за
+             рабочим столом — нет, и это разные ответы для одного человека. -->
+        <label class="jp-check" style="margin-top: 8px">
+          <input v-model="sound" type="checkbox" />
+          Звуки ответов (на этом устройстве)
         </label>
       </section>
 

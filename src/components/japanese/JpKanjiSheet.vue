@@ -3,6 +3,7 @@ import { ref, watch } from "vue";
 import { fetchJpKanji } from "@/components/japaneseApi.js";
 import JpStrokeOrder from "./JpStrokeOrder.vue";
 import JpSentenceList from "./JpSentenceList.vue";
+import JpTraceCanvas from "./JpTraceCanvas.vue";
 
 // Знак крупным планом: как он пишется, из чего состоит и как живёт во фразе.
 //
@@ -22,6 +23,10 @@ const emit = defineEmits(["close"]);
 const data = ref(null);
 const error = ref("");
 const loading = ref(false);
+// Обводка — по желанию: смотреть порядок черт и писать самому это разные
+// занятия, и второе занимает весь экран.
+const tracing = ref(false);
+const traced = ref(null);
 
 watch(
   () => props.char,
@@ -30,6 +35,8 @@ watch(
     loading.value = true;
     error.value = "";
     data.value = null;
+    tracing.value = false;
+    traced.value = null;
     try {
       data.value = await fetchJpKanji(char);
     } catch (e) {
@@ -70,12 +77,31 @@ watch(
           </div>
 
           <!-- Как пишется и из чего состоит: цвет черт и есть ответ на второе. -->
-          <JpStrokeOrder
-            v-if="data.strokePaths?.length"
-            :paths="data.strokePaths"
-            :groups="data.strokeGroups || []"
-            :size="200"
-          />
+          <template v-if="data.strokePaths?.length">
+            <JpTraceCanvas
+              v-if="tracing"
+              :paths="data.strokePaths"
+              :char="data.char"
+              @done="traced = $event"
+            />
+            <JpStrokeOrder
+              v-else
+              :paths="data.strokePaths"
+              :groups="data.strokeGroups || []"
+              :size="200"
+            />
+
+            <div class="jks-trace">
+              <button class="jks-trace-btn" @click="tracing = !tracing">
+                {{ tracing ? "Смотреть" : "✍️ Написать самому" }}
+              </button>
+              <span v-if="traced" class="jks-muted jks-muted-sm">
+                {{
+                  traced.misses === 0 ? "начисто, ни одного промаха" : `промахов ${traced.misses}`
+                }}
+              </span>
+            </div>
+          </template>
 
           <div v-if="data.sentences?.length" class="jks-block">
             <div class="jks-label">Примеры</div>
@@ -195,9 +221,34 @@ watch(
   text-align: left;
 }
 
+.jks-trace {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.jks-trace-btn {
+  min-height: 40px;
+  padding: 0 14px;
+  border-radius: 11px;
+  border: 1px solid var(--m-line, #262933);
+  background: var(--m-card-2, #22242d);
+  color: var(--m-text, #e6e8ef);
+  font-size: 15px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
 .jks-muted {
   color: var(--m-muted, #7a7f8e);
   font-size: 14px;
   padding: 20px 0;
+}
+
+.jks-muted-sm {
+  font-size: 12px;
+  padding: 0;
 }
 </style>
