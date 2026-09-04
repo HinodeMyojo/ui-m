@@ -18,6 +18,7 @@ const TABS = [
 
 // Разделы «Ещё». Порядок — по тому, как часто в них заходят, а не по алфавиту.
 const MORE = [
+  { to: "/blockers", icon: "🚧", label: "Блокеры" },
   { to: "/discipline", icon: "🎯", label: "Дисциплина" },
   { to: "/roadmap", icon: "🗺️", label: "Roadmap" },
   { to: "/roadmap/today", icon: "📖", label: "Чтение дня" },

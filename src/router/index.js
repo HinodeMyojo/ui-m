@@ -139,6 +139,12 @@ const router = createRouter({
       component: () => import("../views/JapaneseView.vue"),
     },
     {
+      // Блокеры всех задач и карточек в одном списке — и когда о них напомнит бот.
+      path: "/blockers",
+      name: "Blockers",
+      component: () => import("../views/BlockersView.vue"),
+    },
+    {
       // Экран сессии для телефона: отдельная раскладка, не адаптив.
       path: "/japanese/today",
       name: "JapaneseToday",
