@@ -168,7 +168,7 @@ function ask() {
   verdict.value = null;
   hintOpen.value = false;
   hintUsed.value = false;
-  teaching.value = !!card.value?.lesson;
+  teaching.value = card.value?.mechanic === JP_MECH_LESSON;
   shownAt.value = Date.now();
   phase.value = PHASE.ASK;
 }
@@ -195,9 +195,11 @@ const asksForKanji = computed(
   () => mechanic.value === JP_MECH_KANJI_BY_MEANING || mechanic.value === JP_MECH_KANJI_BY_READING,
 );
 
+// Урок закончился — идём дальше без ответа: показ не оценивают, оценивают
+// вопросы, которые пойдут следом.
 function learned() {
   teaching.value = false;
-  shownAt.value = Date.now();
+  advance();
 }
 
 // --- Проверка ответа ---
@@ -407,6 +409,16 @@ function openWordSheet() {
 
 const isWordCard = computed(() => card.value?.itemType === "word");
 
+// Сколько уроков в этой сессии и какой из них перед глазами. Без счётчика
+// показ выглядит бесконечным: непонятно, сколько ещё знаков будет.
+const lessonTotal = computed(
+  () => queue.value.filter((c) => c.mechanic === JP_MECH_LESSON).length,
+);
+
+const lessonNo = computed(
+  () => queue.value.slice(0, index.value + 1).filter((c) => c.mechanic === JP_MECH_LESSON).length,
+);
+
 // Ответ с подсказкой — это не «вспомнил»: интервал должен вырасти меньше,
 // иначе карточка вернётся тогда, когда её уже нет в голове.
 const goodRating = computed(() =>
@@ -567,16 +579,15 @@ onBeforeUnmount(stopTicker);
       <div class="jps-mid">
         <div class="jps-kind">
           {{ jpItemLabel(card.itemType) }}
-          <span v-if="card.isNew" class="jps-new">новое</span>
+          <span v-if="teaching" class="jps-new">знакомимся {{ lessonNo }} из {{ lessonTotal }}</span>
+          <span v-else-if="card.isNew" class="jps-new">новое</span>
         </div>
 
         <!-- Урок: единицу видят впервые. Сначала показываем всё, что о ней
              знаем, и только по «понял» спрашиваем. -->
         <template v-if="teaching">
           <div class="jps-char-box">
-            <div v-if="card.reading || card.mainReading" class="jps-furigana">
-              {{ card.reading || card.mainReading }}
-            </div>
+            <div v-if="readingNow" class="jps-furigana">{{ readingNow }}</div>
             <div class="jps-char" :class="{ 'is-word': card.itemType === 'word' }">
               {{ card.char }}
             </div>
@@ -775,7 +786,9 @@ onBeforeUnmount(stopTicker);
       <!-- Всё нажимаемое — здесь, в нижней трети. -->
       <div class="jps-bottom">
         <template v-if="teaching">
-          <button class="m-btn m-btn-accent jps-wide" @click="learned">Понял, спрашивай</button>
+          <button class="m-btn m-btn-accent jps-wide" @click="learned">
+            {{ lessonNo < lessonTotal ? "Понял, следующий" : "Понял, спрашивай" }}
+          </button>
         </template>
 
         <template v-else-if="phase === PHASE.ASK">
