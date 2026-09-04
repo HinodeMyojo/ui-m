@@ -79,6 +79,19 @@ export const JP_MECH_TRACE = "trace";
 export const JP_MECH_READING_IN_WORD = "reading-in-word";
 export const JP_MECH_TELL_APART = "tell-apart";
 export const JP_MECH_CLOZE = "cloze";
+// Режимы второй итерации — docs/japanese-study-modes.md.
+export const JP_MECH_LESSON = "lesson";
+export const JP_MECH_READING_CHOICE = "reading-choice";
+export const JP_MECH_KANJI_BY_MEANING = "kanji-by-meaning";
+export const JP_MECH_KANJI_BY_READING = "kanji-by-reading";
+export const JP_MECH_SPEAK = "speak";
+
+// Умеет ли браузер распознавать речь. Без этого режим «произнести вслух»
+// просто не показывается: в Safari он есть с iOS 14.5, в Chrome давно, но
+// далеко не везде.
+export function canHearJapanese() {
+  return !!(globalThis.SpeechRecognition || globalThis.webkitSpeechRecognition);
+}
 
 // Оценки FSRS. На телефоне из них видны три: «не знал» ставится самим фактом
 // ошибки, спрашивать после неё ещё и уверенность бессмысленно.

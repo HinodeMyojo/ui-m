@@ -4,6 +4,7 @@ import JpKanaKeyboard from "./JpKanaKeyboard.vue";
 import JpTraceCanvas from "./JpTraceCanvas.vue";
 import JpKanjiSheet from "./JpKanjiSheet.vue";
 import JpWordSheet from "./JpWordSheet.vue";
+import JpSpeakCheck from "./JpSpeakCheck.vue";
 import { jpPlay } from "./jpSound.js";
 import {
   startJpSession,
@@ -19,6 +20,12 @@ import {
   JP_MECH_READING_IN_WORD,
   JP_MECH_TELL_APART,
   JP_MECH_CLOZE,
+  JP_MECH_LESSON,
+  JP_MECH_READING_CHOICE,
+  JP_MECH_KANJI_BY_MEANING,
+  JP_MECH_KANJI_BY_READING,
+  JP_MECH_SPEAK,
+  canHearJapanese,
   JP_RATING_AGAIN,
   JP_RATING_HARD,
   JP_RATING_GOOD,
@@ -65,6 +72,9 @@ const typed = ref(""); // введённое чтение (механика 2)
 const tiles = ref([]); // собранные плитки (механика 3)
 const verdict = ref(null); // "right" | "close" | "wrong"
 const sending = ref(false);
+// Урок перед вопросом: единицу видят впервые, и первым делом её показывают
+// целиком, а не спрашивают из четырёх вариантов.
+const teaching = ref(false);
 const hintOpen = ref(false); // разбор раскрыт прямо сейчас
 const hintUsed = ref(false); // разбор открывали на этой карточке
 const sheetChar = ref(""); // знак, раскрытый листом поверх сессии
@@ -155,6 +165,7 @@ function ask() {
   verdict.value = null;
   hintOpen.value = false;
   hintUsed.value = false;
+  teaching.value = !!card.value?.lesson;
   shownAt.value = Date.now();
   phase.value = PHASE.ASK;
 }
@@ -165,6 +176,25 @@ function ask() {
 function studyAhead() {
     kindNow.value = "ahead";
     begin(1);
+}
+
+// Режим, по которому спрашиваем прямо сейчас. Пока идёт урок, вопроса нет.
+// «Произнести вслух» там, где браузер не умеет слушать, превращается во ввод
+// чтения: иначе карточка была бы неотвечаемой.
+const mechanic = computed(() => {
+  const m = card.value?.mechanic;
+  if (m === JP_MECH_SPEAK && !canHearJapanese()) return JP_MECH_READING;
+  return m;
+});
+
+// Вопрос показывает сам знак: в обратных направлениях знак и есть ответ.
+const asksForKanji = computed(
+  () => mechanic.value === JP_MECH_KANJI_BY_MEANING || mechanic.value === JP_MECH_KANJI_BY_READING,
+);
+
+function learned() {
+  teaching.value = false;
+  shownAt.value = Date.now();
 }
 
 // --- Проверка ответа ---
@@ -395,11 +425,23 @@ const speakable = computed(() => (canSpeakJapanese() ? speakableOf(card.value) :
 // выбор «он или кун». В пропуске звучало бы не предложение, а чтение знака —
 // то есть подсказка, какое слово вырезано. Во всём остальном звук нужен именно
 // до ответа: знак, которого ни разу не слышал, остаётся картинкой.
-const SILENT_MECHANICS = [JP_MECH_READING, JP_MECH_READING_IN_WORD, JP_MECH_CLOZE];
+// Где чтение и есть ответ — там его не показывают и не проигрывают. В
+// «произнеси вслух» это особенно важно: с подсказкой на экране проверяется
+// произношение, а без неё — ещё и то, что чтение вспомнилось. В «какой знак
+// это значит» звук сузил бы выбор до одного варианта.
+const SILENT_MECHANICS = [
+  JP_MECH_READING,
+  JP_MECH_READING_CHOICE,
+  JP_MECH_READING_IN_WORD,
+  JP_MECH_CLOZE,
+  JP_MECH_SPEAK,
+  JP_MECH_KANJI_BY_MEANING,
+  JP_MECH_KANJI_BY_READING,
+];
 
 const speakableNow = computed(() => {
   if (!speakable.value || phase.value !== PHASE.ASK) return "";
-  return SILENT_MECHANICS.includes(card.value?.mechanic) ? "" : speakable.value;
+  return SILENT_MECHANICS.includes(mechanic.value) ? "" : speakable.value;
 });
 
 // Чтение над знаком — та же фуригана, что в книге: слово, которое не
@@ -412,7 +454,9 @@ const speakableNow = computed(() => {
 const readingNow = computed(() => {
   const c = card.value;
   if (!c) return "";
-  if (phase.value === PHASE.ASK && SILENT_MECHANICS.includes(c.mechanic)) return "";
+  if (phase.value === PHASE.ASK && !teaching.value && SILENT_MECHANICS.includes(mechanic.value)) {
+    return "";
+  }
   // Оны в справочнике записаны катаканой. Читает он кану любую, но учит
   // чтения хираганой — как в WaniKani, чей метод модуль и повторяет.
   return c.reading || jpKatakanaToHiragana(c.mainReading || "");
@@ -523,8 +567,65 @@ onBeforeUnmount(stopTicker);
           <span v-if="card.isNew" class="jps-new">новое</span>
         </div>
 
+        <!-- Урок: единицу видят впервые. Сначала показываем всё, что о ней
+             знаем, и только по «понял» спрашиваем. -->
+        <template v-if="teaching">
+          <div class="jps-char-box">
+            <div v-if="card.reading || card.mainReading" class="jps-furigana">
+              {{ card.reading || card.mainReading }}
+            </div>
+            <div class="jps-char" :class="{ 'is-word': card.itemType === 'word' }">
+              {{ card.char }}
+            </div>
+          </div>
+          <div class="jps-lesson-meaning">{{ meaning }}</div>
+          <div v-if="speakable" class="jps-tools">
+            <button class="jps-say-btn" @click="say">🔊 Как звучит</button>
+          </div>
+          <div v-if="breakdown.length" class="jps-break">
+            <button
+              v-for="p in breakdown"
+              :key="p.char"
+              class="jps-break-row"
+              @click="openSheet(p.char)"
+            >
+              <span class="jps-break-char">{{ p.char }}</span>
+              <span class="jps-break-body">
+                <span class="jps-break-meaning">{{ p.meaning }}</span>
+                <span v-if="p.readings" class="jps-break-readings">{{ p.readings }}</span>
+              </span>
+              <span class="jps-break-more">✎</span>
+            </button>
+          </div>
+          <div v-if="card.examples?.length" class="jps-break">
+            <div v-for="e in card.examples" :key="e.char" class="jps-break-row is-flat">
+              <span class="jps-break-char">{{ e.char }}</span>
+              <span class="jps-break-body">
+                <span class="jps-break-meaning">{{ e.meaningRu }}</span>
+              </span>
+            </div>
+          </div>
+          <div v-if="card.mnemonic" class="jps-mnemonic">{{ card.mnemonic }}</div>
+        </template>
+
+        <!-- Обратные направления: сверху вопрос, знак лежит в вариантах. -->
+        <template v-else-if="asksForKanji && phase === PHASE.ASK">
+          <div class="jps-ask-meaning">
+            <template v-if="mechanic === JP_MECH_KANJI_BY_READING">
+              {{ card.reading || card.mainReading }}
+            </template>
+            <template v-else>{{ meaning }}</template>
+          </div>
+          <div class="jps-hint jps-hint-sm">
+            {{ mechanic === JP_MECH_KANJI_BY_READING ? "какой это знак" : "какой знак это значит" }}
+          </div>
+          <div v-if="mechanic === JP_MECH_KANJI_BY_READING && speakable" class="jps-tools">
+            <button class="jps-say-btn" @click="say">🔊 Послушать</button>
+          </div>
+        </template>
+
         <!-- Пропуск в предложении: вопрос — сама фраза, знака над ней нет. -->
-        <template v-if="card.mechanic === JP_MECH_CLOZE">
+        <template v-else-if="card.mechanic === JP_MECH_CLOZE">
           <div class="jps-sentence">{{ card.sentence }}</div>
           <div v-if="card.sentenceTranslation" class="jps-hint">
             {{ card.sentenceTranslation }}
@@ -535,7 +636,7 @@ onBeforeUnmount(stopTicker);
              значение, а знаки лежат в вариантах. -->
         <div
           v-else-if="phase === PHASE.ASK && card.mechanic === JP_MECH_TELL_APART"
-          class="jps-ask-meaning"
+          class="jps-ask-meaning jps-ask-plain"
         >
           {{ meaning }}
         </div>
@@ -560,7 +661,10 @@ onBeforeUnmount(stopTicker);
           </div>
         </div>
 
-        <div v-if="card.mechanic === JP_MECH_READING_IN_WORD" class="jps-hint jps-hint-sm">
+        <div
+          v-if="!teaching && card.mechanic === JP_MECH_READING_IN_WORD"
+          class="jps-hint jps-hint-sm"
+        >
           как читается {{ card.focus }} в этом слове
         </div>
 
@@ -569,17 +673,25 @@ onBeforeUnmount(stopTicker);
         <!-- В различении похожих значение и есть вопрос, оно уже стоит выше:
              второй раз тем же текстом — просто шум. -->
         <div
-          v-if="card.mechanic !== JP_MECH_MEANING && card.mechanic !== JP_MECH_TELL_APART"
+          v-if="
+            !teaching &&
+            !asksForKanji &&
+            card.mechanic !== JP_MECH_MEANING &&
+            card.mechanic !== JP_MECH_TELL_APART
+          "
           class="jps-hint"
         >
           {{ meaning }}
         </div>
-        <div v-if="card.mechanic === JP_MECH_READING" class="jps-hint jps-hint-sm">
+        <div v-if="!teaching && mechanic === JP_MECH_READING" class="jps-hint jps-hint-sm">
           главное чтение
+        </div>
+        <div v-if="!teaching && mechanic === JP_MECH_READING_CHOICE" class="jps-hint jps-hint-sm">
+          как это читается
         </div>
 
         <!-- Звук и разбор — до ответа, а не после него. -->
-        <div v-if="speakableNow || canHint || isWordCard" class="jps-tools">
+        <div v-if="!teaching && (speakableNow || canHint || isWordCard)" class="jps-tools">
           <button v-if="speakableNow" class="jps-say-btn" @click="say">🔊 Как звучит</button>
           <button v-if="canHint" class="jps-say-btn" @click="openHint">
             {{ hintOpen ? "🧩 Скрыть разбор" : "🧩 Разобрать по знакам" }}
@@ -587,7 +699,7 @@ onBeforeUnmount(stopTicker);
           <button v-if="isWordCard" class="jps-say-btn" @click="openWordSheet">📖 Примеры</button>
         </div>
 
-        <div v-if="hintOpen && phase === PHASE.ASK" class="jps-break">
+        <div v-if="hintOpen && phase === PHASE.ASK && !teaching" class="jps-break">
           <button
             v-for="p in breakdown"
             :key="p.char"
@@ -607,9 +719,12 @@ onBeforeUnmount(stopTicker);
         <div v-if="phase === PHASE.REVEAL" class="jps-answer" :class="`is-${verdict}`">
           <div class="jps-answer-head">{{ verdictLabel }}</div>
           <div class="jps-answer-body">
-            <template v-if="card.mechanic === JP_MECH_READING">
+            <template v-if="mechanic === JP_MECH_READING || mechanic === JP_MECH_SPEAK">
               {{ card.mainReading }}
-              <span v-if="verdict === 'close'" class="jps-muted"> — но учим это</span>
+              <span v-if="verdict === 'close'" class="jps-muted"> — тоже чтение этого знака</span>
+            </template>
+            <template v-else-if="asksForKanji">
+              {{ card.char }} — {{ meaning }}
             </template>
             <template v-else-if="card.mechanic === JP_MECH_BUILD">
               {{ realTiles.join(" + ") }}
@@ -656,12 +771,17 @@ onBeforeUnmount(stopTicker);
 
       <!-- Всё нажимаемое — здесь, в нижней трети. -->
       <div class="jps-bottom">
-        <template v-if="phase === PHASE.ASK">
+        <template v-if="teaching">
+          <button class="m-btn m-btn-accent jps-wide" @click="learned">Понял, спрашивай</button>
+        </template>
+
+        <template v-else-if="phase === PHASE.ASK">
           <div
             v-if="
-              card.mechanic === JP_MECH_MEANING ||
-              card.mechanic === JP_MECH_READING_IN_WORD ||
-              card.mechanic === JP_MECH_CLOZE
+              mechanic === JP_MECH_MEANING ||
+              mechanic === JP_MECH_READING_IN_WORD ||
+              mechanic === JP_MECH_READING_CHOICE ||
+              mechanic === JP_MECH_CLOZE
             "
             class="jps-options"
           >
@@ -675,9 +795,9 @@ onBeforeUnmount(stopTicker);
             </button>
           </div>
 
-          <!-- Различение похожих: выбирают начертание, поэтому варианты
-               крупные и в сетку, а не строками с текстом. -->
-          <div v-else-if="card.mechanic === JP_MECH_TELL_APART" class="jps-glyphs">
+          <!-- Вопросы, где ответ это сам знак: варианты крупные и в сетку,
+               а не строками с текстом. -->
+          <div v-else-if="mechanic === JP_MECH_TELL_APART || asksForKanji" class="jps-glyphs">
             <button
               v-for="(o, i) in card.options"
               :key="i"
@@ -688,7 +808,16 @@ onBeforeUnmount(stopTicker);
             </button>
           </div>
 
-          <template v-else-if="card.mechanic === JP_MECH_READING">
+          <!-- Произнести вслух: слушает браузер. -->
+          <template v-else-if="mechanic === JP_MECH_SPEAK">
+            <JpSpeakCheck
+              :expect="card.mainReading"
+              :also-accept="[...(card.onReadings || []), ...(card.kunReadings || [])]"
+              @done="reveal($event.verdict)"
+            />
+          </template>
+
+          <template v-else-if="mechanic === JP_MECH_READING">
             <div class="jps-typed" :class="{ 'is-empty': !typed }">{{ typed || "…" }}</div>
             <JpKanaKeyboard v-model="typed" />
             <button class="m-btn m-btn-accent jps-wide" :disabled="!canSubmit" @click="submit">
@@ -696,7 +825,7 @@ onBeforeUnmount(stopTicker);
             </button>
           </template>
 
-          <template v-else-if="card.mechanic === JP_MECH_TRACE">
+          <template v-else-if="mechanic === JP_MECH_TRACE">
             <div class="jps-trace-hint">Обведи знак по контуру, черту за чертой</div>
             <JpTraceCanvas :paths="card.strokePaths || []" :char="card.char" @done="traceDone" />
           </template>
@@ -866,6 +995,18 @@ onBeforeUnmount(stopTicker);
   font-size: 20px;
   letter-spacing: 2px;
   color: #a58bff;
+}
+
+/* Урок: значение крупнее подсказки — это то, ради чего показывают знак. */
+.jps-lesson-meaning {
+  font-size: 20px;
+  font-weight: 600;
+  color: #e6e8ef;
+  line-height: 1.3;
+}
+
+.jps-break-row.is-flat {
+  cursor: default;
 }
 
 /* Иероглиф — главное на экране, поэтому он занимает столько, сколько может. */
