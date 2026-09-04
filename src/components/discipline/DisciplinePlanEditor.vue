@@ -219,6 +219,72 @@ async function saveActivity() {
   await changed();
 }
 
+// Уровни дня. Пользователь думает не «у активности есть минимум», а «что
+// будет в минимальном дне», — поэтому у плана два вида: по навыкам и по
+// уровням. Второй показывает три списка и правится на месте.
+const LEVELS = [
+  { key: "minDesc", title: "Минимум", hint: "обязателен каждый день" },
+  { key: "midDesc", title: "Средний", hint: "желателен, по квоте месяца" },
+  { key: "maxDesc", title: "Максимум", hint: "по силам, по квоте месяца" },
+];
+
+const planView = ref(localStorage.getItem("disciplinePlanView") || "skills");
+
+function selectView(view) {
+  planView.value = view;
+  localStorage.setItem("disciplinePlanView", view);
+}
+
+// Все активности плана одной лентой: в разрезе уровней навык — это подпись,
+// а не заголовок.
+const allActivities = computed(() => {
+  const out = [];
+  for (const skill of month.value?.skills || []) {
+    for (const activity of skill.activities || []) {
+      // Счётчики живут вне уровней: они не влияют на статус дня.
+      if (!activity.isCounter) out.push({ skill, activity });
+    }
+  }
+  return out;
+});
+
+function levelCount(key) {
+  return allActivities.value.filter((row) => row.activity[key]).length;
+}
+
+// Сначала то, что в уровень входит, потом остальное. Иначе состав уровня
+// приходится вылавливать глазами среди трёх десятков пустых строк.
+function levelRows(key) {
+  const inLevel = allActivities.value.filter((row) => row.activity[key]);
+  const rest = allActivities.value.filter((row) => !row.activity[key]);
+  return [...inLevel, ...rest];
+}
+
+// Правка уровня прямо в списке. Пустая строка означает «в этот уровень
+// активность не входит» — так же, как в модалке.
+async function setLevel(activity, key, value) {
+  const next = value.trim() || null;
+  if ((activity[key] || null) === next) return;
+
+  activity[key] = next;
+  await updateDisciplineActivity(activity.id, {
+    title: activity.title,
+    emoji: activity.emoji,
+    position: activity.position,
+    isCounter: activity.isCounter,
+    counterGoal: activity.counterGoal,
+    minDesc: activity.minDesc || null,
+    midDesc: activity.midDesc || null,
+    maxDesc: activity.maxDesc || null,
+    weekdays: activity.weekdays || null,
+    variants: activity.variants || null,
+    replacementText: activity.replacementText || null,
+    replacementFrom: activity.replacementFrom || null,
+    replacementTo: activity.replacementTo || null,
+  });
+  await changed();
+}
+
 async function removeActivity() {
   const f = activityModal.value;
   if (!f.id) return;
@@ -240,8 +306,52 @@ async function removeActivity() {
       <button class="dpe-btn dpe-btn-primary" @click="saveQuotas">Сохранить</button>
     </div>
 
-    <div class="dpe-section-title">Навыки и активности</div>
-    <div v-for="s in month.skills" :key="s.planSkillId" class="dpe-skill">
+    <div class="dpe-section-head">
+      <div class="dpe-section-title">Навыки и активности</div>
+      <div class="dpe-view">
+        <button
+          class="dpe-btn dpe-btn-sm"
+          :class="{ 'dpe-btn-primary': planView === 'skills' }"
+          @click="selectView('skills')"
+        >
+          По навыкам
+        </button>
+        <button
+          class="dpe-btn dpe-btn-sm"
+          :class="{ 'dpe-btn-primary': planView === 'levels' }"
+          @click="selectView('levels')"
+        >
+          По уровням
+        </button>
+      </div>
+    </div>
+
+    <!-- Вид по уровням: что именно считается минимумом, средним и максимумом.
+         Правится на месте — пустое поле значит «в этот уровень не входит». -->
+    <template v-if="planView === 'levels'">
+      <div v-for="lvl in LEVELS" :key="lvl.key" class="dpe-level">
+        <div class="dpe-level-head">
+          <b>{{ lvl.title }}</b>
+          <span class="dpe-muted">{{ lvl.hint }} · активностей {{ levelCount(lvl.key) }}</span>
+        </div>
+        <div v-for="row in levelRows(lvl.key)" :key="row.activity.id" class="dpe-level-row">
+          <span class="dpe-level-skill" :style="{ color: row.skill.color || '#8ab4ff' }">
+            {{ row.skill.icon }}
+          </span>
+          <span class="dpe-level-title">{{ row.activity.emoji }} {{ row.activity.title }}</span>
+          <input
+            class="dpe-input dpe-level-input"
+            :class="{ 'dpe-level-off': !row.activity[lvl.key] }"
+            :value="row.activity[lvl.key] || ''"
+            placeholder="не входит — впиши, что считается"
+            @change="setLevel(row.activity, lvl.key, $event.target.value)"
+          />
+        </div>
+        <div v-if="!allActivities.length" class="dpe-muted">Нет активностей в плане</div>
+      </div>
+    </template>
+
+    <div v-for="s in month.skills" v-show="planView === 'skills'" :key="s.planSkillId" class="dpe-skill">
       <div class="dpe-skill-head">
         <b :style="{ color: s.color || '#8ab4ff' }">{{ s.icon }} {{ s.title }}</b>
         <label class="dpe-inline">с <input type="number" min="1" max="31" :value="s.startDay"
@@ -253,12 +363,19 @@ async function removeActivity() {
         <button class="dpe-btn dpe-btn-danger" @click="removeSkillFromPlan(s)">✕</button>
       </div>
       <div class="dpe-activities">
+        <!-- Плашка открывает карточку активности. Уровни подписаны прямо на
+             ней: без этого план читался как список названий, а чем именно
+             отличается минимум от среднего, приходилось вспоминать. -->
         <button v-for="a in s.activities" :key="a.id" class="dpe-chip" @click="openActivityModal(s.learningSkillId, a)">
           {{ a.emoji }} {{ a.title }}
           <i v-if="a.isCounter">· счётчик {{ a.counterGoal }}</i>
-          <i v-else>
-            <template v-if="a.minDesc">мин</template><template v-if="a.midDesc">·сред</template><template v-if="a.maxDesc">·макс</template>
+          <i v-else class="dpe-chip-levels">
+            <span v-if="a.minDesc">мин: {{ a.minDesc }}</span>
+            <span v-if="a.midDesc">сред: {{ a.midDesc }}</span>
+            <span v-if="a.maxDesc">макс: {{ a.maxDesc }}</span>
+            <span v-if="!a.minDesc && !a.midDesc && !a.maxDesc">уровни не заданы</span>
           </i>
+          <b class="dpe-chip-edit">✎</b>
         </button>
         <button class="dpe-chip dpe-chip-add" @click="openActivityModal(s.learningSkillId, null)">+ активность</button>
       </div>
@@ -348,6 +465,93 @@ async function removeActivity() {
   letter-spacing: 0.4px;
 }
 
+.dpe-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.dpe-view {
+  display: flex;
+  gap: 6px;
+}
+
+/* Вид по уровням: три списка, в каждом видно, что именно считается этим
+   уровнем у каждой активности. */
+.dpe-level {
+  border: 1px solid #262b36;
+  border-radius: 12px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+  background: #1b1e27;
+}
+
+.dpe-level-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.dpe-level-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 0;
+}
+
+.dpe-level-skill {
+  flex: 0 0 22px;
+  text-align: center;
+}
+
+.dpe-level-title {
+  flex: 1 1 40%;
+  min-width: 120px;
+  font-size: 13px;
+  color: #cfd3e0;
+}
+
+.dpe-level-input {
+  flex: 1 1 45%;
+  min-width: 120px;
+}
+
+/* Пустое поле выглядит выключенным: так с одного взгляда видно, из чего
+   уровень состоит, а из чего нет. */
+.dpe-level-off {
+  opacity: 0.45;
+}
+
+.dpe-muted {
+  font-size: 12px;
+  color: #7a7f8e;
+}
+
+/* Уровни на плашке: каждый со своей строкой, иначе «мин·сред·макс» читается
+   как набор меток, а не как содержание плана. */
+.dpe-chip-levels {
+  display: block;
+  margin-top: 2px;
+}
+
+.dpe-chip-levels span {
+  display: block;
+  font-style: normal;
+}
+
+.dpe-chip-edit {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  font-size: 11px;
+  color: #4a4e5a;
+  font-weight: 400;
+}
+
 .dpe-btn {
   background: #22242d;
   border: 1px solid #2f3340;
@@ -434,14 +638,20 @@ async function removeActivity() {
 }
 
 .dpe-chip {
+  position: relative;
   background: #242731;
   border: 1px solid #333748;
   border-radius: 8px;
   color: #cfd3e0;
-  padding: 5px 10px;
+  padding: 5px 20px 6px 10px;
   font-size: 12px;
+  text-align: left;
   cursor: pointer;
   min-height: 32px;
+}
+
+.dpe-chip:hover {
+  border-color: #4a5068;
 }
 
 .dpe-chip i {
