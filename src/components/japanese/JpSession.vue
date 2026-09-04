@@ -50,6 +50,9 @@ const PHASE = { LOADING: "loading", ASK: "ask", REVEAL: "reveal", DONE: "done", 
 
 const phase = ref(PHASE.LOADING);
 const error = ref("");
+// Режим текущей сессии. Меняется изнутри: с пустого экрана можно попросить
+// «дальше», не выходя в раздел и не теряя нить.
+const kindNow = ref(props.kind);
 const session = ref(null);
 const queue = ref([]);
 const index = ref(0);
@@ -76,7 +79,8 @@ const elapsed = ref(0);
 let ticker = null;
 
 const card = computed(() => queue.value[index.value] || null);
-const isArena = computed(() => props.kind === "arena");
+const isArena = computed(() => kindNow.value === "arena");
+const isAhead = computed(() => kindNow.value === "ahead");
 const total = computed(() => queue.value.length);
 
 // Шкала считается по закрытым карточкам, а не по позиции в очереди. Провал
@@ -109,7 +113,7 @@ async function begin(nextRound = 1) {
   result.value = null;
   try {
     const data = await startJpSession({
-      kind: props.kind,
+      kind: kindNow.value,
       sec: props.sec || 0,
       round: nextRound,
     });
@@ -153,6 +157,14 @@ function ask() {
   hintUsed.value = false;
   shownAt.value = Date.now();
   phase.value = PHASE.ASK;
+}
+
+// «Заниматься дальше»: берём новое сверх дневной нормы, а если и его нет —
+// ближайшие повторения наперёд. Пустой экран в ответ на желание позаниматься
+// — худшее, что может сделать учебник.
+function studyAhead() {
+    kindNow.value = "ahead";
+    begin(1);
 }
 
 // --- Проверка ответа ---
@@ -437,10 +449,24 @@ onBeforeUnmount(stopTicker);
           error ||
           (isArena
             ? "Арена гоняет только закреплённое — пока закреплять нечего."
-            : "На сегодня всё — повторять нечего.")
+            : isAhead
+              ? "Кончилось совсем: ни новых единиц в наборах, ни повторений впереди."
+              : "На сегодня норма закрыта.")
         }}
       </p>
-      <button class="m-btn" @click="emit('exit')">Назад</button>
+      <div class="jps-done-actions">
+        <button
+          v-if="!isArena && !isAhead && !error"
+          class="m-btn m-btn-accent jps-wide"
+          @click="studyAhead"
+        >
+          Заниматься дальше
+        </button>
+        <p v-if="!isArena && !isAhead && !error" class="jps-muted jps-hint-sm">
+          Возьмём новое сверх нормы, а потом ближайшие повторения наперёд
+        </p>
+        <button class="m-btn" @click="emit('exit')">Назад</button>
+      </div>
     </div>
 
     <!-- Итог раунда -->

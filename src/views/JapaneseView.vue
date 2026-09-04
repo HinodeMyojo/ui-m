@@ -151,9 +151,14 @@ onMounted(load);
                 {{ overview?.dueNow ?? 0 }} к повторению · {{ overview?.newLeft ?? 0 }} новых
               </div>
             </div>
-            <button class="jp-btn is-primary jpv-go" @click="start('mix')">
-              Заниматься {{ minutes }} мин
-            </button>
+            <div class="jpv-start-actions">
+              <button class="jp-btn is-primary jpv-go" @click="start('mix')">
+                Заниматься {{ minutes }} мин
+              </button>
+              <!-- Норма — это план на день, а не запрет. Кто хочет заниматься
+                   больше, не должен упираться в «на сегодня всё». -->
+              <button class="jp-btn jpv-more" @click="start('ahead')">Сверх нормы</button>
+            </div>
           </div>
         </section>
 
@@ -295,6 +300,17 @@ onMounted(load);
   font-size: 24px;
   font-weight: 700;
   margin-bottom: 4px;
+}
+
+.jpv-start-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: stretch;
+}
+
+.jpv-more {
+  font-size: 13px;
 }
 
 .jpv-go {
