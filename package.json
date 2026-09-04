@@ -1,5 +1,5 @@
 {
-  "version": "1.0.131",
+  "version": "1.0.132",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
