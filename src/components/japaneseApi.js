@@ -67,6 +67,22 @@ export const fetchJpAchievements = () => request("/achievements");
 export const importJpTranslations = (text) => post("/translations", { text });
 export const fetchJpPendingTranslations = (chunk = 1) =>
   request(`/translations/pending?chunk=${chunk}`);
+// --- Учёбы ---
+//
+// Учёба — курс внутри модуля: что учим, сколько в день, когда напоминать и как
+// часто экзамен. По умолчанию заведена одна — «Иероглифы».
+export const fetchJpStudies = () => request("/studies");
+export const saveJpStudy = (body) => post("/studies", body);
+export const deleteJpStudy = (id) => request(`/studies/${id}`, { method: "DELETE" });
+
+// Что можно учить. Порядок — от простого к сложному, как в самом методе:
+// ключ входит в знак, знак входит в слово.
+export const JP_ITEM_TYPES = [
+  { code: "radical", label: "Ключи" },
+  { code: "kanji", label: "Иероглифы" },
+  { code: "word", label: "Слова" },
+];
+
 export const fetchJpSettings = () => request("/settings");
 export const saveJpSettings = (body) => put("/settings", body);
 

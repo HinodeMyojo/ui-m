@@ -50,6 +50,8 @@ import {
 const props = defineProps({
   kind: { type: String, default: "mix" },
   sec: { type: Number, default: 0 },
+  // Какую учёбу проходим: она решает, что попадёт в сессию.
+  studyId: { type: String, default: "" },
 });
 const emit = defineEmits(["exit"]);
 
@@ -124,6 +126,7 @@ async function begin(nextRound = 1) {
   try {
     const data = await startJpSession({
       kind: kindNow.value,
+      studyId: props.studyId || null,
       sec: props.sec || 0,
       round: nextRound,
     });

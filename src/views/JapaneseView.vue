@@ -3,7 +3,7 @@ import { ref, computed, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import "@/styles/japanese.css";
 
-import { fetchJpOverview, fetchJpDecks } from "@/components/japaneseApi.js";
+import { fetchJpOverview, fetchJpDecks, fetchJpStudies } from "@/components/japaneseApi.js";
 import JpSession from "@/components/japanese/JpSession.vue";
 import JpDecksTab from "@/components/japanese/JpDecksTab.vue";
 import JpAnalyzeTab from "@/components/japanese/JpAnalyzeTab.vue";
@@ -42,6 +42,9 @@ const sessionKind = ref("mix");
 const openedChar = ref("");
 const overview = ref(null);
 const decks = ref([]);
+// Учёбы: что учим прямо сейчас. Выбранная решает, что попадёт в сессию.
+const studies = ref([]);
+const studyId = ref(localStorage.getItem("japaneseStudy") || "");
 const error = ref("");
 const inSession = ref(false);
 
@@ -53,9 +56,13 @@ function selectTab(code) {
 async function load() {
   error.value = "";
   try {
-    const [o, d] = await Promise.all([fetchJpOverview(), fetchJpDecks()]);
+    const [o, d, st] = await Promise.all([fetchJpOverview(), fetchJpDecks(), fetchJpStudies()]);
     overview.value = o;
     decks.value = d || [];
+    studies.value = st || [];
+    if (!studies.value.some((s) => s.id === studyId.value)) {
+      studyId.value = (studies.value.find((s) => s.enabled) || studies.value[0])?.id || "";
+    }
   } catch (e) {
     error.value = e.message || "не удалось загрузить раздел";
   }
@@ -81,6 +88,15 @@ function start(kind) {
   sessionKind.value = kind;
   inSession.value = true;
 }
+
+function selectStudy(id) {
+  studyId.value = id;
+  localStorage.setItem("japaneseStudy", id);
+}
+
+// Выбранная учёба: из неё берутся и норма, и длина сессии, и повод для
+// экзамена.
+const study = computed(() => studies.value.find((s) => s.id === studyId.value) || null);
 
 function endSession() {
   inSession.value = false;
@@ -135,10 +151,25 @@ onMounted(load);
       <!-- Сессия занимает вкладку целиком: во время неё на экране не должно
            быть ничего, кроме карточки. -->
       <section v-if="inSession" class="jp-card jpv-session">
-        <JpSession :kind="sessionKind" @exit="endSession" />
+        <JpSession :kind="sessionKind" :study-id="studyId" @exit="endSession" />
       </section>
 
       <template v-else>
+        <!-- Учёбы: что учим сейчас. Одна учёба — переключать нечего, и полоса
+             не показывается. -->
+        <div v-if="studies.length > 1" class="jpv-studies">
+          <button
+            v-for="s in studies"
+            :key="s.id"
+            class="jp-btn jp-btn-sm"
+            :class="{ 'is-primary': s.id === studyId }"
+            @click="selectStudy(s.id)"
+          >
+            {{ s.emoji }} {{ s.name }}
+            <span v-if="s.dueNow" class="jpv-study-due">{{ s.dueNow }}</span>
+          </button>
+        </div>
+
         <section class="jp-card">
           <div class="jpv-start">
             <div class="jpv-start-facts">
@@ -148,7 +179,17 @@ onMounted(load);
                 <template v-else>Ничего не горит</template>
               </div>
               <div class="jp-muted">
-                {{ overview?.dueNow ?? 0 }} к повторению · {{ overview?.newLeft ?? 0 }} новых
+                <template v-if="study">
+                  {{ study.dueNow }} к повторению · {{ study.newLeft }} новых · закреплено
+                  {{ study.learned }}
+                </template>
+                <template v-else>
+                  {{ overview?.dueNow ?? 0 }} к повторению · {{ overview?.newLeft ?? 0 }} новых
+                </template>
+              </div>
+              <div v-if="study && study.examEvery > 0" class="jp-muted">
+                <template v-if="study.examDue">🎓 Пора мини-экзамен</template>
+                <template v-else>До мини-экзамена: {{ study.toExam }}</template>
               </div>
             </div>
             <div class="jpv-start-actions">
@@ -158,6 +199,11 @@ onMounted(load);
               <!-- Норма — это план на день, а не запрет. Кто хочет заниматься
                    больше, не должен упираться в «на сегодня всё». -->
               <button class="jp-btn jpv-more" @click="start('ahead')">Сверх нормы</button>
+              <!-- Экзамен зовёт сам, когда накопилось: он должен быть событием,
+                   а не пунктом меню, о котором забывают. -->
+              <button v-if="study?.examDue" class="jp-btn is-primary jpv-exam" @click="start('exam')">
+                🎓 Мини-экзамен
+              </button>
             </div>
           </div>
         </section>
@@ -300,6 +346,24 @@ onMounted(load);
   font-size: 24px;
   font-weight: 700;
   margin-bottom: 4px;
+}
+
+.jpv-studies {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.jpv-study-due {
+  margin-left: 4px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(110, 74, 255, 0.25);
+  font-size: 11px;
+}
+
+.jpv-exam {
+  font-size: 15px;
 }
 
 .jpv-start-actions {

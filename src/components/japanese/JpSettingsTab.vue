@@ -11,6 +11,7 @@ import {
   japaneseVoiceName,
 } from "@/components/japaneseApi.js";
 import { jpSoundEnabled, setJpSoundEnabled, jpPlay } from "./jpSound.js";
+import JpStudySettings from "./JpStudySettings.vue";
 
 // Настройки раздела. Всё, кроме темпа новых: его подбирает система, и ручку
 // «столько-то в день» здесь не заводим намеренно — она мгновенно превращается
@@ -246,6 +247,8 @@ onMounted(() => {
           Звуки ответов (на этом устройстве)
         </label>
       </section>
+
+      <JpStudySettings />
 
       <section class="jp-card">
         <h3>Напоминания</h3>
