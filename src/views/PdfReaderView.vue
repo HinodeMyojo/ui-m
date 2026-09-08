@@ -23,6 +23,7 @@
                 :estimatedReadingTime="estimatedReadingTime" :canPrev="canPrev" :canNext="canNext"
                 :isCurrentPageBookmarked="isCurrentPageBookmarked"
                 :hoverTranslate="hoverMode"
+                :canSetGoal="!!libraryFileId" :hasGoal="!!sessionGoal"
                 @prev-page="prevPage" @next-page="nextPage" @jump-to-page="goToPage"
                 @zoom-in="zoomTo(Math.min(4, +(zoomLevel + 0.25).toFixed(2)), viewportEl?.clientHeight / 2 ?? 0)"
                 @zoom-out="zoomTo(Math.max(0.25, +(zoomLevel - 0.25).toFixed(2)), viewportEl?.clientHeight / 2 ?? 0)"
@@ -32,6 +33,7 @@
                 @toggle-fullscreen="toggleFullscreen" @toggle-sidebar="toggleSidebar"
                 @toggle-thumbnails="toggleThumbnails" @toggle-search="openSearch" @close-doc="onCloseDoc"
                 @toggle-bookmark="toggleCurrentPage"
+                @open-goal="goalPanelOpen = true"
                 @toggle-hover-translate="hoverMode = !hoverMode"
                 @open-translate-settings="showTranslateSettings = true"
                 @go-home="$router.push('/')" />
@@ -112,6 +114,10 @@
                 @change-langs="onChangeLangs"
                 @add-to-vocab="onModalAddToVocab" />
 
+            <!-- Цель на сессию -->
+            <PdfSessionGoal :visible="goalPanelOpen" :file="libraryDetails" :currentPage="currentPage"
+                @close="goalPanelOpen = false" />
+
             <!-- Translation settings -->
             <PdfTranslationSettings
                 :visible="showTranslateSettings"
@@ -148,6 +154,16 @@
                         <span class="pdf-ri-extra"> · {{ Math.round(sessionSeconds / 60) }} мин</span>
                     </template>
                 </template>
+                <!-- Цель на сессию. На телефоне остаётся, в отличие от остальных
+                     подробностей: ради неё плашку и открывают. По клику — та же
+                     панель, что и по 🎯 на верхней панели. -->
+                <template v-if="libraryFileId">
+                    <span class="pdf-ri-sep"> · </span>
+                    <button class="pdf-ri-goal" :class="{ 'is-done': goalDone }"
+                        :title="goalLabel ? 'Изменить цель на сессию' : 'Поставить цель на сессию'"
+                        @click="goalPanelOpen = true">{{ goalLabel || '🎯 цель' }}</button>
+                    <span v-if="goalEta" class="pdf-ri-extra"> · {{ goalEta }}</span>
+                </template>
             </div>
         </template>
 
@@ -171,6 +187,8 @@ import { usePdfTranslation }    from './pdf-reader/composables/usePdfTranslation
 import { usePdfReadingSync }    from './pdf-reader/composables/usePdfReadingSync.js';
 import { addVocabCard }         from '@/components/api.js';
 import { getPdfDownloadUrl, getPdfDetailsCached } from '@/api/pdfFiles.js';
+import { useSessionGoal }       from '@/composables/useReadingGoal.js';
+import { pagesPerHour, minutesFor, formatDuration } from '@/utils/readingGoal.js';
 import { useRoute, useRouter }  from 'vue-router';
 import { isMobile }             from '@/composables/useIsMobile.js';
 import PdfDropZone              from './pdf-reader/components/PdfDropZone.vue';
@@ -182,6 +200,7 @@ import PdfThumbnailStrip        from './pdf-reader/components/PdfThumbnailStrip.
 import PdfSelectionToolbar      from './pdf-reader/components/PdfSelectionToolbar.vue';
 import PdfTranslationModal      from './pdf-reader/components/PdfTranslationModal.vue';
 import PdfTranslationSettings   from './pdf-reader/components/PdfTranslationSettings.vue';
+import PdfSessionGoal            from './pdf-reader/components/PdfSessionGoal.vue';
 import './pdf-reader/pdf-reader.css';
 
 // ── Core state ────────────────────────────────────────────────────────────
@@ -204,6 +223,31 @@ const { bookmarks, isCurrentPageBookmarked, toggleCurrentPage, removeBookmark, u
 const { details: libraryDetails, sessionSeconds, flush: flushReading } = usePdfReadingSync(
     libraryFileId, pdfDoc, pageCount, currentPage, goToPage,
 );
+// Цель на сессию — docs/pdf-library.md. Ставится и в карточке книги, и здесь:
+// в библиотеку заходят не всегда, «Продолжить чтение» открывает читалку сразу.
+const goalPanelOpen = ref(false);
+const { goal: sessionGoal, pagesRead: goalRead, remaining: goalLeft, done: goalDone } =
+    useSessionGoal(libraryFileId, currentPage);
+
+const goalLabel = computed(() => {
+    if (!sessionGoal.value) return '';
+    const { pages } = sessionGoal.value;
+    return goalDone.value ? `🎯 ${pages}/${pages} стр ✓` : `🎯 ${goalRead.value}/${pages} стр`;
+});
+
+const goalEta = computed(() => {
+    if (!sessionGoal.value || goalDone.value || !goalLeft.value) return '';
+    const rate = pagesPerHour(libraryDetails.value);
+    return `ещё ~${formatDuration(minutesFor(goalLeft.value, rate.value))}`;
+});
+
+// Цель взята — говорим об этом один раз и не мешаем читать дальше.
+watch(goalDone, (done, was) => {
+    if (done && !was && sessionGoal.value) {
+        showToast(`🎯 Цель на сессию взята: ${sessionGoal.value.pages} стр.`);
+    }
+});
+
 const { apiKey, hoverMode, sourceLang, targetLang, isTranslating, translationError, lastTranslation,
         translate, checkApiKey, speakText, stopSpeech,
         analyzeText, analyzeResult, isAnalyzing, analyzeError,

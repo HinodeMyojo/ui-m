@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted } from "vue";
+import { ref, computed, watch, onMounted } from "vue";
 import LibraryCover from "@/components/library/LibraryCover.vue";
 import {
   updatePdfFile,
@@ -10,12 +10,23 @@ import {
   formatPdfSize,
 } from "@/api/pdfFiles.js";
 import { fetchRoadmaps, fetchRoadmapFull } from "@/components/roadmapApi.js";
+import { useSessionGoal } from "@/composables/useReadingGoal.js";
+import {
+  goalTimeLine,
+  goalBookLine,
+  goalPlanLine,
+  goalPlanStatus,
+} from "@/utils/readingGoal.js";
 
-// Карточка книги: метаданные, полка, теги, привязка к пункту roadmap'а.
+// Карточка книги: метаданные, полка, теги, привязка к пункту roadmap'а,
+// цель на текущую сессию чтения.
 
 const props = defineProps({
   file: { type: Object, required: true },
   categories: { type: Array, default: () => [] },
+  // Вся библиотека — только ради темпа чтения: у новой книги своей истории нет,
+  // а средняя по всем книгам всё же ближе к правде, чем оценка из воздуха.
+  library: { type: Array, default: () => [] },
 });
 const emit = defineEmits(["close", "saved", "read"]);
 
@@ -33,6 +44,7 @@ const form = ref({
 
 const roadmapItemId = ref(props.file.roadmapItemId || "");
 const roadmapItems = ref([]);
+const roadmapFull = ref(null);
 const busy = ref(false);
 const error = ref("");
 const replaceInput = ref(null);
@@ -91,6 +103,9 @@ async function loadRoadmapItems() {
     const active = list.find((r) => r.isActive) || list[0];
     if (!active) return;
     const full = await fetchRoadmapFull(active.id);
+    // План держим целиком: по нему считается, что цель на сессию сделает с
+    // отставанием квартала.
+    roadmapFull.value = full;
     const items = [];
     for (const quarter of full.quarters) {
       for (const item of quarter.items) {
@@ -113,6 +128,57 @@ async function loadRoadmapItems() {
 const progressLabel = computed(() => {
   if (!props.file.pageCount) return "объём пока неизвестен";
   return `страница ${props.file.currentPage} из ${props.file.pageCount}`;
+});
+
+// --- Цель на текущую сессию чтения ---
+//
+// Необязательное намерение: сколько страниц хочу осилить прямо сейчас. На
+// сервер не уезжает и умирает вместе со вкладкой — useReadingGoal.js.
+
+const { goal, setPages, clear: clearGoal } = useSessionGoal(props.file.id);
+const goalPages = ref(goal.value?.pages ? String(goal.value.pages) : "");
+
+// Страница, с которой читалка продолжит: от неё и отсчитывается цель.
+const startPage = computed(() => Math.max(1, props.file.currentPage || 1));
+
+const goalNum = computed(() => {
+  const parsed = parseInt(goalPages.value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+});
+
+// Цель ставится сразу, без «Сохранить»: сохранять нечего, это намерение.
+watch(goalNum, (pages) => {
+  if (pages) setPages(pages, startPage.value);
+  else clearGoal();
+});
+
+const pagesLeft = computed(() => Math.max(0, (props.file.pageCount || 0) - startPage.value));
+
+const presets = computed(() => {
+  const list = [10, 25, 50].filter((p) => !pagesLeft.value || p < pagesLeft.value);
+  return pagesLeft.value ? [...list, pagesLeft.value] : list;
+});
+
+const timeLine = computed(() => goalTimeLine(props.file, props.library, goalNum.value));
+const bookLine = computed(() => goalBookLine(props.file, goalNum.value, startPage.value));
+
+// Как дела в плане до всякой цели: от этой цифры и выбирают, сколько читать.
+const planStatus = computed(() => goalPlanStatus(roadmapFull.value, roadmapItemId.value));
+
+const planLine = computed(() => {
+  if (!goalNum.value) return null;
+  const line = goalPlanLine({
+    full: roadmapFull.value,
+    itemId: roadmapItemId.value,
+    pages: goalNum.value,
+    fromPage: startPage.value,
+    pageCount: props.file.pageCount,
+  });
+  if (line) return line;
+  // План есть, а книга ни к чему не привязана — подсказываем, чего не хватает.
+  return roadmapItems.value.length
+    ? { text: "Привяжите книгу к пункту плана — и будет видно, как цель двигает график.", tone: "" }
+    : null;
 });
 
 async function save() {
@@ -247,6 +313,48 @@ onMounted(loadRoadmapItems);
           Привязанная книга сама двигает прогресс пункта: страницы уходят в план, а время
           в читалке — в сессии чтения.
         </p>
+      </div>
+
+      <div class="lb-goal">
+        <div class="lb-goal-head">
+          <label class="lb-label" style="margin: 0">🎯 Цель на эту сессию</label>
+          <button v-if="goalNum" class="lb-btn is-small" @click="goalPages = ''">Сбросить</button>
+        </div>
+
+        <div class="lb-row">
+          <input
+            v-model="goalPages"
+            class="lb-input lb-goal-input"
+            type="number"
+            min="1"
+            inputmode="numeric"
+            placeholder="стр."
+          />
+          <button
+            v-for="p in presets"
+            :key="p"
+            class="lb-btn is-small"
+            :class="{ 'is-active': goalNum === p }"
+            @click="goalPages = String(p)"
+          >
+            {{ p === pagesLeft ? `до конца · ${p}` : p }}
+          </button>
+        </div>
+
+        <template v-if="goalNum">
+          <div class="lb-sub">{{ timeLine }}</div>
+          <div v-if="bookLine" class="lb-sub">{{ bookLine }}</div>
+          <div v-if="planLine" class="lb-goal-plan" :class="`is-${planLine.tone || 'plain'}`">
+            {{ planLine.text }}
+          </div>
+        </template>
+        <template v-else>
+          <div v-if="planStatus" class="lb-goal-plan">{{ planStatus }}</div>
+          <p class="lb-sub" style="margin: 0">
+            Необязательно. Сколько страниц хочется осилить прямо сейчас — посчитаю время и
+            что это даст плану. Цель живёт до закрытия вкладки: это намерение, а не обещание.
+          </p>
+        </template>
       </div>
 
       <div>

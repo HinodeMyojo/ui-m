@@ -941,6 +941,114 @@ body.pdf-dark {
     pointer-events: none;
 }
 
+/* Цель на сессию: единственное в плашке, что остаётся на телефоне — ради неё
+   туда и смотрят. Сама плашка не ловит клики, а этот чип ловит: по нему
+   открывается та же панель, что и по 🎯 на верхней панели. */
+.pdf-ri-goal {
+    pointer-events: auto;
+    cursor: pointer;
+    background: none;
+    border: none;
+    padding: 0;
+    font: inherit;
+    color: var(--pdf-text);
+    font-weight: 500;
+}
+
+.pdf-ri-goal:hover {
+    text-decoration: underline;
+}
+
+.pdf-ri-goal.is-done {
+    color: #63c94f;
+}
+
+/* ── Панель цели на сессию ───────────────────────────────────────────────── */
+.pdf-goal-panel {
+    background: var(--pdf-toolbar-bg);
+    border: 1px solid var(--pdf-toolbar-border);
+    border-radius: 12px;
+    width: min(460px, 92vw);
+    box-shadow: 0 20px 60px rgba(0, 0, 0, .4);
+    font-family: inherit;
+    overflow: hidden;
+}
+
+.pdf-goal-body {
+    padding: 14px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.pdf-goal-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.pdf-goal-input {
+    width: 90px;
+    background: var(--pdf-page-bg, #f0f0f0);
+    border: 1px solid var(--pdf-toolbar-border);
+    border-radius: 6px;
+    color: var(--pdf-text);
+    font-family: inherit;
+    font-size: 14px;
+    padding: 7px 10px;
+}
+
+.pdf-goal-preset {
+    padding: 7px 10px;
+    border: 1px solid var(--pdf-border);
+    border-radius: 6px;
+    background: transparent;
+    color: var(--pdf-text);
+    font-family: inherit;
+    font-size: 12px;
+    cursor: pointer;
+    transition: background .15s, border-color .15s;
+}
+
+.pdf-goal-preset:hover { background: var(--pdf-hover); }
+
+.pdf-goal-preset.active {
+    background: #4285f4;
+    border-color: #4285f4;
+    color: #fff;
+}
+
+.pdf-goal-line {
+    font-size: 13px;
+    line-height: 1.45;
+    color: var(--pdf-text-secondary);
+}
+
+.pdf-goal-line.is-late { color: #d9822b; }
+.pdf-goal-line.is-ahead,
+.pdf-goal-line.is-ok { color: #34a853; }
+
+.pdf-goal-foot {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 16px 14px;
+    border-top: 1px solid var(--pdf-toolbar-border);
+}
+
+/* На телефоне поля меньше 16px заставляют Safari зумить страницу при фокусе. */
+@media (max-width: 768px) {
+    .pdf-goal-input {
+        font-size: 16px;
+        min-height: 42px;
+    }
+
+    .pdf-goal-preset {
+        min-height: 40px;
+    }
+}
+
 /* ── Translation backdrop & modal ────────────────────────────────────────── */
 .pdf-translate-backdrop {
     position: fixed;

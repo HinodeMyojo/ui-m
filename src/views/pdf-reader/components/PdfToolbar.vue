@@ -30,6 +30,9 @@
             <button class="pdf-tb-btn pdf-tb-secondary" @click="emit('toggle-sidebar')" :class="{ active: showSidebar }" title="Панель">☰</button>
             <button class="pdf-tb-btn pdf-tb-secondary" @click="emit('toggle-thumbnails')" :class="{ active: showThumbnails }" title="Миниатюры">⊞</button>
             <div class="pdf-tb-divider pdf-tb-secondary"></div>
+            <button v-if="canSetGoal" class="pdf-tb-btn" @click="emit('open-goal')"
+                :class="{ active: hasGoal }"
+                :title="hasGoal ? 'Цель на сессию' : 'Поставить цель на сессию'">🎯</button>
             <button class="pdf-tb-btn pdf-tb-secondary" @click="emit('toggle-bookmark')"
                 :class="{ bookmarked: isCurrentPageBookmarked }"
                 :title="isCurrentPageBookmarked ? 'Удалить закладку (B)' : 'Добавить закладку (B)'">🔖</button>
@@ -71,13 +74,17 @@ defineProps({
     canPrev: Boolean, canNext: Boolean,
     isCurrentPageBookmarked: Boolean,
     hoverTranslate: Boolean,
+    // Цель на сессию есть только у книги из библиотеки: у файла с диска нет id,
+    // а значит и сессии, к которой её можно привязать.
+    canSetGoal: Boolean,
+    hasGoal: Boolean,
 });
 const emit = defineEmits([
     'prev-page', 'next-page', 'jump-to-page',
     'zoom-in', 'zoom-out', 'fit-width', 'fit-page',
     'toggle-dark', 'toggle-night', 'night-brightness-down', 'night-brightness-up',
     'toggle-fullscreen', 'toggle-sidebar', 'toggle-thumbnails',
-    'toggle-search', 'close-doc', 'toggle-bookmark',
+    'toggle-search', 'close-doc', 'toggle-bookmark', 'open-goal',
     'toggle-hover-translate', 'open-translate-settings', 'go-home',
 ]);
 </script>

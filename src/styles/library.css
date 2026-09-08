@@ -441,6 +441,47 @@
   color: var(--lb-text);
 }
 
+/* --- Цель на сессию чтения ---
+   Намерение перед тем, как сесть читать: страницы, время и сдвиг графика.
+   Отдельной рамкой, потому что это единственный блок карточки, который никуда
+   не сохраняется. */
+
+.lb-goal {
+  border: 1px solid var(--lb-line-2);
+  border-radius: 10px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: var(--lb-card-2);
+}
+
+.lb-goal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.lb-goal-input {
+  width: 90px;
+}
+
+.lb-goal-plan {
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--lb-muted);
+}
+
+.lb-goal-plan.is-late {
+  color: var(--lb-warn);
+}
+
+.lb-goal-plan.is-ahead,
+.lb-goal-plan.is-ok {
+  color: var(--lb-ok);
+}
+
 /* --- Телефон -------------------------------------------------------------
    Полка сама по себе ложится в две колонки — сетка обложек этого и хотела.
    Править надо не раскладку, а размеры: кнопки в 31px мимо пальца, а поля
@@ -477,6 +518,12 @@
 
   .lb-textarea {
     min-height: 90px;
+  }
+
+  /* Поле цели рядом с пресетами: три цифры влезают и в 80 точек, а строку
+     целиком оно бы отняло у кнопок «25 / 50 / до конца». */
+  .lb-goal-input {
+    width: 80px;
   }
 
   /* Поиск занимает строку целиком — с ним работают чаще, чем с фильтрами. */

@@ -383,6 +383,7 @@ onMounted(load);
       v-if="selected"
       :file="selected"
       :categories="categories"
+      :library="files"
       @close="selected = null"
       @saved="onSaved"
       @read="readBook(selected)"
