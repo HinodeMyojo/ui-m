@@ -218,6 +218,13 @@ export const updateSportSet = (id, data) =>
   sportFetch(`/sets/${id}`, { method: "PUT", body: JSON.stringify(data) });
 export const deleteSportSet = (id) => sportFetch(`/sets/${id}`, { method: "DELETE" });
 
+// Круг: один подход в каждом упражнении разом. Для круговой тренировки —
+// основной способ отмечать сделанное, галочки остаются на правки.
+export const markSportRound = (workoutId) =>
+  sportFetch(`/workouts/${workoutId}/round`, { method: "POST" });
+export const undoSportRound = (workoutId) =>
+  sportFetch(`/workouts/${workoutId}/round`, { method: "DELETE" });
+
 // --- план ---
 
 export const fetchSportTemplates = (archived = false) => sportFetch(`/templates${q({ archived })}`);
@@ -230,6 +237,11 @@ export const deleteSportTemplate = (id) => sportFetch(`/templates/${id}`, { meth
 export const applySportTemplate = (id, data) =>
   sportFetch(`/templates/${id}/apply`, { method: "POST", body: JSON.stringify(data) });
 
+// История шаблона. Снимок пишется сам, перед каждым изменением состава.
+export const fetchSportTemplateVersions = (id) => sportFetch(`/templates/${id}/versions`);
+export const restoreSportTemplateVersion = (id, no) =>
+  sportFetch(`/templates/${id}/versions/${no}/restore`, { method: "POST" });
+
 export const fetchSportPrograms = () => sportFetch("/programs");
 export const fetchSportProgram = (id) => sportFetch(`/programs/${id}`);
 export const createSportProgram = (data) =>
@@ -237,8 +249,16 @@ export const createSportProgram = (data) =>
 export const updateSportProgram = (id, data) =>
   sportFetch(`/programs/${id}`, { method: "PUT", body: JSON.stringify(data) });
 export const deleteSportProgram = (id) => sportFetch(`/programs/${id}`, { method: "DELETE" });
+// mode: "fill" — дописать недостающее; "replace" — пересобрать период с нуля.
 export const rolloutSportProgram = (id, data) =>
   sportFetch(`/programs/${id}/rollout`, { method: "POST", body: JSON.stringify(data) });
+// Убрать раскатанное за период. Тренировки с отметками остаются: план можно
+// переложить, сделанное — нет.
+export const clearSportRollout = (id, data) =>
+  sportFetch(`/programs/${id}/rollout`, { method: "DELETE", body: JSON.stringify(data) });
+// Начать цикл заново с новой даты, не заводя копию программы.
+export const restartSportProgram = (id, data) =>
+  sportFetch(`/programs/${id}/restart`, { method: "POST", body: JSON.stringify(data) });
 
 export const fetchSportWeekPlans = (from, to) => sportFetch(`/week-plans${q({ from, to })}`);
 export const fetchSportWeekPlan = (weekStart) => sportFetch(`/week-plans/${weekStart}`);

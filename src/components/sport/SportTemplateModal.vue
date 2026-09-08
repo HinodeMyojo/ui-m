@@ -6,6 +6,8 @@ import {
   createSportTemplate,
   updateSportTemplate,
   deleteSportTemplate,
+  fetchSportTemplateVersions,
+  restoreSportTemplateVersion,
   SPORT_SET_FIELDS,
 } from "@/components/sportApi.js";
 
@@ -18,6 +20,42 @@ const busy = ref(false);
 const adding = ref("");
 
 const form = ref({ title: "", note: "", color: "#6e4aff", exercises: [] });
+
+// История изменений. Снимок снимается сам, перед каждой правкой состава, —
+// поэтому список наполняется по ходу работы, а не по кнопке «сохранить версию».
+const versions = ref([]);
+const showVersions = ref(false);
+const openVersion = ref(null);
+
+async function loadVersions() {
+  if (!props.templateId) return;
+  versions.value = await fetchSportTemplateVersions(props.templateId).catch(() => []);
+}
+
+async function restoreVersion(no) {
+  if (!confirm(`Вернуть состав версии ${no}?
+
+Текущий тоже сохранится в истории.`)) return;
+  busy.value = true;
+  error.value = "";
+  try {
+    await restoreSportTemplateVersion(props.templateId, no);
+    emit("saved");
+  } catch (e) {
+    error.value = e.message || "не удалось вернуть версию";
+    busy.value = false;
+  }
+}
+
+// Подпись подхода в истории: «15 повт.», «8 × 60 кг».
+function setLabel(set) {
+  const parts = [];
+  if (set.reps != null) parts.push(`${set.reps} повт.`);
+  if (set.weight != null) parts.push(`${set.weight} кг`);
+  if (set.duration != null) parts.push(`${set.duration} с`);
+  if (set.distance != null) parts.push(`${set.distance} м`);
+  return parts.join(" × ") || "—";
+}
 
 function exerciseById(id) {
   return exercises.value.find((e) => e.id === id) || { fields: ["reps", "weight"] };
@@ -47,6 +85,7 @@ onMounted(async () => {
   } catch (e) {
     error.value = e.message || "не удалось загрузить шаблон";
   }
+  await loadVersions();
 });
 
 function addExercise() {
@@ -183,9 +222,48 @@ async function remove() {
         </div>
       </div>
 
+      <div v-if="templateId && showVersions" class="sp-versions">
+        <div class="sp-muted">
+          Снимок состава пишется сам, перед каждым изменением. Так видно, с чем
+          вы шли прошлый цикл: было пятнадцать повторений — стало восемнадцать.
+        </div>
+        <div v-if="!versions.length" class="sp-empty">
+          Пока пусто: история появится после первой правки состава.
+        </div>
+        <div v-for="v in versions" :key="v.no" class="sp-version">
+          <div class="sp-row">
+            <strong>Версия {{ v.no }}</strong>
+            <span class="sp-muted">{{ v.summary }} · {{ v.createdAt }}</span>
+            <div class="sp-spacer"></div>
+            <button
+              class="sp-btn sp-btn-sm"
+              @click="openVersion = openVersion === v.no ? null : v.no"
+            >
+              {{ openVersion === v.no ? "Свернуть" : "Что было" }}
+            </button>
+            <button class="sp-btn sp-btn-sm" :disabled="busy" @click="restoreVersion(v.no)">
+              Вернуть
+            </button>
+          </div>
+          <div v-if="openVersion === v.no" class="sp-version-body">
+            <div v-for="(ex, i) in v.exercises" :key="i" class="sp-muted">
+              {{ ex.exercise?.emoji }} {{ ex.exercise?.title || "упражнение удалено" }} —
+              {{ ex.sets.map(setLabel).join(", ") }}
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div class="sp-modal-foot">
         <button v-if="templateId" class="sp-btn is-danger" :disabled="busy" @click="remove">
           Удалить
+        </button>
+        <button
+          v-if="templateId"
+          class="sp-btn sp-btn-sm"
+          @click="showVersions = !showVersions"
+        >
+          История ({{ versions.length }})
         </button>
         <div class="sp-spacer"></div>
         <button class="sp-btn" @click="emit('close')">Отмена</button>
@@ -206,5 +284,28 @@ async function remove() {
   width: 74px;
   min-height: 28px;
   padding: 3px 6px;
+}
+
+.sp-versions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 14px;
+  border-top: 1px solid #2e2e3a;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.sp-version {
+  border: 1px solid #262a35;
+  border-radius: 8px;
+  padding: 8px;
+}
+
+.sp-version-body {
+  margin-top: 6px;
+  padding-left: 8px;
+  border-left: 2px solid #2e2660;
+  line-height: 1.5;
 }
 </style>

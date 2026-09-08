@@ -7,6 +7,8 @@ import {
   upsertSportWeekPlan,
   applySportTemplate,
   rolloutSportProgram,
+  clearSportRollout,
+  restartSportProgram,
   fetchSportWorkouts,
   fetchSportExercises,
   moveSportWorkout,
@@ -116,21 +118,68 @@ async function applyTemplate() {
   }
 }
 
-async function rollout(program) {
+// Управление раскаткой. Открывается на программу и помнит выбранный
+// промежуток: перекладывать план обычно приходится не один раз подряд.
+const rolloutFor = ref(null); // { id, from, to, mode }
+
+function openRollout(program) {
+  const weeks = program.weeks || 4;
+  rolloutFor.value = {
+    id: program.id,
+    title: program.title,
+    startDate: program.startDate,
+    weeks,
+    from: props.today,
+    to: sportShiftDate(props.today, weeks * 7 - 1),
+    mode: "fill",
+    restartFrom: props.today,
+  };
+}
+
+function rolloutSummary(result) {
+  const parts = [];
+  if (result.removed) parts.push(`убрано ${result.removed}`);
+  if (result.created) parts.push(`создано ${result.created}`);
+  if (result.updated) parts.push(`обновлено ${result.updated}`);
+  if (result.skipped) parts.push(`пропущено, уже сделаны — ${result.skipped}`);
+  return parts.length ? parts.join(", ") : "менять было нечего";
+}
+
+async function runRollout(fn, ...args) {
   busy.value = true;
   info.value = "";
+  error.value = "";
   try {
-    const result = await rolloutSportProgram(program.id, {
-      from: props.today,
-      to: sportShiftDate(props.today, 28),
-    });
-    info.value = `Создано ${result.created}, обновлено ${result.updated}, пропущено (уже выполнены) ${result.skipped}`;
+    info.value = rolloutSummary(await fn(...args));
     await load();
   } catch (e) {
-    error.value = e.message || "не удалось раскатать программу";
+    error.value = e.message || "не удалось изменить план";
   } finally {
     busy.value = false;
   }
+}
+
+function applyRollout() {
+  const r = rolloutFor.value;
+  return runRollout(rolloutSportProgram, r.id, { from: r.from, to: r.to, mode: r.mode });
+}
+
+function clearRollout() {
+  const r = rolloutFor.value;
+  if (!confirm(`Убрать запланированные тренировки с ${r.from} по ${r.to}?
+
+Выполненные останутся.`)) return;
+  return runRollout(clearSportRollout, r.id, { from: r.from, to: r.to });
+}
+
+function restartProgram() {
+  const r = rolloutFor.value;
+  if (!confirm(`Начать «${r.title}» заново с ${r.restartFrom} на ${r.weeks} нед.?`)) return;
+  return runRollout(restartSportProgram, r.id, {
+    startDate: r.restartFrom,
+    weeks: Number(r.weeks) || null,
+    replace: true,
+  });
 }
 
 async function move(workout, days) {
@@ -157,6 +206,18 @@ onMounted(load);
   <div style="display: flex; flex-direction: column; gap: 12px">
     <div v-if="error" class="sp-error">{{ error }}</div>
     <div v-if="info" class="sp-card" style="border-color: #63c94f">{{ info }}</div>
+
+    <!-- Что где менять. Вопрос «почему программа не правится» возникает
+         каждый раз: упражнения и повторы лежат не в ней, а в шаблоне. -->
+    <div class="sp-card sp-howto sp-muted">
+      <b>Шаблон</b> — состав тренировки: какие упражнения, сколько подходов и повторов.
+      Меняете повторы с 15 на 18 — значит меняете шаблон.
+      <b>Программа</b> — расписание: какой шаблон в какой день недели и сколько недель подряд.
+      Она берёт состав из шаблонов, своего у неё нет.
+      <br />
+      Правки в шаблоне сами по себе не переписывают уже разложенные тренировки —
+      для этого у программы есть «План на календарь».
+    </div>
 
     <div class="sp-grid">
       <!-- Шаблоны -->
@@ -210,7 +271,61 @@ onMounted(load);
             </span>
             <div class="sp-spacer"></div>
             <button class="sp-btn sp-btn-sm" @click="programModal = { id: p.id }">Изменить</button>
-            <button class="sp-btn sp-btn-sm" :disabled="busy" @click="rollout(p)">Раскатать</button>
+            <button class="sp-btn sp-btn-sm" :disabled="busy" @click="openRollout(p)">План на календарь…</button>
+          </div>
+
+          <!-- Раскатка. Собрана в одном месте, потому что все три действия —
+               про одно и то же: что программа кладёт в календарь и на какие
+               дни. Порознь их приходилось бы искать по разным экранам. -->
+          <div v-if="rolloutFor && rolloutFor.id === p.id" class="sp-rollout">
+            <div class="sp-row">
+              <div class="sp-field" style="width: 150px">
+                <label>С</label>
+                <input v-model="rolloutFor.from" class="sp-input" type="date" />
+              </div>
+              <div class="sp-field" style="width: 150px">
+                <label>По</label>
+                <input v-model="rolloutFor.to" class="sp-input" type="date" />
+              </div>
+              <div class="sp-field" style="flex: 1; min-width: 220px">
+                <label>Что делать с уже разложенным</label>
+                <select v-model="rolloutFor.mode" class="sp-select">
+                  <option value="fill">дописать недостающее</option>
+                  <option value="replace">переложить заново</option>
+                </select>
+              </div>
+            </div>
+            <div class="sp-muted">
+              «Дописать» добавит недостающие дни и обновит нетронутые тренировки.
+              «Переложить заново» сначала уберёт их — так уходят упражнения,
+              которых в шаблоне больше нет. Выполненные тренировки не трогает ни то, ни другое.
+            </div>
+            <div class="sp-row">
+              <button class="sp-btn is-primary" :disabled="busy" @click="applyRollout">
+                Разложить по календарю
+              </button>
+              <button class="sp-btn sp-btn-sm is-danger" :disabled="busy" @click="clearRollout">
+                Убрать из календаря
+              </button>
+            </div>
+
+            <div class="sp-row" style="border-top: 1px solid #2e2e3a; padding-top: 10px">
+              <div class="sp-field" style="width: 150px">
+                <label>Начать заново с</label>
+                <input v-model="rolloutFor.restartFrom" class="sp-input" type="date" />
+              </div>
+              <div class="sp-field" style="width: 110px">
+                <label>Недель</label>
+                <input v-model.number="rolloutFor.weeks" class="sp-input" type="number" min="1" />
+              </div>
+              <button class="sp-btn" :disabled="busy" @click="restartProgram">
+                Начать цикл заново
+              </button>
+            </div>
+            <div class="sp-muted">
+              Повторить закончившуюся программу: недели считаются заново от новой даты.
+              Копию заводить не нужно — расписание и прогрессия остаются те же.
+            </div>
           </div>
           <div class="sp-muted">
             <template v-for="d in p.days" :key="d.id">
@@ -377,6 +492,28 @@ onMounted(load);
 }
 
 .sp-plan-title:hover {
+  color: #b7a6ff;
+}
+
+.sp-rollout {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 10px;
+  border: 1px solid #2e2660;
+  border-radius: 10px;
+  background: #1b1d24;
+}
+
+.sp-howto {
+  border: 1px solid #2e2e3a;
+  border-radius: 10px;
+  padding: 10px 12px;
+  line-height: 1.5;
+}
+
+.sp-howto b {
   color: #b7a6ff;
 }
 </style>

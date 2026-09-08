@@ -6,6 +6,8 @@ import {
   fetchSportTodayData,
   setSportEntry,
   updateSportSet,
+  markSportRound,
+  undoSportRound,
   uploadSportPhotos,
   quickSportWorkout,
   fetchSportExercises,
@@ -75,6 +77,34 @@ async function toggleSet(set) {
   } finally {
     busy.value = false;
   }
+}
+
+// Круг: одна кнопка вместо галочки на каждое упражнение. Именно здесь она
+// нужнее всего — этот экран открыт во время тренировки, с телефона в руке.
+async function round(workout, fn) {
+  busy.value = true;
+  error.value = "";
+  try {
+    await fn(workout.id);
+    await load();
+  } catch (e) {
+    error.value = e.message || "не удалось отметить круг";
+  } finally {
+    busy.value = false;
+  }
+}
+
+// Сколько кругов закрыто — по самому отстающему упражнению.
+function roundsDone(workout) {
+  const list = workout.exercises || [];
+  if (!list.length) return 0;
+  return Math.min(...list.map((ex) => ex.sets.filter((s) => s.done).length));
+}
+
+function roundsPlanned(workout) {
+  const list = workout.exercises || [];
+  if (!list.length) return 0;
+  return Math.max(...list.map((ex) => ex.sets.length));
 }
 
 async function finish(workout) {
@@ -230,6 +260,19 @@ onMounted(async () => {
             </button>
           </div>
         </div>
+        <div v-if="(w.exercises || []).length > 1" class="spm-round">
+          <button class="sp-btn is-primary spm-round-btn" :disabled="busy" @click="round(w, markSportRound)">
+            ✓ Круг {{ roundsDone(w) + 1 }}
+          </button>
+          <button
+            class="sp-btn spm-round-undo"
+            :disabled="busy || !roundsDone(w)"
+            @click="round(w, undoSportRound)"
+          >
+            ↶
+          </button>
+          <span class="sp-muted">{{ roundsDone(w) }} из {{ roundsPlanned(w) }}</span>
+        </div>
         <button class="sp-btn spm-finish" :disabled="busy" @click="finish(w)">Завершить</button>
       </div>
 
@@ -347,6 +390,26 @@ onMounted(async () => {
 .spm-ex {
   margin-top: 8px;
   font-size: 14px;
+}
+
+.spm-round {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+/* Кнопка круга — основная во время тренировки, поэтому крупная: по ней
+   попадают потными руками, не глядя. */
+.spm-round-btn {
+  flex: 1;
+  min-height: 46px;
+  font-size: 1.05rem;
+}
+
+.spm-round-undo {
+  min-width: 46px;
+  min-height: 46px;
 }
 
 .spm-sets {

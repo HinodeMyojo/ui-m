@@ -13,6 +13,8 @@ import {
   addSportSet,
   updateSportSet,
   deleteSportSet,
+  markSportRound,
+  undoSportRound,
   SPORT_SET_FIELDS,
   SPORT_STATUS_LABELS,
   SPORT_PR_LABELS,
@@ -116,6 +118,45 @@ async function saveSet(set, patch = {}) {
 async function toggleDone(set) {
   await saveSet(set, { done: !set.done });
 }
+
+// Круг — для тренировок, которые делают не упражнение за упражнением, а
+// по кругу: пресс, комплексы, разминочные серии. Одна кнопка вместо галочки
+// на каждое упражнение после каждого круга.
+const roundNote = ref("");
+
+async function round(fn, restAfter) {
+  busy.value = true;
+  error.value = "";
+  try {
+    const result = await fn(props.workoutId);
+    roundNote.value = restAfter
+      ? `Круг ${result.round} закрыт` + (result.added ? ` · дописано подходов: ${result.added}` : "")
+      : `Откат` + (result.removed ? ` · убрано дописанных: ${result.removed}` : "");
+    setTimeout(() => (roundNote.value = ""), 4000);
+    if (restAfter) startRest(90);
+    await load();
+    emit("changed");
+  } catch (e) {
+    error.value = e.message || "не удалось отметить круг";
+  } finally {
+    busy.value = false;
+  }
+}
+
+// Сколько кругов закрыто: по самому отстающему упражнению. Пока во всех
+// упражнениях не отмечено по подходу, круг не считается закрытым.
+const roundsDone = computed(() => {
+  const list = workout.value?.exercises || [];
+  if (!list.length) return 0;
+  return Math.min(...list.map((ex) => ex.sets.filter((s) => s.done).length));
+});
+
+// Сколько кругов заложено планом — по упражнению с наибольшим числом подходов.
+const roundsPlanned = computed(() => {
+  const list = workout.value?.exercises || [];
+  if (!list.length) return 0;
+  return Math.max(...list.map((ex) => ex.sets.length));
+});
 
 // Новый подход повторяет предыдущий: в зале обычно меняется только вес.
 async function addSet(ex) {
@@ -313,6 +354,26 @@ onMounted(async () => {
             </span>
           </div>
 
+          <!-- Круговая отметка. Стоит над списком упражнений, потому что
+               относится к тренировке целиком, а не к какому-то одному. -->
+          <div v-if="workout.exercises.length > 1" class="sp-round">
+            <button class="sp-btn is-primary" :disabled="busy" @click="round(markSportRound, true)">
+              ✓ Круг сделан
+            </button>
+            <button
+              class="sp-btn sp-btn-sm"
+              :disabled="busy || !roundsDone"
+              @click="round(undoSportRound, false)"
+            >
+              ↶ Отменить круг
+            </button>
+            <span class="sp-muted">
+              Круг {{ roundsDone }} из {{ roundsPlanned }} · отмечает по подходу в каждом упражнении
+            </span>
+            <div class="sp-spacer"></div>
+            <span v-if="roundNote" class="sp-round-note">{{ roundNote }}</span>
+          </div>
+
           <div v-for="(ex, exIndex) in workout.exercises" :key="ex.id" class="sp-ex">
             <div class="sp-row">
               <strong>{{ ex.exercise.emoji }} {{ ex.exercise.title }}</strong>
@@ -334,7 +395,9 @@ onMounted(async () => {
                     <th v-for="f in fieldsOf(ex)" :key="f.code">
                       {{ f.label }}<span v-if="f.unit" class="sp-muted">, {{ f.unit }}</span>
                     </th>
-                    <th style="width: 60px">разм.</th>
+                    <th style="width: 74px" title="Разминочный подход: не идёт в рекорды и в объём">
+                      разминка
+                    </th>
                     <th style="width: 34px"></th>
                   </tr>
                 </thead>
@@ -362,6 +425,7 @@ onMounted(async () => {
                       <input
                         type="checkbox"
                         :checked="set.isWarmup"
+                        title="Разминочный подход: не идёт в рекорды и в объём"
                         @change="saveSet(set, { isWarmup: !set.isWarmup })"
                       />
                     </td>
@@ -422,6 +486,21 @@ onMounted(async () => {
 </template>
 
 <style scoped>
+.sp-round {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px 12px;
+  border: 1px solid #2e2660;
+  border-radius: 10px;
+  background: #1d1b2e;
+}
+.sp-round-note {
+  color: #7ee0a5;
+  font-size: 0.9rem;
+}
+
 .sp-ex {
   border: 1px solid #232631;
   border-radius: 10px;
