@@ -5,6 +5,7 @@ import { createPinia } from "pinia";
 
 import App from "./App.vue";
 import router from "./router";
+import { startSessionWatch } from "./components/session";
 
 // Vuetify отсюда убран. Он подключался целиком — все компоненты, все стили и
 // шрифт Material Design Icons — ради ровно двух <v-icon> со стрелками месяца на
@@ -18,6 +19,11 @@ app.use(createPinia());
 app.use(router);
 
 app.mount("#app");
+
+// Токен доступа живёт полчаса, а читают его из localStorage полтора десятка
+// модулей напрямую. Поэтому обновляем фоном: модулям ничего знать не нужно,
+// в хранилище всегда лежит действительный токен.
+startSessionWatch();
 
 // Офлайн для модуля «Путешествия»: данные читаются из кэша, а правки,
 // сделанные без сети, ждут в очереди и уходят, когда связь вернётся.

@@ -1,24 +1,39 @@
 import router from "@/router";
+import {
+  clearSession,
+  ensureFreshToken,
+  getToken,
+  refreshSession,
+  saveSession,
+} from "./session";
 
 export const API_BASE_URL = import.meta.env.VITE_API_URL || `${window.location.protocol}//82.202.136.167:5005`;
 
-export async function authorizedFetch(url, options = {}) {
-  const token = localStorage.getItem("token");
-
-  // Создаем объект с заголовками, добавляя Authorization, если токен есть
-  const headers = {
-    "Content-Type": "application/json", // по умолчанию
-    ...options.headers, // кастомные заголовки сверху
-    ...(token ? { Authorization: `Bearer ${token}` } : {}), // Authorization сверху
-  };
-
-  const response = await fetch(url, {
+function withAuth(options, token) {
+  return {
     ...options,
-    headers,
-  });
+    headers: {
+      "Content-Type": "application/json", // по умолчанию
+      ...options.headers, // кастомные заголовки сверху
+      ...(token ? { Authorization: `Bearer ${token}` } : {}), // Authorization сверху
+    },
+  };
+}
+
+export async function authorizedFetch(url, options = {}) {
+  // Токен живёт полчаса, поэтому перед запросом убеждаемся, что он ещё жив.
+  await ensureFreshToken();
+
+  let response = await fetch(url, withAuth(options, getToken()));
+
+  // Одна повторная попытка: между проверкой и запросом токен мог истечь, а
+  // терять из-за этого набранный текст обидно.
+  if (response.status === 401 && (await refreshSession())) {
+    response = await fetch(url, withAuth(options, getToken()));
+  }
 
   if (response.status === 401) {
-    localStorage.removeItem("token");
+    clearSession();
     router.push("/login");
     throw new Error("Unauthorized");
   }
@@ -26,27 +41,111 @@ export async function authorizedFetch(url, options = {}) {
   return response;
 }
 
-export async function login(password) {
-  let response;
-  try {
-    response = await fetch(`${API_BASE_URL}/api/v1/auth/login`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        login: "hinode",
-        password: password,
-      }),
-    });
+// authRequest — ручки входа и восстановления. Идут без токена: их вызывают
+// как раз тогда, когда войти ещё не получилось.
+async function authRequest(path, body) {
+  const response = await fetch(`${API_BASE_URL}/api/v1/auth/${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
 
-    const data = await response.json();
-    if (!response.ok) {
-      throw data.error;
-    }
-    localStorage.setItem("token", data.token.accessToken);
-    return;
-  } catch (error) {
-    throw error;
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw data.error || "Не получилось. Попробуйте ещё раз.";
   }
+  return data;
+}
+
+export async function login(userLogin, password) {
+  const data = await authRequest("login", { login: userLogin, password });
+  saveSession(data);
+  return data.user;
+}
+
+export async function register(userLogin, password, displayName) {
+  const data = await authRequest("register", {
+    login: userLogin,
+    password,
+    displayName,
+  });
+  saveSession(data);
+  return data.user;
+}
+
+// forgotPassword просит код на почту. Сервер отвечает одинаково и когда логин
+// найден, и когда нет, — по разнице ответов иначе легко узнать, кто заведён.
+export function forgotPassword(userLogin) {
+  return authRequest("forgot-password", { login: userLogin });
+}
+
+export function resetPassword(userLogin, code, newPassword) {
+  return authRequest("reset-password", { login: userLogin, code, newPassword });
+}
+
+export async function logout() {
+  const refreshToken = localStorage.getItem("refreshToken");
+  try {
+    await authorizedFetch(`${API_BASE_URL}/api/v1/auth/logout`, {
+      method: "POST",
+      body: JSON.stringify({ refreshToken }),
+    });
+  } catch {
+    // Выход не должен застревать из-за сети: локальную сессию гасим в любом
+    // случае, а серверная догорит сама по сроку.
+  }
+  clearSession();
+  router.push("/login");
+}
+
+export async function fetchMe() {
+  const response = await authorizedFetch(`${API_BASE_URL}/api/v1/auth/me`);
+  return await response.json();
+}
+
+export async function changePassword(oldPassword, newPassword) {
+  const response = await authorizedFetch(
+    `${API_BASE_URL}/api/v1/auth/change-password`,
+    { method: "POST", body: JSON.stringify({ oldPassword, newPassword }) },
+  );
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw data.error || "Не удалось сменить пароль";
+  return data;
+}
+
+export async function setEmail(email) {
+  const response = await authorizedFetch(`${API_BASE_URL}/api/v1/auth/email`, {
+    method: "POST",
+    body: JSON.stringify({ email }),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw data.error || "Не удалось привязать почту";
+  return data;
+}
+
+export async function confirmEmail(code) {
+  const response = await authorizedFetch(
+    `${API_BASE_URL}/api/v1/auth/email/confirm`,
+    { method: "POST", body: JSON.stringify({ code }) },
+  );
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw data.error || "Код неверен или истёк";
+  return data;
+}
+
+export async function fetchUsers() {
+  const response = await authorizedFetch(`${API_BASE_URL}/api/v1/auth/users`);
+  return await response.json();
+}
+
+export async function updateUser(id, changes) {
+  const response = await authorizedFetch(
+    `${API_BASE_URL}/api/v1/auth/users/${id}`,
+    { method: "PUT", body: JSON.stringify(changes) },
+  );
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw data.error || "Не удалось изменить пользователя";
+  return data;
 }
 
 // time
@@ -695,7 +794,11 @@ async function workJson(response, fallback) {
 }
 
 export async function fetchWorkDay(date) {
-  const response = await authorizedFetch(`${W}/day?date=${date}`);
+  // Логический «сегодня» считает клиент (сутки начинаются не в полночь) —
+  // по нему сервер решает, тянуть ли карточки «переносить, пока не закрою».
+  const response = await authorizedFetch(
+    `${W}/day?date=${date}&today=${disciplineLogicalToday()}`,
+  );
   return workJson(response, "не удалось загрузить день");
 }
 
@@ -745,6 +848,28 @@ export async function placeWorkItem(id, data) {
     body: JSON.stringify({ tz: clientTimeZone(), ...data }),
   });
   return workJson(response, "не удалось перенести карточку");
+}
+
+// «Переносить, пока не закрою» — быстрый переключатель прямо с доски.
+export async function setWorkItemCarry(id, autoCarry) {
+  const response = await authorizedFetch(`${W}/items/${id}/carry`, {
+    method: "POST",
+    body: JSON.stringify({ autoCarry }),
+  });
+  if (!response.ok) {
+    throw new Error((await response.json().catch(() => ({}))).error || "не удалось переключить перенос");
+  }
+}
+
+// Многодневная карточка: одна и та же карточка во всех днях диапазона.
+export async function setWorkItemSpan(id, from, to) {
+  const response = await authorizedFetch(`${W}/items/${id}/span`, {
+    method: "POST",
+    body: JSON.stringify({ from, to }),
+  });
+  if (!response.ok) {
+    throw new Error((await response.json().catch(() => ({}))).error || "не удалось задать диапазон");
+  }
 }
 
 export async function unplaceWorkItem(id, date) {

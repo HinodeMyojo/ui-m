@@ -12,6 +12,7 @@ import type {
   CreateSkillLevelRequest,
   CreateSubSkillRequest,
 } from "../types/skillTree";
+import { clearSession } from "../components/session";
 
 const API_BASE = `${window.location.protocol}//82.202.136.167:5005/api/v1/skill-tree`;
 
@@ -29,7 +30,9 @@ async function request<T>(
     },
   });
   if (res.status === 401) {
-    localStorage.removeItem("token");
+    // Гасим сессию целиком: оставленный refresh-токен молча вернул бы
+    // доступ, хотя сервер только что отказал.
+    clearSession();
     window.location.href = "/login";
     throw new Error("Unauthorized");
   }

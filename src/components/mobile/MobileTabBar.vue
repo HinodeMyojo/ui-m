@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import { logout as apiLogout } from "../api.js";
 
 // Нижнее меню мобильного слоя. Четыре раздела, в которые заходят каждый день,
 // и «Ещё» на всё остальное. Пятая вкладка сознательно не раздел, а лист: если
@@ -53,10 +54,11 @@ function go(to) {
   if (route.path !== to) router.push(to);
 }
 
+// Выход гасит и серверную сессию: иначе refresh-токен на чужом телефоне
+// продолжил бы пускать в приложение ещё месяц.
 function logout() {
-  localStorage.removeItem("token");
   sheetOpen.value = false;
-  router.push("/login");
+  apiLogout();
 }
 </script>
 
@@ -89,6 +91,7 @@ function logout() {
             <span class="mtb-cell-label">{{ m.label }}</span>
           </button>
         </div>
+        <button class="mtb-logout" @click="go('/account')">Профиль</button>
         <button class="mtb-logout" @click="logout">Выйти</button>
       </div>
     </div>

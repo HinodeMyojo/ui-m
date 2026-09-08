@@ -28,6 +28,7 @@ import type {
   CreateBudgetPlanItemRequest,
   UpdateBudgetPlanItemRequest,
 } from "../types/budget";
+import { clearSession } from "../components/session";
 
 const API_BASE_URL = `${window.location.protocol}//82.202.136.167:5005`;
 const PREFIX = "/api/v1/budget";
@@ -47,7 +48,9 @@ async function budgetRequest<T>(
   });
 
   if (response.status === 401) {
-    localStorage.removeItem("token");
+    // Гасим сессию целиком: оставленный refresh-токен молча вернул бы
+    // доступ, хотя сервер только что отказал.
+    clearSession();
     window.location.href = "/login";
     throw new Error("Unauthorized");
   }

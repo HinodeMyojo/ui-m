@@ -10,6 +10,7 @@ import {
   fetchTask,
   fetchLearningSkills,
   reorderTasksAPI,
+  logout as apiLogout,
 } from "./api.js";
 import { useRouter } from "vue-router";
 
@@ -610,9 +611,10 @@ onBeforeUnmount(() => {
 
 const router = useRouter();
 
+// Выход гасит и серверную сессию: без этого refresh-токен жил бы ещё месяц,
+// и «выйти» на чужом ноутбуке ничего бы не значило.
 function logout() {
-  localStorage.removeItem("token");
-  router.push("/login");
+  apiLogout();
 }
 
 function formatShortDateRange(start, end) {
@@ -805,6 +807,7 @@ function closeTimeStats() {
         <button class="add-task-btn" @click="openAddModal">
           + Добавить задачу
         </button>
+        <button class="add-task-btn" @click="router.push('/account')">Профиль</button>
         <button class="logout-btn" @click="logout">Выйти</button>
         <button class="version-badge" @click="showBuildInfo = !showBuildInfo" :title="`v${appVersion} · ${buildTime}`">v{{ appVersion }}</button>
         <div v-if="showBuildInfo" class="build-info-popup">
