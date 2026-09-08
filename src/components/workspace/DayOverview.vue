@@ -3,7 +3,12 @@ import { ref, computed, watch, onMounted, onBeforeUnmount } from "vue";
 import confetti from "canvas-confetti";
 import MarkdownView from "./MarkdownView.vue";
 import { AUTUMN_COLORS } from "@/composables/useAutumn.js";
-import { checkTask, createWorkItem, setTaskLogStatus } from "@/components/api.js";
+import {
+  checkTask,
+  createWorkItem,
+  setTaskLogStatus,
+  setWorkItemCarry,
+} from "@/components/api.js";
 
 // Общий вид дня: все карточки разом. Отсюда день не только читают, но и
 // разгребают — карточку можно перетащить в другой статус, закрыть одним
@@ -297,12 +302,45 @@ function excerpt(item) {
   return text.length > 160 ? text.slice(0, 160) + "…" : text;
 }
 
+// Блокеры бывают двух родов: свои у карточки дня и унаследованные от
+// привязанных задач с главной. В счётчик дня идут и те, и те.
 const blockersTotal = computed(() =>
   props.items.reduce(
-    (sum, i) => sum + (i.tasks || []).reduce((s, t) => s + (t.openBlockers || 0), 0),
-    0,
+    (sum, i) =>
+      sum +
+      (i.openBlockers || 0) +
+      (i.tasks || []).reduce((s, t) => s + (t.openBlockers || 0), 0),
+    props.mainSubtasks.reduce((s, sub) => s + (sub.openBlockers || 0), 0),
   ),
 );
+
+// Отметить карточку «переносить, пока не закрою» одним нажатием: выбирать
+// такие задачи приходится пачкой, лезть в редактор ради галочки — долго.
+const carryBusy = ref(new Set());
+
+async function toggleCarry(item, event) {
+  event.stopPropagation();
+  if (carryBusy.value.has(item.id)) return;
+  carryBusy.value = new Set(carryBusy.value).add(item.id);
+  const next = !item.autoCarry;
+  item.autoCarry = next; // отзывчиво: сервер подтвердит на перезагрузке дня
+  try {
+    await setWorkItemCarry(item.id, next);
+    emit("refresh");
+  } catch (e) {
+    item.autoCarry = !next;
+    subError.value = e.message || "не удалось переключить перенос";
+  } finally {
+    const busy = new Set(carryBusy.value);
+    busy.delete(item.id);
+    carryBusy.value = busy;
+  }
+}
+
+// Подпись «день 2 из 5» у многодневной карточки.
+function spanLabel(item) {
+  return (item.spanDays || 1) > 1 ? `${item.spanIndex}/${item.spanDays}` : "";
+}
 
 // --- Награда за закрытие ---
 
@@ -772,6 +810,19 @@ onBeforeUnmount(() => {
                 >{{ item.title }}
               </span>
               <span v-if="item.priority" class="ovw-card-prio">{{ "!".repeat(item.priority) }}</span>
+              <button
+                class="ovw-card-carry ovw-nodrag"
+                :class="{ on: item.autoCarry }"
+                :disabled="carryBusy.has(item.id)"
+                :title="
+                  item.autoCarry
+                    ? 'Переносится на следующий день, пока не закрою — выключить'
+                    : 'Переносить на следующий день, пока не закрою'
+                "
+                @click="toggleCarry(item, $event)"
+              >
+                ↻
+              </button>
             </div>
 
             <div v-if="timeOf(item)" class="ovw-when" :class="timeOf(item).tone">
@@ -818,6 +869,10 @@ onBeforeUnmount(() => {
               </span>
             </div>
 
+            <div v-if="item.openBlockers" class="ovw-card-blocked">
+              🚧 заблокировано — {{ item.openBlockers }}
+            </div>
+
             <div
               v-for="t in (item.tasks || []).filter((x) => x.openBlockers > 0)"
               :key="t.id"
@@ -841,6 +896,24 @@ onBeforeUnmount(() => {
               <span v-if="item.notes?.length" class="ovw-chip">🗒 {{ item.notes.length }}</span>
               <span v-if="item.files?.length" class="ovw-chip">📎 {{ item.files.length }}</span>
               <span v-if="item.tasks?.length" class="ovw-chip">🔗 {{ item.tasks.length }}</span>
+              <span
+                v-if="spanLabel(item)"
+                class="ovw-chip span"
+                :title="`Многодневная: ${item.spanStart} — ${item.spanEnd}`"
+              >
+                ⧉ {{ spanLabel(item) }}
+              </span>
+              <span
+                v-if="item.autoCarry"
+                class="ovw-chip carry"
+                :title="
+                  item.carryCount
+                    ? `Переносится, пока не закрою. Уже ${item.carryCount}×`
+                    : 'Переносится, пока не закрою'
+                "
+              >
+                ↻<template v-if="item.carryCount"> {{ item.carryCount }}</template>
+              </span>
             </div>
           </article>
         </template>
@@ -1475,6 +1548,39 @@ onBeforeUnmount(() => {
   color: #ff9ba0;
   border-color: #6b2b2e;
   background: rgba(229, 72, 77, 0.12);
+}
+
+.ovw-card-carry {
+  background: none;
+  border: none;
+  color: #4a4f5c;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 2px 4px;
+  flex-shrink: 0;
+}
+
+.ovw-card-carry:hover:not(:disabled) {
+  color: #e0b070;
+}
+
+.ovw-card-carry.on {
+  color: #e07b39;
+}
+
+.ovw-card-carry:disabled {
+  opacity: 0.5;
+}
+
+.ovw-chip.span {
+  color: #9ec5ff;
+  border-color: rgba(74, 168, 255, 0.35);
+}
+
+.ovw-chip.carry {
+  color: #e0b070;
+  border-color: rgba(224, 123, 57, 0.4);
 }
 
 /* --- Горящий срок --- */

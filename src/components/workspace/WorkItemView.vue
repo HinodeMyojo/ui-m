@@ -26,6 +26,8 @@ const LINK_ICONS = { doc: "📄", repo: "🐙", video: "🎬", design: "🎨", o
 const busy = ref(false);
 const error = ref("");
 const openLogTaskId = ref(null);
+const newBlocker = ref("");
+const blockerFormOpen = ref(false);
 
 const status = computed(() => STATUSES.find((s) => s.key === props.item.status) || STATUSES[0]);
 
@@ -34,6 +36,18 @@ const checkProgress = computed(() => {
   const total = checks.value.length;
   const done = checks.value.filter((c) => c.done).length;
   return { total, done, percent: total ? Math.round((done / total) * 100) : 0 };
+});
+
+// Блокеры карточки дня: открытые сверху, снятые остаются историей.
+const blockers = computed(() => props.item.blockers || []);
+const openBlockers = computed(() => blockers.value.filter((b) => !b.resolved).length);
+
+// Карточка может стоять в нескольких днях подряд — тогда это один и тот же
+// её экземпляр, и подпись показывает, какой это день из диапазона.
+const spanLabel = computed(() => {
+  const days = props.item.spanDays || 1;
+  if (days < 2) return "";
+  return `день ${props.item.spanIndex} из ${days}`;
 });
 
 const notes = computed(() =>
@@ -47,6 +61,7 @@ const isBare = computed(
   () =>
     !props.item.body?.trim() &&
     !checks.value.length &&
+    !blockers.value.length &&
     !props.item.links?.length &&
     !notes.value.length &&
     !props.item.tasks?.length &&
@@ -152,6 +167,36 @@ async function toggleCheck(check) {
   await persist({ checks: next });
 }
 
+// Блокеры шлём тем же полным сохранением, что и чек-лист: правится только то,
+// что мы положили в patch.
+function blockerPayload() {
+  return blockers.value.map((b) => ({
+    id: b.id,
+    text: b.text,
+    resolved: b.resolved,
+    resolveNote: b.resolveNote || "",
+    createdAt: b.createdAt,
+  }));
+}
+
+async function addBlocker() {
+  const text = newBlocker.value.trim();
+  if (!text) return;
+  newBlocker.value = "";
+  blockerFormOpen.value = false;
+  await persist({
+    blockers: [{ id: null, text, resolved: false, resolveNote: "" }, ...blockerPayload()],
+  });
+}
+
+async function toggleBlocker(blocker) {
+  await persist({
+    blockers: blockerPayload().map((b) =>
+      b.id === blocker.id ? { ...b, resolved: !b.resolved } : b,
+    ),
+  });
+}
+
 async function onBodyChecked(nextBody) {
   await persist({ body: nextBody });
 }
@@ -191,6 +236,14 @@ function toggleLog(taskId) {
         <span v-if="item.priority" class="wiv-prio" :title="'Приоритет ' + item.priority">
           {{ "!".repeat(item.priority) }}
         </span>
+        <button
+          class="wiv-blocker-add"
+          :class="{ hot: openBlockers }"
+          :title="'Поставить блокер'"
+          @click="blockerFormOpen = !blockerFormOpen"
+        >
+          🚧<span v-if="openBlockers"> {{ openBlockers }}</span>
+        </button>
         <button class="wiv-edit" @click="emit('edit')">✎ Править</button>
       </div>
 
@@ -214,7 +267,15 @@ function toggleLog(taskId) {
         </span>
         <span v-if="totalSpent" class="wiv-meta-item">⏱ {{ humanMinutes(totalSpent) }}</span>
         <span v-if="item.googleEventId" class="wiv-meta-item">📅 в календаре</span>
-        <span v-if="item.otherDates?.length" class="wiv-meta-item">⧉ ещё {{ item.otherDates.length }} дн.</span>
+        <span v-if="spanLabel" class="wiv-meta-item">
+          ⧉ {{ spanLabel }} <span class="wiv-meta-dim">({{ item.spanStart }} — {{ item.spanEnd }})</span>
+        </span>
+        <span v-else-if="item.otherDates?.length" class="wiv-meta-item">
+          ⧉ ещё {{ item.otherDates.length }} дн.
+        </span>
+        <span v-if="item.carryCount" class="wiv-meta-item" title="Переносится, пока не закрою">
+          ↻ перенесена {{ item.carryCount }}×
+        </span>
       </div>
     </header>
 
@@ -227,6 +288,41 @@ function toggleLog(taskId) {
     <div class="wiv-body">
       <section v-if="item.body?.trim()" class="wiv-block wiv-canvas">
         <MarkdownView :text="item.body" editable-checks @update:text="onBodyChecked" />
+      </section>
+
+      <section v-if="blockers.length || blockerFormOpen" class="wiv-block">
+        <div class="wiv-block-head">
+          <span>Блокеры</span>
+          <span v-if="openBlockers" class="wiv-block-count bad">{{ openBlockers }} открыто</span>
+          <span v-else-if="blockers.length" class="wiv-block-count">все снято</span>
+        </div>
+        <div
+          v-for="b in blockers"
+          :key="b.id"
+          class="wiv-blocker"
+          :class="{ resolved: b.resolved }"
+        >
+          <button
+            class="wiv-blocker-toggle"
+            :disabled="busy"
+            :title="b.resolved ? 'Открыть заново' : 'Снять блокер'"
+            @click="toggleBlocker(b)"
+          >
+            {{ b.resolved ? "✓" : "🚧" }}
+          </button>
+          <span class="wiv-blocker-text">
+            {{ b.text }}
+            <span v-if="b.resolved && b.resolveNote" class="wiv-blocker-note">
+              — {{ b.resolveNote }}
+            </span>
+          </span>
+        </div>
+        <input
+          v-model="newBlocker"
+          class="wiv-blocker-input"
+          placeholder="Что мешает двигаться дальше? (Enter)"
+          @keydown.enter.prevent="addBlocker"
+        />
       </section>
 
       <section v-if="checks.length" class="wiv-block">
@@ -396,6 +492,101 @@ function toggleLog(taskId) {
   color: #e5484d;
   font-weight: 700;
   font-size: 13px;
+}
+
+.wiv-blocker-add {
+  margin-left: auto;
+  background: #22242d;
+  border: 1px solid #2f3340;
+  color: #cfd3e0;
+  border-radius: 8px;
+  padding: 6px 11px;
+  cursor: pointer;
+  font-size: 12.5px;
+  min-height: 34px;
+}
+
+.wiv-blocker-add:hover {
+  border-color: #e5484d;
+}
+
+.wiv-blocker-add.hot {
+  border-color: #6b2b2e;
+  color: #ff9ba0;
+}
+
+.wiv-blocker-add + .wiv-edit {
+  margin-left: 0;
+}
+
+.wiv-blocker {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 0;
+  border-left: 2px solid #e5484d;
+  padding-left: 10px;
+}
+
+.wiv-blocker.resolved {
+  border-left-color: #3a5a3a;
+  opacity: 0.6;
+}
+
+.wiv-blocker-toggle {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 0;
+  flex-shrink: 0;
+  color: #63c94f;
+  min-height: 24px;
+}
+
+.wiv-blocker-toggle:disabled {
+  opacity: 0.5;
+}
+
+.wiv-blocker-text {
+  font-size: 13.5px;
+  color: #dfe3ee;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.wiv-blocker.resolved .wiv-blocker-text {
+  text-decoration: line-through;
+}
+
+.wiv-blocker-note {
+  color: #7a7f8e;
+  text-decoration: none;
+}
+
+.wiv-blocker-input {
+  background: #16171d;
+  border: 1px solid #2f3340;
+  border-radius: 8px;
+  color: #e8eaf2;
+  padding: 9px 10px;
+  font-size: 13px;
+  outline: none;
+  width: 100%;
+  min-height: 38px;
+  margin-top: 6px;
+}
+
+.wiv-blocker-input:focus {
+  border-color: #e5484d;
+}
+
+.wiv-meta-dim {
+  color: #6e7382;
+}
+
+.wiv-block-count.bad {
+  color: #ff9ba0;
 }
 
 .wiv-edit {

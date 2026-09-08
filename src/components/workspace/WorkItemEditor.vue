@@ -9,6 +9,7 @@ import {
   deleteWorkItem,
   unplaceWorkItem,
   placeWorkItem,
+  setWorkItemSpan,
   setWorkItemStatus,
   uploadWorkItemFile,
   deleteWorkItemFile,
@@ -79,6 +80,11 @@ const syncing = ref(false);
 const showDangerZone = ref(false);
 const moveDate = ref(props.date);
 const moveShiftDeadline = ref(true);
+const newBlocker = ref("");
+// Последний день многодневной карточки. Диапазон не входит в автосохранение
+// формы: он меняет размещения, а не поля карточки, — поэтому отдельной кнопкой.
+const spanUntil = ref(props.date);
+const spanBusy = ref(false);
 
 let saveTimer = null;
 let skipNextSave = false;
@@ -101,9 +107,11 @@ function blank() {
     learningSkillId: null,
     learningGradeId: null,
     disciplineActivityId: null,
+    autoCarry: false,
     links: [],
     notes: [],
     checks: [],
+    blockers: [],
     tasks: [],
     tags: [],
     files: [],
@@ -129,9 +137,11 @@ function hydrate(item) {
     learningSkillId: item.learningSkillId || null,
     learningGradeId: item.learningGradeId || null,
     disciplineActivityId: item.disciplineActivityId || null,
+    autoCarry: !!item.autoCarry,
     links: (item.links || []).map((l) => ({ ...l })),
     notes: (item.notes || []).map((n) => ({ ...n })),
     checks: (item.checks || []).map((c) => ({ ...c })),
+    blockers: (item.blockers || []).map((b) => ({ ...b })),
     tasks: (item.tasks || []).map((t) => ({ ...t })),
     tags: (item.tags || []).map((t) => ({ ...t })),
     files: (item.files || []).map((f) => ({ ...f })),
@@ -139,6 +149,8 @@ function hydrate(item) {
   savedAt.value = null;
   error.value = "";
   moveDate.value = props.date;
+  spanUntil.value = item.spanEnd || props.date;
+  newBlocker.value = "";
   loadGrades();
 }
 
@@ -203,6 +215,14 @@ async function save({ silent = false } = {}) {
         createdAt: n.createdAt,
       })),
       checks: form.value.checks.map((c) => ({ id: c.id, text: c.text, done: c.done })),
+      blockers: form.value.blockers.map((b) => ({
+        id: b.id,
+        text: b.text,
+        resolved: !!b.resolved,
+        resolveNote: b.resolveNote || "",
+        createdAt: b.createdAt,
+      })),
+      autoCarry: form.value.autoCarry,
       taskIds: form.value.tasks.map((t) => t.id),
       tags: form.value.tags.map((t) => ({ name: t.name, color: t.color })),
       syncGoogle: !!props.google.connected && !!props.item.googleEventId,
@@ -419,6 +439,59 @@ const checkProgress = computed(() => {
   const done = form.value.checks.filter((c) => c.done).length;
   return { total, done, percent: total ? Math.round((done / total) * 100) : 0 };
 });
+
+// --- Блокеры ---
+
+// Блокер карточки дня — то же «открыт/снят», что и у задач с главной, только
+// живёт в самой карточке: у неё нет чата, где лежала бы лента.
+function addBlocker() {
+  const text = newBlocker.value.trim();
+  if (!text) return;
+  form.value.blockers.unshift({
+    id: null,
+    text,
+    resolved: false,
+    resolveNote: "",
+    createdAt: new Date().toISOString(),
+  });
+  newBlocker.value = "";
+}
+
+function removeBlocker(index) {
+  form.value.blockers.splice(index, 1);
+}
+
+function toggleBlocker(blocker) {
+  blocker.resolved = !blocker.resolved;
+  if (!blocker.resolved) blocker.resolveNote = "";
+}
+
+const openBlockers = computed(() => form.value.blockers.filter((b) => !b.resolved).length);
+
+// --- Многодневная карточка ---
+
+const spanStart = computed(() => props.item.spanStart || props.date);
+const spanDays = computed(() => props.item.spanDays || 1);
+const spanLabel = computed(() =>
+  spanDays.value > 1 ? `день ${props.item.spanIndex} из ${spanDays.value}` : "один день",
+);
+
+async function applySpan(until) {
+  const to = until || spanUntil.value;
+  if (!to || spanBusy.value) return;
+  spanBusy.value = true;
+  error.value = "";
+  try {
+    // Сначала дописываем поля, иначе автосохранение перезапишет их после.
+    await save({ silent: true });
+    await setWorkItemSpan(props.item.id, spanStart.value, to);
+    emit("changed", { keepSelection: true });
+  } catch (e) {
+    error.value = e.message || "не удалось задать диапазон";
+  } finally {
+    spanBusy.value = false;
+  }
+}
 
 // --- Ссылки ---
 
@@ -850,6 +923,45 @@ const totalSpent = computed(
       />
     </section>
 
+    <!-- Блокеры -->
+    <section class="wie-block">
+      <div class="wie-block-head">
+        🚧 Блокеры
+        <span v-if="openBlockers" class="wie-blockers-count">{{ openBlockers }} открыто</span>
+        <span v-else-if="form.blockers.length" class="wie-dim">все снято</span>
+      </div>
+      <div
+        v-for="(b, i) in form.blockers"
+        :key="b.id || 'new-' + i"
+        class="wie-blocker"
+        :class="{ resolved: b.resolved }"
+      >
+        <div class="wie-blocker-top">
+          <button
+            class="wie-blocker-toggle"
+            :title="b.resolved ? 'Открыть заново' : 'Снять блокер'"
+            @click="toggleBlocker(b)"
+          >
+            {{ b.resolved ? "✓" : "🚧" }}
+          </button>
+          <input v-model="b.text" class="wie-check-text" :class="{ done: b.resolved }" />
+          <button class="wie-x" @click="removeBlocker(i)">✕</button>
+        </div>
+        <input
+          v-if="b.resolved"
+          v-model="b.resolveNote"
+          class="wie-input wie-blocker-note"
+          placeholder="чем закончилось (необязательно)"
+        />
+      </div>
+      <input
+        v-model="newBlocker"
+        class="wie-input"
+        placeholder="+ что мешает двигаться дальше? (Enter)"
+        @keydown.enter.prevent="addBlocker"
+      />
+    </section>
+
     <!-- Ссылки -->
     <section class="wie-block">
       <div class="wie-block-head">🌐 Ссылки</div>
@@ -907,6 +1019,48 @@ const totalSpent = computed(
       </div>
       <input ref="fileInput" type="file" multiple class="wie-hidden" @change="onFilePicked" />
       <button class="wie-chip" @click="fileInput.click()">+ прикрепить файл</button>
+    </section>
+
+    <!-- Дни карточки: многодневность и автоперенос -->
+    <section class="wie-block">
+      <div class="wie-block-head">
+        🗓 Дни
+        <span class="wie-dim">{{ spanLabel }}</span>
+      </div>
+
+      <div class="wie-span">
+        <span class="wie-dim">с {{ spanStart }} по</span>
+        <input v-model="spanUntil" type="date" class="wie-input" :min="spanStart" />
+        <button class="wie-chip" :disabled="spanBusy" @click="applySpan()">
+          {{ spanDays > 1 ? "Изменить диапазон" : "Растянуть на дни" }}
+        </button>
+        <button
+          v-if="spanDays > 1"
+          class="wie-chip ghost"
+          :disabled="spanBusy"
+          @click="applySpan(spanStart)"
+        >
+          Сделать однодневной
+        </button>
+      </div>
+      <p class="wie-dim">
+        Многодневная карточка — одна и та же карточка в каждом дне диапазона:
+        правки, чек-лист и блокеры у неё общие.
+      </p>
+
+      <label class="wie-carry">
+        <input v-model="form.autoCarry" type="checkbox" />
+        <span>
+          Переносить, пока не закрою
+          <span class="wie-dim">
+            — незакрытая карточка сама переедет в новый день и останется в той же колонке
+          </span>
+        </span>
+      </label>
+      <p v-if="item.carryCount" class="wie-dim">
+        Уже перенесена {{ item.carryCount }} раз{{ item.carryCount === 1 ? "" : "а" }} — срок не
+        двигали, просрочка видна как есть.
+      </p>
     </section>
 
     <!-- Календарь -->
@@ -1643,6 +1797,72 @@ select.wie-input {
   gap: 6px;
   flex-wrap: wrap;
   align-items: center;
+}
+
+.wie-blockers-count {
+  color: #ffb4a0;
+  font-size: 11.5px;
+  font-weight: 500;
+}
+
+.wie-blocker {
+  border-left: 2px solid #e5484d;
+  padding-left: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.wie-blocker.resolved {
+  border-left-color: #3a5a3a;
+  opacity: 0.65;
+}
+
+.wie-blocker-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.wie-blocker-toggle {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 13px;
+  padding: 2px 4px;
+  flex-shrink: 0;
+  color: #63c94f;
+}
+
+.wie-blocker-note {
+  font-size: 12px;
+  min-height: 32px;
+}
+
+.wie-span {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.wie-span .wie-input {
+  max-width: 170px;
+}
+
+.wie-carry {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 13px;
+  color: #dfe3ee;
+  cursor: pointer;
+  line-height: 1.4;
+}
+
+.wie-carry input {
+  margin-top: 3px;
+  flex-shrink: 0;
 }
 
 .wie-move .wie-input {

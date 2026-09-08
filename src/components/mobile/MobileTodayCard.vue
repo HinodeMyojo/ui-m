@@ -130,6 +130,10 @@ function timeLabel(item) {
             </span>
             <span v-if="timeLabel(item)" class="mtd-time">{{ timeLabel(item) }}</span>
           </button>
+
+          <span v-if="item.openBlockers" class="mtd-blocked" title="Заблокировано">
+            🚧<template v-if="item.openBlockers > 1"> {{ item.openBlockers }}</template>
+          </span>
         </li>
       </ul>
 
@@ -151,6 +155,13 @@ function timeLabel(item) {
   background: #22242d;
   border-radius: 9px;
   padding: 7px 10px;
+}
+
+.mtd-blocked {
+  font-size: 12px;
+  color: #ff9ba0;
+  flex-shrink: 0;
+  align-self: center;
 }
 
 .mtd-list {
