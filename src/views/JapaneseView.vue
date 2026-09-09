@@ -122,8 +122,10 @@ onMounted(load);
 </script>
 
 <template>
-  <div class="jp">
-    <div class="jp-header">
+  <div class="jp" :class="{ 'is-session': inSession }">
+    <!-- Во время сессии шапка и вкладки прячутся: на телефоне они съедали
+         треть экрана, и кнопки ответа уезжали под таб-бар. -->
+    <div v-if="!inSession" class="jp-header">
       <h1>語 Японский</h1>
       <div class="jp-head-right">
         <span v-if="overview" class="jp-streak">🔥 {{ overview.streak }}</span>
@@ -133,7 +135,7 @@ onMounted(load);
 
     <!-- Полоса разделов листается вбок: пять вкладок в 390px не помещаются, а
          перенос во вторую строку выглядит как сломанная вёрстка. -->
-    <div class="jp-tabs">
+    <div v-if="!inSession" class="jp-tabs">
       <button
         v-for="t in TABS"
         :key="t.code"

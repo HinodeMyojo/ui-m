@@ -287,3 +287,19 @@
   border-color: var(--jp-accent);
   color: #c9b9ff;
 }
+
+/* Сессия внутри раздела занимает экран целиком: вопрос сверху, ответы внизу,
+   и высота у неё определённая — иначе нижняя треть не была бы нижней. */
+.jp.is-session {
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+.jpv-session {
+  height: calc(100vh - 16px);
+  height: calc(100dvh - 16px);
+  box-sizing: border-box;
+  display: flex;
+  overflow: hidden;
+}
+

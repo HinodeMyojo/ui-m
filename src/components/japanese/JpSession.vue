@@ -5,7 +5,10 @@ import JpTraceCanvas from "./JpTraceCanvas.vue";
 import JpKanjiSheet from "./JpKanjiSheet.vue";
 import JpWordSheet from "./JpWordSheet.vue";
 import JpSpeakCheck from "./JpSpeakCheck.vue";
+import JpStrokeOrder from "./JpStrokeOrder.vue";
+import JpSentenceList from "./JpSentenceList.vue";
 import { jpPlay } from "./jpSound.js";
+import { sessionFocus } from "@/composables/useSessionFocus.js";
 import {
   startJpSession,
   answerJpCard,
@@ -81,29 +84,32 @@ const hintOpen = ref(false); // разбор раскрыт прямо сейч�
 const hintUsed = ref(false); // разбор открывали на этой карточке
 const sheetChar = ref(""); // знак, раскрытый листом поверх сессии
 const sheetWord = ref(""); // слово, раскрытое листом поверх сессии
-// Карточки, с которыми покончено: те, что не вернутся в этой сессии. По ним
-// считается шкала — см. progressPct.
-const doneIds = ref(new Set());
 
 const startedAt = ref(0);
 const shownAt = ref(0);
 const elapsed = ref(0);
 let ticker = null;
+// Пока идёт урок, таймер стоит: шесть минут — это на вопросы, а урок читают
+// столько, сколько нужно. Иначе экран с новым знаком торопит, и его листают.
+let pausedMs = 0;
+let pauseStart = 0;
+
+function activeMs() {
+  const paused = pausedMs + (pauseStart ? Date.now() - pauseStart : 0);
+  return Date.now() - startedAt.value - paused;
+}
 
 const card = computed(() => queue.value[index.value] || null);
 const isArena = computed(() => kindNow.value === "arena");
 const isAhead = computed(() => kindNow.value === "ahead");
 const total = computed(() => queue.value.length);
 
-// Шкала считается по закрытым карточкам, а не по позиции в очереди. Провал
-// возвращает карточку в конец, очередь растёт ровно с той же скоростью, что и
-// позиция, — и доля index/total стоит на месте всю сессию. Карточек в счёте
-// столько, сколько их всего разных: повтор той же карточки очередь удлиняет,
-// а работы не добавляет.
-const uniqueTotal = computed(() => new Set(queue.value.map((c) => c.cardId)).size);
-
+// Шкала — пройденные карточки от всех, что в очереди. Ошибка добавляет
+// карточку в конец, и шкала честно отодвигается: работы прибавилось. Считать
+// по «закрытым» карточкам не вышло: новая единица закрывается только после
+// всего штурма, и весь первый проход шкала стояла на нуле.
 const progressPct = computed(() =>
-  uniqueTotal.value ? Math.round((doneIds.value.size / uniqueTotal.value) * 100) : 0,
+  total.value ? Math.round((index.value / total.value) * 100) : 0,
 );
 const plannedSec = computed(() => session.value?.plannedSec || props.sec || 360);
 const leftSec = computed(() => Math.max(0, plannedSec.value - elapsed.value));
@@ -134,13 +140,14 @@ async function begin(nextRound = 1) {
     round.value = data?.round || nextRound;
     queue.value = data?.cards || [];
     index.value = 0;
-    doneIds.value = new Set();
     if (!queue.value.length) {
       phase.value = PHASE.EMPTY;
       return;
     }
     startedAt.value = Date.now();
     elapsed.value = 0;
+    pausedMs = 0;
+    pauseStart = 0;
     startTicker();
     ask();
   } catch (e) {
@@ -152,7 +159,7 @@ async function begin(nextRound = 1) {
 function startTicker() {
   stopTicker();
   ticker = setInterval(() => {
-    elapsed.value = Math.round((Date.now() - startedAt.value) / 1000);
+    elapsed.value = Math.round(activeMs() / 1000);
   }, 1000);
 }
 
@@ -169,6 +176,7 @@ function ask() {
   hintOpen.value = false;
   hintUsed.value = false;
   teaching.value = card.value?.mechanic === JP_MECH_LESSON;
+  if (teaching.value && !pauseStart) pauseStart = Date.now();
   shownAt.value = Date.now();
   phase.value = PHASE.ASK;
 }
@@ -199,8 +207,23 @@ const asksForKanji = computed(
 // вопросы, которые пойдут следом.
 function learned() {
   teaching.value = false;
+  if (pauseStart) {
+    pausedMs += Date.now() - pauseStart;
+    pauseStart = 0;
+  }
   advance();
 }
+
+// Строка чтений в уроке: оны катаканой, куны хираганой — как в словаре, и
+// сразу видно, что у знака их несколько, а учим пока одно.
+const lessonReadings = computed(() => {
+  const c = card.value;
+  if (!c) return "";
+  const rows = [];
+  if (c.onReadings?.length) rows.push(`он ${c.onReadings.join(", ")}`);
+  if (c.kunReadings?.length) rows.push(`кун ${c.kunReadings.join(", ")}`);
+  return rows.join(" · ");
+});
 
 // --- Проверка ответа ---
 
@@ -305,12 +328,10 @@ async function rate(rating) {
       thinkMs: Math.max(0, Date.now() - shownAt.value),
     });
     // Провал возвращает карточку в конец этой же сессии — так и задумано,
-    // ошибку надо переспросить, пока она свежая.
+    // ошибку надо переспросить, пока она свежая. Варианты перетасовываются:
+    // тот же порядок запоминается как «третья кнопка», а не как ответ.
     if (answer?.againInSession) {
-      queue.value.push({ ...current });
-      doneIds.value.delete(current.cardId); // вернулась — значит ещё не закрыта
-    } else {
-      doneIds.value = new Set(doneIds.value).add(current.cardId);
+      queue.value.push(reshuffled(current));
     }
     advance();
   } catch (e) {
@@ -318,6 +339,17 @@ async function rate(rating) {
   } finally {
     sending.value = false;
   }
+}
+
+function reshuffled(c) {
+  if (!Array.isArray(c.options) || c.options.length < 2) return { ...c };
+  const correct = c.options[c.correctIndex];
+  const options = [...c.options];
+  for (let i = options.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [options[i], options[j]] = [options[j], options[i]];
+  }
+  return { ...c, options, correctIndex: options.indexOf(correct) };
 }
 
 function advance() {
@@ -336,7 +368,7 @@ async function finish() {
   jpPlay("done");
   try {
     result.value = await finishJpSession(session.value.sessionId, {
-      durationSec: Math.round((Date.now() - startedAt.value) / 1000),
+      durationSec: Math.round(activeMs() / 1000),
     });
   } catch (e) {
     error.value = e.message || "итог не сохранился";
@@ -401,10 +433,10 @@ function openSheet(char) {
 
 // Примеры к слову. До ответа это подсказка посильнее разбора — в переводе
 // фразы значение слова видно прямо, — поэтому «Легко» после неё не даётся.
-function openWordSheet() {
+function openWordSheet(text) {
   if (!card.value) return;
-  sheetWord.value = card.value.char;
-  if (phase.value === PHASE.ASK) hintUsed.value = true;
+  sheetWord.value = text || card.value.char;
+  if (phase.value === PHASE.ASK && !teaching.value) hintUsed.value = true;
 }
 
 const isWordCard = computed(() => card.value?.itemType === "word");
@@ -459,6 +491,15 @@ const speakableNow = computed(() => {
   return SILENT_MECHANICS.includes(mechanic.value) ? "" : speakable.value;
 });
 
+// Где чтение не показывают над знаком. Шире списка беззвучных на одну
+// механику: на «что это значит» фуригана превращала вопрос в «что значит
+// いち» — отвечали по кане, не глядя на знак. Звук при этом остаётся: он
+// не подсказывает значения.
+const READING_HIDDEN = [...SILENT_MECHANICS, JP_MECH_MEANING];
+
+// Чтение, которое произносим на разборе, — хираганой, как и над знаком.
+const speakableKana = computed(() => jpKatakanaToHiragana(speakable.value));
+
 // Чтение над знаком — та же фуригана, что в книге: слово, которое не
 // прочитать, остаётся картинкой, и вслух его не повторишь. Стоит целиком над
 // словом, а не по знакам: разбить чтение по иероглифам нечем — 為替 читается
@@ -469,7 +510,7 @@ const speakableNow = computed(() => {
 const readingNow = computed(() => {
   const c = card.value;
   if (!c) return "";
-  if (phase.value === PHASE.ASK && !teaching.value && SILENT_MECHANICS.includes(mechanic.value)) {
+  if (phase.value === PHASE.ASK && !teaching.value && READING_HIDDEN.includes(mechanic.value)) {
     return "";
   }
   // Оны в справочнике записаны катаканой. Читает он кану любую, но учит
@@ -482,10 +523,14 @@ function say() {
 }
 
 onMounted(() => {
+  sessionFocus.value = true;
   primeJapaneseVoice();
   begin(1);
 });
-onBeforeUnmount(stopTicker);
+onBeforeUnmount(() => {
+  stopTicker();
+  sessionFocus.value = false;
+});
 </script>
 
 <template>
@@ -552,6 +597,9 @@ onBeforeUnmount(stopTicker);
         <div v-if="result?.newLearned" class="jps-done-row">
           ✅ Выучено всего: {{ result.newLearned }}
         </div>
+        <div v-if="result?.dueLeft" class="jps-done-row">
+          ⏳ Ещё ждут повторения: {{ result.dueLeft }}
+        </div>
         <div v-if="result?.dueTomorrow" class="jps-done-row">
           🕓 Завтра ждут: {{ result.dueTomorrow }}
         </div>
@@ -593,9 +641,49 @@ onBeforeUnmount(stopTicker);
             </div>
           </div>
           <div class="jps-lesson-meaning">{{ meaning }}</div>
-          <div v-if="speakable" class="jps-tools">
-            <button class="jps-say-btn" @click="say">🔊 Как звучит</button>
+          <div v-if="lessonReadings" class="jps-lesson-readings">{{ lessonReadings }}</div>
+          <div v-if="speakable || card.itemType === 'kanji'" class="jps-tools">
+            <button v-if="speakable" class="jps-say-btn" @click="say">🔊 Как звучит</button>
+            <button v-if="card.itemType === 'kanji'" class="jps-say-btn" @click="openSheet(card.char)">
+              ✍️ Написать самому
+            </button>
           </div>
+
+          <!-- Порядок черт: знак, которого не видел в движении, остаётся
+               картинкой, а картинку рукой не воспроизвести. -->
+          <JpStrokeOrder
+            v-if="card.strokePaths?.length"
+            :paths="card.strokePaths"
+            :groups="card.strokeGroups || []"
+            :size="140"
+          />
+
+          <!-- Слова с этим знаком — ради них знак и учат. -->
+          <template v-if="card.words?.length">
+            <div class="jps-label">В словах</div>
+            <div class="jps-break">
+              <button
+                v-for="w in card.words"
+                :key="w.text"
+                class="jps-break-row"
+                @click="openWordSheet(w.text)"
+              >
+                <span class="jps-break-char is-word">{{ w.text }}</span>
+                <span class="jps-break-body">
+                  <span class="jps-break-meaning">{{ w.meaningRu }}</span>
+                  <span class="jps-break-readings">{{ w.reading }}</span>
+                </span>
+                <span class="jps-break-more">📖</span>
+              </button>
+            </div>
+          </template>
+
+          <template v-if="card.sentences?.length">
+            <div class="jps-label">Во фразе</div>
+            <JpSentenceList :sentences="card.sentences" />
+          </template>
+
+          <div v-if="breakdown.length" class="jps-label">Из чего состоит</div>
           <div v-if="breakdown.length" class="jps-break">
             <button
               v-for="p in breakdown"
@@ -686,12 +774,15 @@ onBeforeUnmount(stopTicker);
              задачи, а не ответ, поэтому видно сразу. -->
         <!-- В различении похожих значение и есть вопрос, оно уже стоит выше:
              второй раз тем же текстом — просто шум. -->
+        <!-- На «как читается» значение тоже спрятано: с ним вопрос отвечали
+             по слову из учебника, не глядя на знак. -->
         <div
           v-if="
             !teaching &&
             !asksForKanji &&
             card.mechanic !== JP_MECH_MEANING &&
-            card.mechanic !== JP_MECH_TELL_APART
+            card.mechanic !== JP_MECH_TELL_APART &&
+            mechanic !== JP_MECH_READING_CHOICE
           "
           class="jps-hint"
         >
@@ -756,7 +847,7 @@ onBeforeUnmount(stopTicker);
           <!-- Звук только после ответа: до него он подсказывал бы чтение,
                а на механике ввода чтения — прямо выдавал ответ. -->
           <div v-if="speakable || isWordCard" class="jps-tools">
-            <button v-if="speakable" class="jps-say-btn" @click="say">🔊 {{ speakable }}</button>
+            <button v-if="speakable" class="jps-say-btn" @click="say">🔊 {{ speakableKana }}</button>
             <button v-if="isWordCard" class="jps-say-btn" @click="openWordSheet">
               📖 Примеры
             </button>
@@ -886,8 +977,10 @@ onBeforeUnmount(stopTicker);
             <button class="jps-rate is-good" :disabled="sending" @click="rate(goodRating)">
               Хорошо
             </button>
+            <!-- «Легко» не бывает на первом дне: узнать знак через минуту
+                 после урока — не значит его помнить. -->
             <button
-              v-if="verdict === 'right' && !hintUsed"
+              v-if="verdict === 'right' && !hintUsed && !card.isNew"
               class="jps-rate is-easy"
               :disabled="sending"
               @click="rate(JP_RATING_EASY)"
@@ -910,7 +1003,8 @@ onBeforeUnmount(stopTicker);
 .jps {
   display: flex;
   flex-direction: column;
-  min-height: 100%;
+  height: 100%;
+  min-height: 0;
   width: 100%;
   max-width: 560px;
   margin: 0 auto;
@@ -1019,6 +1113,28 @@ onBeforeUnmount(stopTicker);
   font-weight: 600;
   color: #e6e8ef;
   line-height: 1.3;
+}
+
+.jps-lesson-readings {
+  font-size: 14px;
+  color: #cfd3e0;
+}
+
+/* Подписи блоков урока: слова, фраза, состав. */
+.jps-label {
+  width: 100%;
+  text-align: left;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--m-muted, #7a7f8e);
+  margin-top: 4px;
+}
+
+.jps-break-char.is-word {
+  font-size: 22px;
+  min-width: 0;
 }
 
 .jps-break-row.is-flat {
@@ -1200,6 +1316,7 @@ onBeforeUnmount(stopTicker);
 .jps-bottom {
   display: flex;
   flex-direction: column;
+  flex-shrink: 0;
   gap: 8px;
   padding-bottom: 4px;
 }
@@ -1210,7 +1327,7 @@ onBeforeUnmount(stopTicker);
 }
 
 .jps-option {
-  min-height: 56px;
+  min-height: 50px;
   padding: 8px 12px;
   border-radius: 13px;
   border: 1px solid var(--m-line, #262933);

@@ -2,6 +2,7 @@
 import { computed, defineAsyncComponent } from "vue";
 import { RouterView, useRoute } from "vue-router";
 import { isMobile } from "@/composables/useIsMobile.js";
+import { sessionFocus } from "@/composables/useSessionFocus.js";
 
 // Нижнее меню — часть мобильного слоя, а не главной страницы: уйти в «Сегодня»
 // и не иметь дороги назад, кроме системной кнопки, — это не навигация.
@@ -28,6 +29,7 @@ const FULLSCREEN = ["/login", "/pdfReader"];
 
 const showTabBar = computed(() => {
   if (!isMobile.value) return false;
+  if (sessionFocus.value) return false;
   if (route.meta?.public) return false;
   if (FULLSCREEN.includes(route.path)) return false;
   if (route.path.endsWith("/print")) return false;
@@ -40,9 +42,10 @@ const showTabBar = computed(() => {
     <RouterView />
   </div>
   <MobileTabBar v-if="showTabBar" />
-  <!-- Печать резюме — единственный экран без вайба: листья попадут в PDF. -->
+  <!-- Печать резюме — экран без вайба: листья попадут в PDF. Учебная сессия —
+       тоже: листья летали по кнопкам ответа. -->
   <template v-if="!route.path.endsWith('/print')">
-    <AutumnLayer />
+    <AutumnLayer v-if="!sessionFocus" />
     <WeatherPanel v-if="!route.meta?.public" />
   </template>
 </template>

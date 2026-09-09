@@ -40,7 +40,8 @@ function leave() {
 .jt-screen {
   display: flex;
   width: 100%;
-  min-height: 100%;
+  height: 100vh;
+  height: 100dvh;
   padding: 8px 12px 12px;
   box-sizing: border-box;
   background: var(--m-bg, #14151b);

@@ -74,6 +74,23 @@ watch(
             <span v-for="r in data.kunReadings || []" :key="`kun-${r}`" class="jks-reading is-kun">
               {{ r }}
             </span>
+            <!-- У ключа чтений нет, зато есть японское имя: にんべん. -->
+            <span
+              v-if="!data.onReadings?.length && !data.kunReadings?.length && data.mainReading"
+              class="jks-reading is-kun"
+            >
+              {{ data.mainReading }}
+            </span>
+          </div>
+
+          <!-- Ключ показывают ради знаков, в которые он входит. -->
+          <div v-if="data.examples?.length" class="jks-block">
+            <div class="jks-label">Встречается в</div>
+            <div class="jks-chips">
+              <span v-for="e in data.examples" :key="e.char" class="jks-chip">
+                <b>{{ e.char }}</b> {{ e.meaningRu }}
+              </span>
+            </div>
           </div>
 
           <!-- Как пишется и из чего состоит: цвет черт и есть ответ на второе. -->
@@ -203,6 +220,27 @@ watch(
 
 .jks-reading.is-kun {
   color: #63c94f;
+}
+
+.jks-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.jks-chip {
+  padding: 4px 9px;
+  border-radius: 9px;
+  border: 1px solid var(--m-line, #262933);
+  background: var(--m-card-2, #22242d);
+  font-size: 13px;
+  color: #cfd3e0;
+}
+
+.jks-chip b {
+  font-size: 18px;
+  font-weight: 500;
+  margin-right: 4px;
 }
 
 .jks-block {
