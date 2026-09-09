@@ -8,6 +8,7 @@ import {
   createWorkItem,
   setTaskLogStatus,
   setWorkItemCarry,
+  updateTaskAPI,
 } from "@/components/api.js";
 
 // Общий вид дня: все карточки разом. Отсюда день не только читают, но и
@@ -23,8 +24,19 @@ const props = defineProps({
   mainSubtasks: { type: Array, default: () => [] },
   // Статусы главной страницы с колонкой доски у каждого — по ним переносим.
   taskStatuses: { type: Array, default: () => [] },
+  // Незакрытые карточки следующего дня — содержимое колонки «Завтра».
+  tomorrow: { type: Array, default: () => [] },
 });
-const emit = defineEmits(["open", "open-sub", "add", "move", "sort", "refresh"]);
+const emit = defineEmits([
+  "open",
+  "open-sub",
+  "add",
+  "move",
+  "sort",
+  "refresh",
+  "defer",
+  "undefer",
+]);
 
 const STATUS_META = {
   todo: { label: "План", color: "#5b616e" },
@@ -172,6 +184,73 @@ async function subToDay(sub, event) {
     emit("refresh");
   } catch (e) {
     subError.value = e.message || "не удалось перенести в день";
+  }
+}
+
+// --- Колонка «Завтра» ---
+
+// Шестая колонка доски — не статус, а следующий день. Всё, что сегодня не
+// успевается, уезжает туда одним движением: раньше для этого нужно было
+// открыть карточку, найти перенос и выбрать дату.
+const NEXT = "__next";
+
+const nextDate = computed(() => {
+  const d = new Date(props.date + "T12:00:00");
+  d.setDate(d.getDate() + 1);
+  return localDay(d);
+});
+
+const nextTitle = computed(() =>
+  props.isToday
+    ? "Завтра"
+    : new Date(nextDate.value + "T12:00:00").toLocaleDateString("ru-RU", {
+        day: "numeric",
+        month: "long",
+      }),
+);
+
+// Дедлайн едет вместе с карточкой — иначе перенесённая задача с утра уже
+// просрочена. Выключатель рядом с заголовком колонки, состояние помнится.
+const shiftDue = ref(localStorage.getItem("deferShiftDeadline") !== "0");
+watch(shiftDue, (v) => localStorage.setItem("deferShiftDeadline", v ? "1" : "0"));
+
+function deferItem(id) {
+  emit("defer", { id, shiftDeadline: shiftDue.value });
+}
+
+// Тот же сдвиг на целые сутки, что и на сервере: время суток у срока обязано
+// остаться прежним, иначе «к 11 утра» превращается в «к 03:00».
+function nextDayDeadline(value) {
+  const at = new Date(value);
+  const from = new Date(at);
+  from.setHours(12, 0, 0, 0);
+  const days = Math.round(
+    (new Date(nextDate.value + "T12:00:00").getTime() - from.getTime()) / 86400000,
+  );
+  const moved = new Date(at);
+  moved.setDate(moved.getDate() + days);
+  return moved;
+}
+
+// Подзадача с главной живёт в дне не размещением, а дедлайном: перенести её
+// на завтра — значит подвинуть срок. Флажок «дедлайны» тут не спрашиваем,
+// двигать нечего больше.
+async function deferSub(sub) {
+  if (!sub.deadline) {
+    subError.value = "у подзадачи нет срока — переносить нечего";
+    return;
+  }
+  subError.value = "";
+  try {
+    await updateTaskAPI(sub.id, {
+      title: sub.title,
+      start: sub.start || null,
+      end: nextDayDeadline(sub.deadline).toISOString(),
+      color: sub.color || "",
+    });
+    emit("refresh");
+  } catch (e) {
+    subError.value = e.message || "не удалось перенести подзадачу";
   }
 }
 
@@ -440,7 +519,10 @@ function toggleDone(item, event) {
 
 // Свой драг на pointer-событиях, а не HTML5 drag-and-drop: последний не
 // существует для пальца, а доску открывают и с телефона.
+// board — вся доска вместе с колонкой «Завтра» (по ней ищем цель броска),
+// strip — прокручиваемая лента колонок статусов.
 const board = ref(null);
+const strip = ref(null);
 const drag = ref(null);
 let pending = null;
 
@@ -538,6 +620,14 @@ function columnAt(x, y) {
   if (y < rect.top - 40 || y > rect.bottom + 40) return null;
 
   const columns = Array.from(el.querySelectorAll("[data-status]"));
+  // Прямое попадание внутрь колонки сильнее любых прикидок по горизонтали:
+  // на узком экране «Завтра» лежит не сбоку, а под лентой статусов, и по
+  // одному x её от них не отличить.
+  for (const column of columns) {
+    const box = column.getBoundingClientRect();
+    if (x >= box.left && x <= box.right && y >= box.top && y <= box.bottom) return column;
+  }
+
   let nearest = null;
   let bestDistance = Infinity;
   for (const column of columns) {
@@ -575,7 +665,7 @@ function updateTarget(x, y) {
 }
 
 function edgeScroll(x) {
-  const el = board.value;
+  const el = strip.value;
   if (!el || el.scrollWidth <= el.clientWidth) return;
   const rect = el.getBoundingClientRect();
   if (x < rect.left + 70) el.scrollLeft -= 16;
@@ -603,6 +693,11 @@ function pointerUp(event) {
     return;
   }
   if (!state.over) return;
+  if (state.over === NEXT) {
+    if (state.kind === "sub") deferSub(started.item);
+    else deferItem(state.id);
+    return;
+  }
   if (state.kind === "sub") {
     // Внутри своей же колонки подзадаче двигаться некуда: порядка у неё нет.
     if (state.over !== state.from) moveSub(started.item, state.over, started?.card);
@@ -684,9 +779,11 @@ onBeforeUnmount(() => {
 
     <p class="ovw-hint">
       Перетащите карточку в другую колонку — на телефоне удержите её пальцем.
+      Не успеваете — бросьте в «{{ nextTitle }}».
     </p>
 
-    <div class="ovw-board" ref="board">
+    <div class="ovw-boards" ref="board">
+    <div class="ovw-board" ref="strip">
       <section
         v-for="g in groups"
         :key="g.key"
@@ -924,6 +1021,59 @@ onBeforeUnmount(() => {
         ></div>
 
       </section>
+      </div>
+
+      <!-- Шестая колонка — не статус, а следующий день: сюда сбрасывают всё,
+           что сегодня не успевается. Стоит отдельно от ленты статусов и уже
+           её: это выход из дня, а не ещё одно его состояние. -->
+      <section
+        class="ovw-col next"
+        :class="{ hot: drag?.over === NEXT }"
+        :data-status="NEXT"
+      >
+        <div class="ovw-col-head" :style="{ '--status': '#a78bfa' }">
+          <span class="ovw-col-dot"></span>
+          {{ nextTitle }}
+          <span class="ovw-col-count">{{ tomorrow.length }}</span>
+        </div>
+
+        <button
+          class="ovw-next-due"
+          :class="{ on: shiftDue }"
+          :title="
+            shiftDue
+              ? 'Дедлайн переезжает вместе с карточкой, время суток остаётся прежним'
+              : 'Дедлайн остаётся на сегодня — просрочка будет видна'
+          "
+          @click="shiftDue = !shiftDue"
+        >
+          {{ shiftDue ? "☑" : "☐" }} срок тоже на {{ nextTitle.toLowerCase() }}
+        </button>
+
+        <div v-if="drag?.over === NEXT" class="ovw-slot"></div>
+        <div v-else-if="!tomorrow.length" class="ovw-col-empty">
+          сюда — то, что не успеваю
+        </div>
+
+        <article
+          v-for="t in tomorrow"
+          :key="t.id"
+          class="ovw-next-card"
+          :style="{ '--accent': t.color || '#1767fd' }"
+        >
+          <span class="ovw-next-title">
+            <span v-if="t.emoji">{{ t.emoji }} </span>{{ t.title || "без названия" }}
+          </span>
+          <span v-if="t.priority" class="ovw-next-prio">{{ "!".repeat(t.priority) }}</span>
+          <button
+            class="ovw-next-back"
+            title="Вернуть в этот день"
+            @click="emit('undefer', { id: t.id, shiftDeadline: shiftDue })"
+          >
+            ↩
+          </button>
+        </article>
+      </section>
     </div>
 
     <div v-if="!items.length" class="ovw-empty">
@@ -1145,7 +1295,18 @@ onBeforeUnmount(() => {
 
 /* --- Доска --- */
 
+/* Лента статусов тянется на всю ширину и прокручивается, «Завтра» стоит
+   рядом узкой полосой и никуда не уезжает: карточку в неё бросают из любого
+   места доски. */
+.ovw-boards {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+
 .ovw-board {
+  flex: 1;
+  min-width: 0;
   display: grid;
   grid-auto-flow: column;
   grid-auto-columns: minmax(268px, 1fr);
@@ -1153,6 +1314,84 @@ onBeforeUnmount(() => {
   align-items: start;
   overflow-x: auto;
   padding-bottom: 8px;
+}
+
+.ovw-col.next {
+  width: 220px;
+  flex-shrink: 0;
+}
+
+.ovw-next-due {
+  background: #16171d;
+  border: 1px dashed #34305a;
+  border-radius: 9px;
+  color: #6e7382;
+  font-size: 11.5px;
+  padding: 6px 9px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ovw-next-due.on {
+  color: #c4b5fd;
+  border-color: rgba(167, 139, 250, 0.5);
+  border-style: solid;
+}
+
+/* Завтрашние карточки — только имена: это напоминание о нагрузке следующего
+   дня, а не вторая доска. Работают с ними уже в самом дне. */
+.ovw-next-card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #1a1c23;
+  border: 1px solid #262a36;
+  border-radius: 11px;
+  padding: 8px 8px 8px 13px;
+  overflow: hidden;
+}
+
+.ovw-next-card::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--accent);
+}
+
+.ovw-next-title {
+  flex: 1;
+  color: #b7bccb;
+  font-size: 12.5px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.ovw-next-prio {
+  color: #e5484d;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.ovw-next-back {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border-radius: 7px;
+  border: 1px solid #2f3340;
+  background: transparent;
+  color: #7a7f8e;
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.ovw-next-back:hover {
+  border-color: #a78bfa;
+  color: #c4b5fd;
 }
 
 .ovw-col {
@@ -1825,13 +2064,24 @@ onBeforeUnmount(() => {
 
 /* На узком экране колонки листаются свайпом с прилипанием */
 @media (max-width: 760px) {
+  .ovw-boards {
+    flex-direction: column;
+    gap: 12px;
+  }
   .ovw-board {
     grid-auto-columns: 86vw;
     scroll-snap-type: x mandatory;
     gap: 10px;
+    width: 100%;
   }
   .ovw-col {
     scroll-snap-align: start;
+  }
+  /* На телефоне «Завтра» уходит под ленту статусов во всю ширину: узкая
+     колонка сбоку там просто не поместилась бы, а бросать в неё пальцем
+     нужно ещё чаще, чем мышью. */
+  .ovw-col.next {
+    width: 100%;
   }
   .ovw-day {
     padding: 13px 15px;

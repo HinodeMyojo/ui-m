@@ -18,6 +18,7 @@ import {
   saveWorkDay,
   createWorkItem,
   setWorkItemStatus,
+  placeWorkItem,
   reorderWorkItems,
   exchangeGoogleCode,
   fetchDisciplineMonth,
@@ -169,6 +170,14 @@ const dayTitle = computed(() => {
 
 const isToday = computed(() => date.value === disciplineLogicalToday());
 
+const nextDate = computed(() => {
+  const d = new Date(date.value + "T12:00:00");
+  d.setDate(d.getDate() + 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
+    d.getDate(),
+  ).padStart(2, "0")}`;
+});
+
 function shiftDate(delta) {
   const d = new Date(date.value + "T12:00:00");
   d.setDate(d.getDate() + delta);
@@ -219,6 +228,56 @@ async function moveItem({ id, status, beforeId }) {
     error.value = e.message;
     await load();
   }
+}
+
+// Карточку бросили в колонку «Завтра»: это не смена статуса, а переезд в
+// следующий день целиком (mode=move). Убираем её из списка сразу — она уже
+// не сегодняшняя, и видеть её до ответа сервера незачем.
+async function deferItem({ id, shiftDeadline }) {
+  const list = day.value?.items;
+  const index = list ? list.findIndex((i) => i.id === id) : -1;
+  if (index >= 0) {
+    const [moved] = list.splice(index, 1);
+    day.value.tomorrow = [
+      ...(day.value.tomorrow || []),
+      {
+        id: moved.id,
+        title: moved.title,
+        emoji: moved.emoji,
+        color: moved.color,
+        status: moved.status,
+        priority: moved.priority,
+        deadline: moved.deadline || "",
+      },
+    ];
+  }
+  if (selectedId.value === id) closeDrawer();
+  try {
+    await placeWorkItem(id, {
+      date: nextDate.value,
+      fromDate: date.value,
+      mode: "move",
+      shiftDeadline,
+    });
+  } catch (e) {
+    error.value = e.message;
+  }
+  await load({ keepSelection: false });
+}
+
+// Передумали: карточка возвращается из завтра в открытый день.
+async function undeferItem({ id, shiftDeadline }) {
+  try {
+    await placeWorkItem(id, {
+      date: date.value,
+      fromDate: nextDate.value,
+      mode: "move",
+      shiftDeadline,
+    });
+  } catch (e) {
+    error.value = e.message;
+  }
+  await load({ keepSelection: false });
 }
 
 // Ключ сортировки: сначала то, у чего есть слот в дне, потом дедлайны со
@@ -443,10 +502,13 @@ function humanMinutes(minutes) {
       :is-today="isToday"
       :main-subtasks="day?.mainSubtasks || []"
       :task-statuses="day?.taskStatuses || []"
+      :tomorrow="day?.tomorrow || []"
       @open="openItem"
       @open-sub="openSub"
       @add="addItem"
       @move="moveItem"
+      @defer="deferItem"
+      @undefer="undeferItem"
       @sort="sortByTime"
       @refresh="load"
     />
