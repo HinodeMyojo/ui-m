@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed, watch } from "vue";
-import confetti from "canvas-confetti";
+import confetti from "@/composables/useConfetti.js";
 import {
   percent,
   shortMonth,

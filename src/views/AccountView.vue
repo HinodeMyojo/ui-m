@@ -142,6 +142,7 @@ function resetUserPassword(user) {
             roles.find((r) => r.value === me.role)?.label || me.role
           }}</span>
         </div>
+        <button class="ghost" @click="$router.push('/admin')">Вкусняхи</button>
         <button class="ghost" @click="logout">Выйти</button>
       </section>
 

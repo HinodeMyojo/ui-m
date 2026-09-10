@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed, defineAsyncComponent } from "vue";
 import { useRouter } from "vue-router";
+import { isOn } from "@/composables/useFeatures.js";
 import "@/styles/mobile.css";
 
 // Мобильная главная — не сжатая месячная сетка, а лента карточек.
@@ -54,18 +55,26 @@ const weekdayLabel = computed(() => WEEKDAYS[now.getDay()]);
         <div class="m-head-sub">{{ weekdayLabel }}</div>
       </div>
       <button class="mh-icon" aria-label="Обновить" @click="refreshKey++">↻</button>
-      <button class="mh-icon" aria-label="Добавить в «Сегодня»" @click="router.push('/today')">
+      <button
+        v-if="isOn('module.today')"
+        class="mh-icon"
+        aria-label="Добавить в «Сегодня»"
+        @click="router.push('/today')"
+      >
         ＋
       </button>
     </header>
 
     <div :key="refreshKey" class="m-feed">
-      <MobileRoadmapCard />
-      <MobileTodayCard />
-      <MobileDisciplineCard />
-      <MobileJapaneseCard />
-      <MobileSportCard />
-      <MobileReadingCard />
+      <!-- Карточка выключенного раздела не просто прячется, а не грузится:
+           каждая тянет свой кусок API сама, и запрос в закрытый раздел был бы
+           лишним даже при спрятанной карточке. -->
+      <MobileRoadmapCard v-if="isOn('module.roadmap')" />
+      <MobileTodayCard v-if="isOn('module.today')" />
+      <MobileDisciplineCard v-if="isOn('module.discipline')" />
+      <MobileJapaneseCard v-if="isOn('module.japanese')" />
+      <MobileSportCard v-if="isOn('module.sport')" />
+      <MobileReadingCard v-if="isOn('module.library')" />
 
       <!-- Месячная сетка задач осталась десктопной, но остаётся доступной:
            на телефоне она открывается тем же экраном с горизонтальным

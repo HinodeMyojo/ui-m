@@ -64,6 +64,10 @@ export function clearSession() {
   localStorage.removeItem(REFRESH_KEY);
   localStorage.removeItem(EXPIRES_KEY);
   localStorage.removeItem(USER_KEY);
+  // Слепок вкусняшек — тоже про вошедшего: набор разделов у каждого свой,
+  // и следующий не должен увидеть чужой. Ключ вписан строкой, а не импортом
+  // из композабла: тот тянет за собой api.js, который тянет этот файл.
+  localStorage.removeItem("features.v1");
 }
 
 // Обновление идёт в одном экземпляре: refresh-токен одноразовый, и два

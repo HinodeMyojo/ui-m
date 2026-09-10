@@ -2,6 +2,7 @@
 import { ref, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import "@/styles/resume.css";
+import { isOn } from "@/composables/useFeatures.js";
 
 import {
   fetchResumes,
@@ -87,7 +88,7 @@ onMounted(load);
       </div>
       <div class="rs-row">
         <button class="rs-btn" @click="router.push('/resume/library')">Библиотека достижений</button>
-        <button class="rs-btn" @click="router.push('/resume/vacancies')">Вакансии</button>
+        <button v-if="isOn('integration.hh')" class="rs-btn" @click="router.push('/resume/vacancies')">Вакансии</button>
         <button class="rs-btn" @click="router.push('/resume/today')">Сегодня</button>
         <button class="rs-btn" :disabled="busy" @click="seed">Загрузить базовое</button>
         <button class="rs-btn is-primary" @click="createOpen = true">+ Резюме</button>

@@ -7,6 +7,7 @@ import WorkItemView from "@/components/workspace/WorkItemView.vue";
 import DayOverview from "@/components/workspace/DayOverview.vue";
 import CarryModal from "@/components/workspace/CarryModal.vue";
 import GooglePanel from "@/components/workspace/GooglePanel.vue";
+import { isOn } from "@/composables/useFeatures.js";
 import SearchModal from "@/components/workspace/SearchModal.vue";
 import SportTodayCard from "@/components/workspace/SportTodayCard.vue";
 import MainTasksPanel from "@/components/workspace/MainTasksPanel.vue";
@@ -415,7 +416,11 @@ function humanMinutes(minutes) {
         <button class="ws-btn" :class="{ hot: mainOpen }" @click="mainOpen = !mainOpen">
           📌 С главной
         </button>
-        <button class="ws-btn" @click="googleOpen = true">
+        <button
+          v-if="isOn('integration.google_calendar')"
+          class="ws-btn"
+          @click="googleOpen = true"
+        >
           📅 Google<span v-if="day?.google?.connected" class="ws-dot-ok"></span>
         </button>
         <button class="ws-btn primary" @click="addItem">+ Задача</button>
@@ -582,7 +587,7 @@ function humanMinutes(minutes) {
       @done="() => { carryOpen = false; load({ keepSelection: false }); }"
     />
     <GooglePanel
-      v-if="googleOpen"
+      v-if="googleOpen && isOn('integration.google_calendar')"
       :status="day?.google || {}"
       :date="date"
       @close="googleOpen = false"

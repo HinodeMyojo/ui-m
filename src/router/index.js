@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from "vue-router";
+import { routeAllowed } from "@/composables/useFeatures.js";
 import HomeView from "../views/HomeView.vue";
 import LoginView from "../views/LoginView.vue";
 
@@ -29,6 +30,12 @@ const router = createRouter({
       path: "/account",
       name: "account",
       component: () => import("@/views/AccountView.vue"),
+    },
+    {
+      // Админка вкусняшек: какие разделы, слои и сервисы включены.
+      path: "/admin",
+      name: "admin",
+      component: () => import("@/views/AdminView.vue"),
     },
     {
       path: "/skills",
@@ -206,6 +213,12 @@ router.beforeEach((to, from, next) => {
   } else if (to.path !== "/login" && !isAuth) {
     next("/login");
   } else if (to.path === "/login" && isAuth) {
+    next("/");
+  } else if (!routeAllowed(to.path)) {
+    // Выключенный в админке раздел закрыт целиком, а не только спрятан:
+    // ссылка из закладок или из старого сообщения бота ведёт на главную.
+    // Пока настройки не загрузились, страж пропускает — прятать разделы
+    // из-за неотвеченного запроса хуже, чем показать лишнее.
     next("/");
   } else {
     next();

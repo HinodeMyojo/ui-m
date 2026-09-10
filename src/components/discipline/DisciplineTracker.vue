@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed, onMounted, watch } from "vue";
-import confetti from "canvas-confetti";
+import confetti from "@/composables/useConfetti.js";
 import { useRouter } from "vue-router";
 import { fetchDisciplineMonth, disciplineLogicalToday } from "../api.js";
 import DisciplineChecklist from "./DisciplineChecklist.vue";

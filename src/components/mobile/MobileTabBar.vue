@@ -2,38 +2,50 @@
 import { ref, computed } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { logout as apiLogout } from "../api.js";
+import { moreModules, tabs as tabFeatures } from "@/composables/useFeatures.js";
 
-// Нижнее меню мобильного слоя. Четыре раздела, в которые заходят каждый день,
-// и «Ещё» на всё остальное. Пятая вкладка сознательно не раздел, а лист: если
-// каждому модулю дать по вкладке, получится полоса иконок 6×6 пикселей.
+// Нижнее меню мобильного слоя. Несколько разделов, в которые заходят каждый
+// день, и «Ещё» на всё остальное. Последняя вкладка сознательно не раздел, а
+// лист: если каждому модулю дать по вкладке, получится полоса иконок 6×6.
+//
+// Состав меню приезжает из настроек — его задаёт админка вкусняшек. «Главная»
+// стоит первой всегда: без неё из раздела нет дороги назад, кроме системной
+// кнопки. У раздела со своей мобильной раскладкой вкладка ведёт в неё —
+// «Спорт» на телефоне это ввод дня, а не десктопный экран с программами.
 
 const route = useRoute();
 const router = useRouter();
 
-const TABS = [
-  { to: "/", icon: "🏠", label: "Главная" },
-  { to: "/today", icon: "📅", label: "Сегодня" },
-  { to: "/library", icon: "📚", label: "Книги" },
-  { to: "/sport/today", icon: "💪", label: "Спорт" },
-];
+function mobileEntry(def) {
+  return {
+    to: def.mobileRoute || def.route,
+    icon: def.mobileIcon || def.icon,
+    label: def.mobileTitle || def.title,
+  };
+}
 
-// Разделы «Ещё». Порядок — по тому, как часто в них заходят, а не по алфавиту.
-const MORE = [
-  { to: "/blockers", icon: "🚧", label: "Блокеры" },
-  { to: "/discipline", icon: "🎯", label: "Дисциплина" },
-  { to: "/roadmap", icon: "🗺️", label: "Roadmap" },
-  { to: "/roadmap/today", icon: "📖", label: "Чтение дня" },
-  { to: "/japanese", icon: "語", label: "Японский" },
-  { to: "/resume/today", icon: "📄", label: "Резюме" },
-  { to: "/learning-skills", icon: "🧠", label: "Навыки" },
-  { to: "/travel", icon: "✈️", label: "Путешествия" },
-  { to: "/budget", icon: "💰", label: "Бюджет" },
-  { to: "/vocabulary", icon: "🔤", label: "Словарь" },
-  { to: "/testing", icon: "❓", label: "Тесты" },
-  { to: "/journey", icon: "🧭", label: "Карта пути" },
-  { to: "/diagrams", icon: "📐", label: "Диаграммы" },
-  { to: "/pdfReader", icon: "📕", label: "Читалка" },
-];
+const TABS = computed(() => [
+  { to: "/", icon: "🏠", label: "Главная" },
+  ...tabFeatures.value.map(mobileEntry),
+]);
+
+// «Ещё» — всё включённое, чего нет во вкладках. Раздел со своей мобильной
+// раскладкой попадает сюда дважды: десктопный экран и экран дня — это разные
+// места, и на телефоне нужны оба.
+const MORE = computed(() => {
+  const inTabs = new Set(TABS.value.map((t) => t.to));
+  const out = [];
+  for (const def of moreModules.value) {
+    if (!inTabs.has(def.route)) {
+      out.push({ to: def.route, icon: def.icon, label: def.title });
+    }
+    if (def.mobileRoute && !inTabs.has(def.mobileRoute)) {
+      out.push(mobileEntry(def));
+    }
+  }
+  out.push({ to: "/admin", icon: "⚙️", label: "Вкусняхи" });
+  return out;
+});
 
 const sheetOpen = ref(false);
 
@@ -43,7 +55,7 @@ const activeTab = computed(() => {
   // Точное совпадение проиграет вложенным путям, поэтому берём самый длинный
   // подходящий префикс: /sport/today не должен подсвечивать «Сегодня».
   let best = "";
-  for (const t of TABS) {
+  for (const t of TABS.value) {
     if (t.to !== "/" && path.startsWith(t.to) && t.to.length > best.length) best = t.to;
   }
   return best;

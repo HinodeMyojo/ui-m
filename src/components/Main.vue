@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount } from "vue";
-import confetti from "canvas-confetti";
+import confetti from "@/composables/useConfetti.js";
 import SalaryViewer from "./elements/SalaryViewer.vue";
 import {
   fetchTasks,
@@ -14,6 +14,7 @@ import {
 } from "./api.js";
 import { useRouter } from "vue-router";
 
+import { isOn, tiles } from "@/composables/useFeatures.js";
 import gifRocket from "../assets/gif/rocket_1f680.gif"
 import gifLantern from "../assets/gif/1f383.gif"
 
@@ -92,6 +93,22 @@ const createEmptyTaskForm = () => ({
 function openMdToPdfPage() {
   const { href } = router.resolve({ name: 'mdToPdf', params: { id: 1 } });
   window.open(href, '_blank');
+}
+
+// Плитки-вкусняхи приезжают из настроек: их состав и порядок задаёт админка,
+// а не этот файл. Здесь остаётся то, чего каталог не знает, — две гифки
+// вместо эмодзи и то, что «MD TO PDF» открывается новой вкладкой.
+const TILE_GIFS = {
+  "module.md_to_pdf": gifRocket,
+  "module.pdf_reader": gifLantern,
+};
+
+function openTile(tile) {
+  if (tile.key === "module.md_to_pdf") {
+    openMdToPdfPage();
+    return;
+  }
+  router.push(tile.route);
 }
 
 function celebrateTaskCreation() {
@@ -801,12 +818,13 @@ function closeTimeStats() {
         <button class="month-nav-icon" aria-label="Следующий месяц" @click="handleNextMonth">›</button>
       </div>
       <div class="header-right">
-        <button class="add-task-btn" @click="router.push('/today')">Сегодня</button>
-        <button class="add-task-btn" @click="router.push('/learning-skills')">Навыки</button>
+        <button v-if="isOn('module.today')" class="add-task-btn" @click="router.push('/today')">Сегодня</button>
+        <button v-if="isOn('module.learning_skills')" class="add-task-btn" @click="router.push('/learning-skills')">Навыки</button>
         <button class="add-task-btn" @click="openNyamaModal">Вкусняхи</button>
         <button class="add-task-btn" @click="openAddModal">
           + Добавить задачу
         </button>
+        <button class="add-task-btn" @click="router.push('/admin')" title="Что включить, а что выключить">⚙</button>
         <button class="add-task-btn" @click="router.push('/account')">Профиль</button>
         <button class="logout-btn" @click="logout">Выйти</button>
         <button class="version-badge" @click="showBuildInfo = !showBuildInfo" :title="`v${appVersion} · ${buildTime}`">v{{ appVersion }}</button>
@@ -1092,61 +1110,17 @@ function closeTimeStats() {
   <transition name="modal-fade">
     <div v-if="showNyamaModals" class="modal-nyama-backdrop" @click.self="showNyamaModals = false">
       <div class="modal-nyama">
-        <button class="nyamaaa" @click="openMdToPdfPage">
-          <div class="icon"><img :src="gifRocket" alt=""></div>
-          <p class="text">MD TO PDF</p>
-        </button>
-        <button class="nyamaaa" @click="router.push('/pdfReader')">
-          <div class="icon"><img :src="gifLantern" alt=""></div>
-          <p class="text">PDF Reader</p>
-        </button>
-        <button class="nyamaaa" @click="router.push('/diagrams')">
-          <div class="icon">🗺️</div>
-          <p class="text">Диаграммы</p>
-        </button>
-        <button class="nyamaaa" @click="router.push('/vocabulary')">
-          <div class="icon">🗣️</div>
-          <p class="text">English Coach</p>
-        </button>
-        <button class="nyamaaa" @click="router.push('/budget')">
-          <div class="icon">💰</div>
-          <p class="text">Бюджет</p>
-        </button>
-        <button class="nyamaaa" @click="router.push('/skill-tree')">
-          <div class="icon">⚔️</div>
-          <p class="text">Skill Tree</p>
-        </button>
-        <button class="nyamaaa" @click="router.push('/journey')">
-          <div class="icon">🗺️</div>
-          <p class="text">Карта пути</p>
-        </button>
-        <button class="nyamaaa" @click="router.push('/testing')">
-          <div class="icon">📝</div>
-          <p class="text">Тестирование</p>
-        </button>
-        <button class="nyamaaa" @click="router.push('/travel')">
-          <div class="icon">✈️</div>
-          <p class="text">Путешествия</p>
-        </button>
-        <button class="nyamaaa" @click="router.push('/sport')">
-          <div class="icon">🏋️</div>
-          <p class="text">Спорт</p>
-        </button>
-        <button class="nyamaaa" @click="router.push('/roadmap')">
-          <div class="icon">🗺️</div>
-          <p class="text">Roadmap</p>
-        </button>
-        <button class="nyamaaa" @click="router.push('/library')">
-          <div class="icon">📚</div>
-          <p class="text">Библиотека</p>
-        </button>
-        <button class="nyamaaa" @click="router.push('/resume')">
-          <div class="icon">📄</div>
-          <p class="text">Резюме</p>
-        </button>
-        <button class="nyamaaa" @click="router.push('/japanese')">
-          <div class="icon">語</div>
-          <p class="text">Японский</p>
+        <button
+          v-for="tile in tiles"
+          :key="tile.key"
+          class="nyamaaa"
+          @click="openTile(tile)"
+        >
+          <div class="icon">
+            <img v-if="TILE_GIFS[tile.key]" :src="TILE_GIFS[tile.key]" alt="" />
+            <template v-else>{{ tile.icon }}</template>
+          </div>
+          <p class="text">{{ tile.title }}</p>
         </button>
         <button class="nyamaaa nyamaaa-soon nyamaaa-unknown" disabled>
           <div class="icon">❓</div>

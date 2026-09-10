@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed, watch, onMounted } from "vue";
-import confetti from "canvas-confetti";
+import confetti from "@/composables/useConfetti.js";
 import { fetchTasks, fetchGlobalTasks, checkTask, createWorkItem } from "@/components/api.js";
 import { AUTUMN_COLORS } from "@/composables/useAutumn.js";
 

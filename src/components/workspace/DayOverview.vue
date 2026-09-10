@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed, watch, onMounted, onBeforeUnmount } from "vue";
-import confetti from "canvas-confetti";
+import confetti from "@/composables/useConfetti.js";
 import MarkdownView from "./MarkdownView.vue";
 import { AUTUMN_COLORS } from "@/composables/useAutumn.js";
 import {

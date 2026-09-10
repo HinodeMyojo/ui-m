@@ -1,8 +1,14 @@
 <script setup>
-import { computed, defineAsyncComponent } from "vue";
+import { computed, defineAsyncComponent, watch } from "vue";
 import { RouterView, useRoute } from "vue-router";
 import { isMobile } from "@/composables/useIsMobile.js";
 import { sessionFocus } from "@/composables/useSessionFocus.js";
+import {
+  clearFeatures,
+  features,
+  isOn,
+  loadFeatures,
+} from "@/composables/useFeatures.js";
 
 // Нижнее меню — часть мобильного слоя, а не главной страницы: уйти в «Сегодня»
 // и не иметь дороги назад, кроме системной кнопки, — это не навигация.
@@ -22,6 +28,25 @@ const WeatherPanel = defineAsyncComponent(
 );
 
 const route = useRoute();
+
+// Вкусняшки грузятся один раз на приложение — их спрашивают и главная, и
+// меню, и страж маршрутов. Следим за маршрутом, а не только за монтированием:
+// после входа приложение не перезагружается, а набор разделов у вошедшего
+// свой. Слепок из localStorage при этом уже нарисовал первый кадр.
+watch(
+  () => route.path,
+  (path) => {
+    if (path === "/login") {
+      // Вышли — забываем набор разделов: в память он попал вместе с токеном,
+      // и следующий вошедший должен получить свой, а не остаться на чужом.
+      clearFeatures();
+      return;
+    }
+    if (route.meta?.public) return;
+    if (!features.value) loadFeatures();
+  },
+  { immediate: true },
+);
 
 // Экраны, которые занимают телефон целиком: вход, читалка (там своя панель и
 // каждый пиксель под текст), печать резюме и гостевая ссылка на поездку.
@@ -45,8 +70,8 @@ const showTabBar = computed(() => {
   <!-- Печать резюме — экран без вайба: листья попадут в PDF. Учебная сессия —
        тоже: листья летали по кнопкам ответа. -->
   <template v-if="!route.path.endsWith('/print')">
-    <AutumnLayer v-if="!sessionFocus" />
-    <WeatherPanel v-if="!route.meta?.public" />
+    <AutumnLayer v-if="!sessionFocus && isOn('layer.autumn')" />
+    <WeatherPanel v-if="!route.meta?.public && isOn('layer.weather')" />
   </template>
 </template>
 

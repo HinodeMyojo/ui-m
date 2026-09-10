@@ -1,4 +1,5 @@
 import { ref, computed, watch } from "vue";
+import { isOn } from "./useFeatures.js";
 
 // Настоящая погода в точке пользователя. Нужна двум потребителям сразу:
 // панели слева и осеннему слою — тот по ней льёт дождь и гонит ветер.
@@ -102,6 +103,12 @@ let started = false;
 export async function refresh() {
   const at = place.value;
   if (!at) return;
+  // Open-Meteo выключен в админке — сети не касаемся вовсе. Погода остаётся
+  // пустой, а осенний слой уходит на свой запасной ветер (sky.known === false).
+  if (!isOn("integration.open_meteo")) {
+    weather.value = null;
+    return;
+  }
   loading.value = true;
   error.value = "";
   try {
@@ -141,6 +148,7 @@ export async function refresh() {
 // таймер на каждой вкладке никому не нужен.
 export function ensureWeather() {
   if (started) return;
+  if (!isOn("integration.open_meteo")) return;
   started = true;
   if (place.value) refresh();
   timer = setInterval(() => {
