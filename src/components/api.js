@@ -1,4 +1,3 @@
-import router from "@/router";
 import {
   clearSession,
   ensureFreshToken,
@@ -7,7 +6,8 @@ import {
   saveSession,
 } from "./session";
 
-export const API_BASE_URL = import.meta.env.VITE_API_URL || `${window.location.protocol}//82.202.136.167:5005`;
+export { API_BASE_URL } from "@/api/base";
+import { API_BASE_URL } from "@/api/base";
 
 function withAuth(options, token) {
   return {
@@ -18,6 +18,15 @@ function withAuth(options, token) {
       ...(token ? { Authorization: `Bearer ${token}` } : {}), // Authorization сверху
     },
   };
+}
+
+// Уход на форму входа. Роутер грузится по требованию нарочно: статический
+// импорт тянул за собой весь главный роутер вместе с главной страницей и
+// формой входа — и всё это уезжало в бандл мини-аппа Telegram, которому не
+// нужно ни то, ни другое (155 КБ на пустом месте).
+async function toLogin() {
+  const { default: router } = await import("@/router");
+  router.push("/login");
 }
 
 export async function authorizedFetch(url, options = {}) {
@@ -34,7 +43,22 @@ export async function authorizedFetch(url, options = {}) {
 
   if (response.status === 401) {
     clearSession();
-    router.push("/login");
+
+    // В мини-аппе Telegram формы входа нет, и уводить туда некуда: маршрута
+    // /login в нём не существует. Зато удостоверение всегда под рукой —
+    // клиент Telegram держит подписанную строку в странице, — поэтому вместо
+    // выхода перезаходим по ней. Импорт ленивый: так код мини-аппа не
+    // приезжает в бандл обычного приложения.
+    if (globalThis.Telegram?.WebApp?.initData) {
+      const { authorize } = await import("@/tg/tgAuth");
+      const result = await authorize();
+      if (result.state === "ok") {
+        response = await fetch(url, withAuth(options, getToken()));
+        if (response.status !== 401) return response;
+      }
+    }
+
+    await toLogin();
     throw new Error("Unauthorized");
   }
 
@@ -95,7 +119,7 @@ export async function logout() {
     // случае, а серверная догорит сама по сроку.
   }
   clearSession();
-  router.push("/login");
+  await toLogin();
 }
 
 export async function fetchMe() {

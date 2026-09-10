@@ -149,9 +149,16 @@ export const JP_GROUP_COLORS = ["#ff7a7a", "#59a5ff", "#63c94f", "#ffd666", "#c5
 
 // --- Озвучка ---
 //
-// Web Speech API: голос уже есть в системе, платить не за что и сеть не нужна.
-// Облачный TTS с кешем в S3 — это озвучка колоды целиком, отдельная история;
-// здесь нужна кнопка «как это звучит» прямо на карточке.
+// Путей два, и первый теперь серверный.
+//
+// Web Speech API был единственным: голос уже есть в системе, платить не за что,
+// сеть не нужна. Но в WebView Telegram он работает через раз, а в мини-аппе
+// это единственный браузер, который у человека есть. Заодно он всегда молчал
+// на машинах, где не доставлен японский язык.
+//
+// Поэтому сначала спрашиваем сервер (open_jtalk в соседнем контейнере, ответ
+// лежит в кеше и звучит одинаково всегда), а синтезатор браузера остаётся
+// запасным путём — на случай, когда контейнера нет или сеть отвалилась.
 //
 // Произносится всегда кана, а не запись кандзи: синтезатор сам выбирает чтение
 // иероглифов и на 生 или 何 ошибается, а кану читает однозначно.
@@ -179,8 +186,72 @@ export function primeJapaneseVoice() {
   });
 }
 
+// Один общий элемент звука на всё приложение.
+//
+// На iOS проигрывать можно только то, что запущено внутри жеста, и «разрешение»
+// выдаётся элементу, а не странице. Новый Audio на каждый тап это разрешение
+// теряет, поэтому элемент один и переиспользуется.
+let audioEl = null;
+
+function player() {
+  if (!audioEl) audioEl = new Audio();
+  return audioEl;
+}
+
+// Готовые файлы: текст → ссылка на blob. Держим немного — карточек за сессию
+// десятки, а каждый файл это сотня килобайт в памяти вкладки.
+const SPEECH_CACHE_MAX = 40;
+const speechCache = new Map();
+
+// Пока не доказано обратное, считаем, что серверная озвучка есть. Доказывает
+// обратное первый же неудачный запрос: дальше не ходим впустую до перезагрузки.
+let serverSpeech = true;
+const pending = new Map();
+
+function cacheSpeech(text, url) {
+  speechCache.set(text, url);
+  while (speechCache.size > SPEECH_CACHE_MAX) {
+    const oldest = speechCache.keys().next().value;
+    URL.revokeObjectURL(speechCache.get(oldest));
+    speechCache.delete(oldest);
+  }
+}
+
+// primeJapaneseSpeech заранее тянет звук для текста.
+//
+// Это не оптимизация, а условие работоспособности: между тапом и ответом
+// сервера проходит запрос, а после await жест на iOS уже «остыл» и play()
+// отклоняется. Поэтому файл должен лежать готовым к моменту тапа — карточка
+// вызывает это, как только показала знак.
+export function primeJapaneseSpeech(text) {
+  const key = String(text || "").trim();
+  if (!key || !serverSpeech || speechCache.has(key)) return;
+  if (pending.has(key)) return;
+
+  const task = (async () => {
+    try {
+      const response = await authorizedFetch(`${JP}/tts?text=${encodeURIComponent(key)}`);
+      if (!response.ok) {
+        // 503 — озвучка не настроена или синтезатор не поднялся. Это не
+        // ошибка сети, повторять бессмысленно.
+        if (response.status === 503) serverSpeech = false;
+        return null;
+      }
+      const url = URL.createObjectURL(await response.blob());
+      cacheSpeech(key, url);
+      return url;
+    } catch {
+      return null;
+    } finally {
+      pending.delete(key);
+    }
+  })();
+
+  pending.set(key, task);
+}
+
 export function canSpeakJapanese() {
-  return !!globalThis.speechSynthesis;
+  return serverSpeech || !!globalThis.speechSynthesis;
 }
 
 // Имя найденного японского голоса — для проверки в настройках. Пусто значит,
@@ -195,8 +266,32 @@ export function japaneseVoiceName() {
 // speakJapanese произносит кану. Возвращает false, если синтезатора нет —
 // кнопку в таком случае показывать незачем.
 export function speakJapanese(kana) {
-  const synth = globalThis.speechSynthesis;
   const text = String(kana || "").trim();
+  if (!text) return false;
+
+  // Готовый файл проигрывается прямо здесь, не выходя из обработчика тапа, —
+  // иначе iOS откажет.
+  const ready = speechCache.get(text);
+  if (ready) {
+    const el = player();
+    el.pause();
+    el.src = ready;
+    el.currentTime = 0;
+    const started = el.play();
+    // play() возвращает промис и отклоняется молча. Если не вышло — падаем на
+    // синтезатор браузера, а не оставляем человека в тишине.
+    if (started?.catch) started.catch(() => speakBrowser(text));
+    return true;
+  }
+
+  // Файла ещё нет: говорим браузером сейчас и заказываем на будущее.
+  primeJapaneseSpeech(text);
+  return speakBrowser(text);
+}
+
+// speakBrowser — прежний путь через Web Speech API, слово в слово.
+function speakBrowser(text) {
+  const synth = globalThis.speechSynthesis;
   if (!synth || !text) return false;
   primeJapaneseVoice();
   if (!jaVoice) jaVoice = pickJapaneseVoice();

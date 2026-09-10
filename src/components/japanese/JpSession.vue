@@ -1,6 +1,7 @@
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount, nextTick } from "vue";
+import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from "vue";
 import JpKanaKeyboard from "./JpKanaKeyboard.vue";
+import { haptic } from "@/tg/telegram";
 import JpTraceCanvas from "./JpTraceCanvas.vue";
 import JpKanjiSheet from "./JpKanjiSheet.vue";
 import JpWordSheet from "./JpWordSheet.vue";
@@ -37,6 +38,7 @@ import {
   canSpeakJapanese,
   primeJapaneseVoice,
   speakJapanese,
+  primeJapaneseSpeech,
   speakableOf,
 } from "@/components/japaneseApi.js";
 
@@ -301,6 +303,10 @@ function reveal(v) {
   verdict.value = v;
   phase.value = PHASE.REVEAL;
   jpPlay(soundFor(v));
+  // Вибрация в довесок к звуку. В мини-аппе Telegram это единственный отклик,
+  // который дойдёт наверняка: звук человек глушит, а на iOS в WebView он ещё и
+  // отваливается сам. Вне Telegram вызов ничего не делает.
+  haptic(soundFor(v) === "right" ? "success" : soundFor(v) === "close" ? "warning" : "error");
   // Арена — про скорость: спрашивать после ответа ещё и уверенность значит
   // отдать половину минуты кнопкам.
   if (isArena.value) {
@@ -521,6 +527,18 @@ const readingNow = computed(() => {
 function say() {
   speakJapanese(speakable.value);
 }
+
+// Звук заказывается, как только карточка показана, а не по нажатию кнопки.
+// Это не про скорость: на iOS проиграть можно только то, что запущено внутри
+// жеста, а запрос к серверу жест «остужает» — к моменту ответа play() уже
+// отклоняется. Поэтому файл должен лежать готовым до тапа.
+watch(
+  speakable,
+  (text) => {
+    if (text) primeJapaneseSpeech(text);
+  },
+  { immediate: true }
+);
 
 onMounted(() => {
   sessionFocus.value = true;

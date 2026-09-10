@@ -14,7 +14,12 @@ import JpSession from "@/components/japanese/JpSession.vue";
 const route = useRoute();
 const router = useRouter();
 
-const kind = ref(["mix", "review", "weak"].includes(route.query.kind) ? route.query.kind : "mix");
+// Список разрешённых типов — защита от произвольной строки в адресе, а не
+// перечень возможностей: сервер знает и «сверх нормы», и экзамен, и арену,
+// и в мини-апп из бота приходят как раз они.
+const SESSION_KINDS = ["mix", "review", "weak", "ahead", "exam", "arena"];
+
+const kind = ref(SESSION_KINDS.includes(route.query.kind) ? route.query.kind : "mix");
 
 function leave() {
   // Возврат — туда, откуда пришли, но не в саму же сессию.

@@ -1,6 +1,6 @@
 // Библиотека PDF — docs/pdf-library.md (back-m).
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || `${window.location.protocol}//82.202.136.167:5005`;
+import { API_BASE_URL } from "./base";
 
 const PDF = `${API_BASE_URL}/api/v1/pdfs`;
 

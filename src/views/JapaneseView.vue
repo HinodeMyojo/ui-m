@@ -11,6 +11,7 @@ import JpScanTab from "@/components/japanese/JpScanTab.vue";
 import JpLevelsTab from "@/components/japanese/JpLevelsTab.vue";
 import JpProgressTab from "@/components/japanese/JpProgressTab.vue";
 import JpSettingsTab from "@/components/japanese/JpSettingsTab.vue";
+import { isMiniApp } from "@/tg/telegram";
 
 // Раздел «Японский». Первый экран отвечает на вопрос «где я и что дальше», а
 // не сразу бросает в сессию: заниматься начинают с виджета на главной или с
@@ -129,7 +130,9 @@ onMounted(load);
       <h1>語 Японский</h1>
       <div class="jp-head-right">
         <span v-if="overview" class="jp-streak">🔥 {{ overview.streak }}</span>
-        <button class="jp-btn" @click="router.push('/')">← Назад</button>
+        <!-- В мини-аппе Telegram своя стрелка в шапке, а этот раздел там и есть
+             корень: вторая «назад», ведущая в никуда, читается как поломка. -->
+        <button v-if="!isMiniApp" class="jp-btn" @click="router.push('/')">← Назад</button>
       </div>
     </div>
 

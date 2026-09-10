@@ -30,7 +30,7 @@ import type {
 } from "../types/budget";
 import { clearSession } from "../components/session";
 
-const API_BASE_URL = `${window.location.protocol}//82.202.136.167:5005`;
+import { API_BASE_URL } from "./base";
 const PREFIX = "/api/v1/budget";
 
 async function budgetRequest<T>(

@@ -16,6 +16,17 @@ export default defineConfig({
     __BUILD_TIME__: JSON.stringify(new Date().toISOString()),
   },
   plugins: [vue(), vueDevTools(), tailwindcss()],
+  build: {
+    rollupOptions: {
+      // Две точки входа: обычное приложение и мини-апп Telegram. Репозиторий
+      // общий (компоненты японского раздела одни на двоих), а бандлы разные —
+      // в мини-апп не должны приезжать задачи, бюджет и редактор диаграмм.
+      input: {
+        main: fileURLToPath(new URL("./index.html", import.meta.url)),
+        tg: fileURLToPath(new URL("./tg/index.html", import.meta.url)),
+      },
+    },
+  },
   resolve: {
     alias: {
       "@": fileURLToPath(new URL("./src", import.meta.url)),

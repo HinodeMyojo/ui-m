@@ -14,7 +14,9 @@ import type {
 } from "../types/skillTree";
 import { clearSession } from "../components/session";
 
-const API_BASE = `${window.location.protocol}//82.202.136.167:5005/api/v1/skill-tree`;
+import { API_BASE_URL } from "./base";
+
+const API_BASE = `${API_BASE_URL}/api/v1/skill-tree`;
 
 async function request<T>(
   endpoint: string,
