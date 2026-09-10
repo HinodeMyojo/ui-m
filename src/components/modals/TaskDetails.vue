@@ -213,6 +213,15 @@
             <button class="subtask-btn add-btn" @click="openAddSubtaskModal">
               Добавить
             </button>
+            <button
+              v-if="overdueOpenSubtasks"
+              class="subtask-btn dates-btn"
+              :disabled="refreshingDates"
+              :title="`Просроченные открытые подзадачи (${overdueOpenSubtasks}) встанут от сегодня: просрочена на день — на сегодня, на два — на завтра`"
+              @click="refreshSubtaskDates"
+            >
+              {{ refreshingDates ? "Обновляю..." : `📅 Обновить даты (${overdueOpenSubtasks})` }}
+            </button>
             <button class="subtask-btn json-btn" @click="showJsonImport = !showJsonImport">
               {{ showJsonImport ? '✕ JSON' : '{ } JSON' }}
             </button>
@@ -233,6 +242,8 @@
               </button>
             </div>
           </div>
+
+          <div v-if="refreshDatesNote" class="subtask-dates-note">{{ refreshDatesNote }}</div>
 
           <!-- JSON Import Section -->
           <div v-if="showJsonImport" class="json-import-panel">
@@ -623,6 +634,7 @@ import {
   reorderTasksAPI,
   fetchTaskLogBoard,
   resolveTaskLogEntry,
+  refreshSubtaskDatesAPI,
 } from "../api.js";
 
 import {
@@ -1053,6 +1065,40 @@ const importSubtasksFromJson = async () => {
     jsonImportError.value = "Ошибка при создании: " + e.message;
   } finally {
     jsonImporting.value = false;
+  }
+};
+
+// «Обновить даты» — подтянуть просроченные открытые подзадачи к сегодняшнему
+// дню зеркалом: просрочена на день — срок на сегодня, на два — на завтра, на
+// три — на послезавтра. Закрытые и будущие сроки не трогаем.
+const refreshingDates = ref(false);
+const refreshDatesNote = ref("");
+
+const overdueOpenSubtasks = computed(() => {
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  return (task.value?.subtasks || []).filter((sub) => {
+    if (sub.done || !sub.end) return false;
+    const end = new Date(sub.end);
+    if (Number.isNaN(end.getTime())) return false;
+    return new Date(end.getFullYear(), end.getMonth(), end.getDate()) < today;
+  }).length;
+});
+
+const refreshSubtaskDates = async () => {
+  if (refreshingDates.value || !task.value?.id) return;
+  refreshingDates.value = true;
+  refreshDatesNote.value = "";
+  try {
+    const updated = await refreshSubtaskDatesAPI(task.value.id);
+    refreshDatesNote.value = updated
+      ? `Сроки обновлены: ${updated}`
+      : "Просроченных открытых подзадач нет";
+    if (updated) reloadTask();
+  } catch (e) {
+    refreshDatesNote.value = e.message || "не удалось обновить даты";
+  } finally {
+    refreshingDates.value = false;
   }
 };
 
@@ -1524,6 +1570,22 @@ function getFileIcon(type) {
 </script>
 <style scoped>
 /* ... (сохраняем все существующие стили) ... */
+
+.subtask-btn.dates-btn {
+  background: #2a2d38;
+  color: #ffd666;
+}
+
+.subtask-btn.dates-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.subtask-dates-note {
+  margin-top: 6px;
+  font-size: 12px;
+  color: #9aa0b0;
+}
 
 /* Новые стили для дедлайнов в подзадачах */
 .subtask-content {

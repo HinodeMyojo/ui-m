@@ -2,7 +2,12 @@
 import { ref, computed } from "vue";
 import MarkdownView from "./MarkdownView.vue";
 import TaskLogPanel from "@/components/tasklog/TaskLogPanel.vue";
-import { updateWorkItem, setWorkItemStatus, workFileUrl } from "@/components/api.js";
+import {
+  collapseWorkItemTask,
+  updateWorkItem,
+  setWorkItemStatus,
+  workFileUrl,
+} from "@/components/api.js";
 
 // Рабочий вид карточки: показываем только то, что реально заполнено.
 // Никаких пустых секций и полей ввода — работать, а не настраивать.
@@ -30,6 +35,22 @@ const newBlocker = ref("");
 const blockerFormOpen = ref(false);
 
 const status = computed(() => STATUSES.find((s) => s.key === props.item.status) || STATUSES[0]);
+
+// Схлопнуть карточку с подзадачей главной страницы в одно дело: на доске дня
+// подзадача перестаёт стоять отдельной строкой. Обратно — тем же переключателем.
+async function toggleCollapse(task) {
+  if (busy.value) return;
+  busy.value = true;
+  error.value = "";
+  try {
+    await collapseWorkItemTask(props.item.id, task.id, !task.collapsed);
+    emit("changed", { keepSelection: true });
+  } catch (e) {
+    error.value = e.message || "не удалось схлопнуть задачи";
+  } finally {
+    busy.value = false;
+  }
+}
 
 const checks = computed(() => props.item.checks || []);
 const checkProgress = computed(() => {
@@ -374,6 +395,18 @@ function toggleLog(taskId) {
               {{ t.statusName }}
             </span>
             <span v-if="t.openBlockers" class="wiv-task-blockers">🚧 {{ t.openBlockers }}</span>
+            <button
+              v-if="t.parentId"
+              class="wiv-task-log"
+              :title="
+                t.collapsed
+                  ? 'Развернуть: подзадача снова встанет на доску отдельно'
+                  : 'Схлопнуть: карточка и подзадача — одно дело, на доске одна строка'
+              "
+              @click="toggleCollapse(t)"
+            >
+              {{ t.collapsed ? "⇱ развернуть" : "⇲ схлопнуть" }}
+            </button>
             <button class="wiv-task-log" @click="toggleLog(t.id)">
               {{ openLogTaskId === t.id ? "▾" : "▸" }} лента
             </button>

@@ -5,6 +5,7 @@ import MarkdownView from "./MarkdownView.vue";
 import { AUTUMN_COLORS } from "@/composables/useAutumn.js";
 import {
   checkTask,
+  collapseWorkItemTask,
   createWorkItem,
   setTaskLogStatus,
   setWorkItemCarry,
@@ -171,19 +172,57 @@ async function moveSub(sub, column, card) {
 
 // Подзадача — не карточка дня, но одним нажатием ею становится: так у неё
 // появляются время, полотно и всё остальное хозяйство ежедневника.
+// Карточка из подзадачи — это та же подзадача, а не вторая такая же, поэтому
+// сразу схлопываем: иначе в колонке оставались две строки об одном деле.
 async function subToDay(sub, event) {
   event.stopPropagation();
   subError.value = "";
   try {
-    await createWorkItem({
+    const created = await createWorkItem({
       date: props.date,
       title: sub.title,
       color: sub.color || sub.parentColor || "",
       taskIds: [sub.id],
     });
+    if (created?.id) await collapseWorkItemTask(created.id, sub.id, true);
     emit("refresh");
   } catch (e) {
     subError.value = e.message || "не удалось перенести в день";
+  }
+}
+
+// Схлопнуть подзадачу с уже существующей карточкой дня, которая к ней привязана:
+// карточку заводили руками, а подзадача приехала сюда своим дедлайном — дело
+// одно, строк две.
+async function collapseSub(sub, event) {
+  event.stopPropagation();
+  if (!sub.linkedItemId || subBusy.value.has(sub.id)) return;
+  subBusy.value = new Set(subBusy.value).add(sub.id);
+  subError.value = "";
+  try {
+    await collapseWorkItemTask(sub.linkedItemId, sub.id, true);
+    emit("refresh");
+  } catch (e) {
+    subError.value = e.message || "не удалось схлопнуть";
+  } finally {
+    const rest = new Set(subBusy.value);
+    rest.delete(sub.id);
+    subBusy.value = rest;
+  }
+}
+
+// Схлопнутые привязки карточки: по ним рисуем плашку и разворачиваем обратно.
+function collapsedTasks(item) {
+  return (item.tasks || []).filter((t) => t.collapsed);
+}
+
+async function expandTask(item, task, event) {
+  event.stopPropagation();
+  try {
+    await collapseWorkItemTask(item.id, task.id, false);
+    emit("refresh");
+  } catch (e) {
+    subError.value = e.message || "не удалось развернуть";
   }
 }
 
@@ -825,6 +864,9 @@ onBeforeUnmount(() => {
           <div class="ovw-sub-flags">
             <span class="ovw-sub-flag">с главной</span>
             <span v-if="sub.parentIsGlobal" class="ovw-sub-flag global">глобальная</span>
+            <span v-if="sub.linkedItemId" class="ovw-sub-flag dupe" title="В этом дне уже есть карточка, привязанная к этой подзадаче">
+              дубль карточки
+            </span>
             <span
               class="ovw-sub-flag due"
               :class="{ soon: subUrgency(sub)?.tone === 'soon', bad: subUrgency(sub)?.tone === 'over' }"
@@ -850,6 +892,15 @@ onBeforeUnmount(() => {
             </button>
             <span class="ovw-sub-title">{{ sub.title }}</span>
             <button
+              v-if="sub.linkedItemId"
+              class="ovw-sub-move ovw-nodrag"
+              title="Схлопнуть с карточкой дня: останется одна задача"
+              @click="collapseSub(sub, $event)"
+            >
+              ⇲
+            </button>
+            <button
+              v-else
               class="ovw-sub-move ovw-nodrag"
               title="Сделать карточкой этого дня"
               @click="subToDay(sub, $event)"
@@ -968,6 +1019,25 @@ onBeforeUnmount(() => {
 
             <div v-if="item.openBlockers" class="ovw-card-blocked">
               🚧 заблокировано — {{ item.openBlockers }}
+            </div>
+
+            <!-- Схлопнутая подзадача: отдельной строкой на доске её нет, но
+                 видно, что карточка — это она, и можно развернуть обратно. -->
+            <div
+              v-for="t in collapsedTasks(item)"
+              :key="'col-' + t.id"
+              class="ovw-card-collapsed"
+            >
+              <span class="ovw-card-collapsed-text" :title="t.parentTitle ? t.parentTitle + ' → ' + t.title : t.title">
+                ⇲ подзадача: {{ t.title }}
+              </span>
+              <button
+                class="ovw-card-collapsed-btn ovw-nodrag"
+                title="Развернуть обратно: подзадача снова встанет на доску отдельно"
+                @click="expandTask(item, t, $event)"
+              >
+                развернуть
+              </button>
             </div>
 
             <div
@@ -1867,6 +1937,45 @@ onBeforeUnmount(() => {
   color: #ffd666;
   border-color: rgba(255, 214, 102, 0.45);
   background: rgba(255, 214, 102, 0.1);
+}
+
+.ovw-sub-flag.dupe {
+  border-color: #e07b3966;
+  color: #e07b39;
+}
+
+.ovw-card-collapsed {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  background: #e07b3914;
+  border: 1px solid #e07b3933;
+  font-size: 11px;
+  color: #c7cbd6;
+}
+
+.ovw-card-collapsed-text {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ovw-card-collapsed-btn {
+  flex: none;
+  border: none;
+  background: transparent;
+  color: #8a90a0;
+  font-size: 11px;
+  cursor: pointer;
+  padding: 0;
+}
+
+.ovw-card-collapsed-btn:hover {
+  color: #e07b39;
 }
 
 .ovw-sub-flag.due.soon {

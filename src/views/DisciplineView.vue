@@ -79,6 +79,15 @@ function isoWeekday(dateStr) {
   return d === 0 ? 7 : d;
 }
 
+// Понедельник недели, в которую попала дата (воскресенье — её последний день).
+function mondayOf(dateStr) {
+  const d = new Date(dateStr + "T12:00:00");
+  d.setDate(d.getDate() - (isoWeekday(dateStr) - 1));
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
+    d.getDate(),
+  ).padStart(2, "0")}`;
+}
+
 function skillDayState(skill, day) {
   const dayNum = day.day;
   const start = skill.startDay || 1;
@@ -138,22 +147,25 @@ const pastDays = computed(() =>
   (month.value?.days || []).filter((d) => !["pre", "future", "pending"].includes(d.status)),
 );
 
-// 1. Выполнение по неделям
+// 1. Выполнение по неделям.
+// Неделя — календарная, с понедельника по воскресенье. Раньше недели резались
+// по встреченному воскресенью, и стоило ему выпасть из выборки (будущий день,
+// день до начала учёта), как две недели слипались в одну.
 const weeklyChart = computed(() => {
-  const weeks = [];
-  let current = { ok: 0, total: 0, from: null };
+  const byMonday = new Map();
   for (const d of pastDays.value) {
-    if (current.from === null) current.from = d.day;
-    current.total++;
-    if (["min", "mid", "max", "rest"].includes(d.status)) current.ok++;
-    if (isoWeekday(d.date) === 7) {
-      weeks.push(current);
-      current = { ok: 0, total: 0, from: null };
+    const monday = mondayOf(d.date);
+    let week = byMonday.get(monday);
+    if (!week) {
+      week = { ok: 0, total: 0, monday };
+      byMonday.set(monday, week);
     }
+    week.total++;
+    if (["min", "mid", "max", "rest"].includes(d.status)) week.ok++;
   }
-  if (current.total) weeks.push(current);
+  const weeks = [...byMonday.values()].sort((a, b) => a.monday.localeCompare(b.monday));
   return {
-    labels: weeks.map((w) => `с ${w.from}-го`),
+    labels: weeks.map((w) => `с ${parseInt(w.monday.slice(8), 10)}.${w.monday.slice(5, 7)}`),
     datasets: [{
       label: "% дней с минимумом",
       data: weeks.map((w) => (w.total ? Math.round((w.ok / w.total) * 100) : 0)),

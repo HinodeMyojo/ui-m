@@ -69,17 +69,29 @@ const timeMark = computed(() => {
 
 const quarterPct = computed(() => Math.round((data.value?.quarterProgress || 0) * 100));
 
+// Неделя календарная, с понедельника по воскресенье (roadmapService.go): норма
+// в часах — недельная, и обнуляться она должна в понедельник.
 const weekPct = computed(() => {
   const target = data.value?.targetPerWeek || 0;
   if (!target) return 0;
-  return Math.min(100, Math.round(((data.value.hoursLast7 || 0) / target) * 100));
+  return Math.min(100, Math.round(((data.value.hoursWeek || 0) / target) * 100));
 });
 
 // Сколько часов недобрано за неделю: цифра понятнее процента.
 const weekGap = computed(() => {
   const target = data.value?.targetPerWeek || 0;
   if (!target) return 0;
-  return Math.max(0, target - (data.value.hoursLast7 || 0));
+  return Math.max(0, target - (data.value.hoursWeek || 0));
+});
+
+// Подсказка у заголовка: какие именно дни попали в неделю.
+const weekRange = computed(() => {
+  if (!data.value?.weekStart) return "";
+  const from = new Date(data.value.weekStart + "T12:00:00");
+  const to = new Date(from);
+  to.setDate(to.getDate() + 6);
+  const fmt = (d) => d.toLocaleDateString("ru-RU", { day: "numeric", month: "short" });
+  return `Неделя ${fmt(from)} — ${fmt(to)} (Пн–Вс)`;
 });
 
 onMounted(load);
@@ -117,9 +129,9 @@ onMounted(load);
 
       <div class="rmb-gauge">
         <div class="rmb-gauge-head">
-          <span>Неделя</span>
+          <span :title="weekRange">Неделя</span>
           <b>
-            {{ formatHours(data.hoursLast7) }}
+            {{ formatHours(data.hoursWeek) }}
             <template v-if="data.targetPerWeek">/ {{ data.targetPerWeek }} ч</template>
           </b>
         </div>

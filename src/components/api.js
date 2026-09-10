@@ -417,6 +417,25 @@ export async function reorderTasksAPI(items) {
   });
 }
 
+// Подтянуть просроченные открытые подзадачи к сегодняшнему дню: просрочка N
+// дней даёт срок сегодня + (N−1). Сегодня считаем календарным днём — ровно тем,
+// по которому на этом же экране показано «просрочено на Nд».
+export async function refreshSubtaskDatesAPI(id) {
+  const now = new Date();
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(
+    now.getDate(),
+  ).padStart(2, "0")}`;
+  const response = await authorizedFetch(
+    `${API_BASE_URL}/api/v1/tasks/${id}/refresh-dates?today=${today}&tz=${encodeURIComponent(
+      clientTimeZone(),
+    )}`,
+    { method: "POST" },
+  );
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.error || "не удалось обновить даты");
+  return data.updated || 0;
+}
+
 export async function updateTaskAPI(id, patch) {
   const updateTask = {
     title: patch.title,
@@ -858,6 +877,18 @@ export async function setWorkItemCarry(id, autoCarry) {
   });
   if (!response.ok) {
     throw new Error((await response.json().catch(() => ({}))).error || "не удалось переключить перенос");
+  }
+}
+
+// Схлопнуть карточку дня с привязанной подзадачей главной страницы в одно дело:
+// на доске остаётся только карточка. collapsed: false — развернуть обратно.
+export async function collapseWorkItemTask(id, taskId, collapsed) {
+  const response = await authorizedFetch(`${W}/items/${id}/collapse`, {
+    method: "POST",
+    body: JSON.stringify({ taskId, collapsed }),
+  });
+  if (!response.ok) {
+    throw new Error((await response.json().catch(() => ({}))).error || "не удалось схлопнуть задачи");
   }
 }
 

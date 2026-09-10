@@ -191,6 +191,19 @@ async function mutate(fn) {
   }
 }
 
+// Связка с материалом живёт в той же отметке, что и уровень: отправляем её
+// обратно при любой правке. Без этого смена уровня приходила с пустым
+// roadmapItemId, сервер считал материал отвязанным и сносил сессию чтения —
+// вместе с уже записанными часами.
+function roadmapFields(entry) {
+  if (!entry?.roadmapItemId) return {};
+  return {
+    roadmapItemId: entry.roadmapItemId,
+    roadmapPages: entry.roadmapPages ?? null,
+    roadmapHours: entry.roadmapHours || 0,
+  };
+}
+
 // клик по чипу — точный выбор уровня (повторный клик по активному — снять)
 function setLevel(activity, levelKey) {
   const entry = entryFor(activity.id);
@@ -202,6 +215,7 @@ function setLevel(activity, levelKey) {
       activityId: activity.id,
       level: next,
       variant: entry?.variant || null,
+      ...roadmapFields(entry),
     }),
   );
 }
@@ -247,6 +261,7 @@ function cycleLevel(activity) {
       activityId: activity.id,
       level: next,
       variant: entry?.variant || null,
+      ...roadmapFields(entry),
     }),
   );
 }
@@ -260,6 +275,7 @@ function setVariant(activity, variant) {
       activityId: activity.id,
       level: entry.level,
       variant: variant || null,
+      ...roadmapFields(entry),
     }),
   );
 }

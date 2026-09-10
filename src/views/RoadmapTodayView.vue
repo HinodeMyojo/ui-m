@@ -104,7 +104,7 @@ onMounted(load);
         <div class="rm-bar-fill" :style="{ width: percent(data.quarterProgress) }" />
       </div>
       <div class="rmm-hero-meta" style="margin-top: 8px">
-        Сегодня {{ formatHours(data.hoursToday) }} · за неделю {{ formatHours(data.hoursLast7) }}
+        Сегодня {{ formatHours(data.hoursToday) }} · с понедельника {{ formatHours(data.hoursWeek) }}
         <template v-if="data.targetPerWeek"> из {{ data.targetPerWeek }} ч</template>
         <template v-if="data.behind > 0.02"> · отстаёшь на {{ Math.round(data.behind * 100) }}%</template>
         <template v-else-if="data.behind < -0.02"> · опережаешь на {{ -Math.round(data.behind * 100) }}%</template>

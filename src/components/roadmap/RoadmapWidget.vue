@@ -62,7 +62,7 @@ onMounted(load);
       Q{{ data.quarterNumber }} · {{ data.quarterTitle }}
     </div>
     <div class="rm-sub">
-      За неделю {{ formatHours(data.hoursLast7) }}
+      С понедельника {{ formatHours(data.hoursWeek) }}
       <template v-if="data.targetPerWeek"> из {{ data.targetPerWeek }} ч</template>
       <template v-if="data.behind > 0.02">
         · <span class="rm-behind is-late">отстаёшь на {{ Math.round(data.behind * 100) }}%</span>

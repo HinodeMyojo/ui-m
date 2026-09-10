@@ -110,7 +110,7 @@ onMounted(load);
         </div>
         <div class="mrm-meta">
           {{ data.quarterTitle }} · {{ percent(data.quarterProgress) }} ·
-          за неделю {{ formatHours(data.hoursLast7) }}<template v-if="data.targetPerWeek">
+          с понедельника {{ formatHours(data.hoursWeek) }}<template v-if="data.targetPerWeek">
             из {{ data.targetPerWeek }} ч</template
           >
         </div>
