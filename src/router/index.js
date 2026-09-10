@@ -146,6 +146,12 @@ const router = createRouter({
       component: () => import("../views/RoadmapTodayView.vue"),
     },
     {
+      // Дорожная карта разработки бизнеса. С /roadmap не пересекается: там учёба.
+      path: "/venture",
+      name: "Venture",
+      component: () => import("../views/VentureView.vue"),
+    },
+    {
       path: "/japanese",
       name: "Japanese",
       component: () => import("../views/JapaneseView.vue"),

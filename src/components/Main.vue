@@ -26,6 +26,7 @@ import TimeStatsModal from "@/components/elements/TimeStatsModal.vue";
 import SkillsMiniWidget from "./elements/SkillsMiniWidget.vue";
 import DisciplineTracker from "./discipline/DisciplineTracker.vue";
 import RoadmapStatusBar from "./roadmap/RoadmapStatusBar.vue";
+import VentureDraftsBar from "./venture/VentureDraftsBar.vue";
 import AgeCounter from "./elements/AgeCounter.vue";
 
 const DEFAULT_TASK_COLOR = "#25636A";
@@ -836,6 +837,9 @@ function closeTimeStats() {
     </div>
     <!-- Отставание по roadmap'у — сразу под шапкой, docs/roadmap-module.md -->
     <RoadmapStatusBar />
+    <!-- Черновики этапов дорожной карты: планируя месяц, видно, что этап уже
+         обещал сделать. docs/venture-module.md -->
+    <VentureDraftsBar @taken="reloadTasksForCurrentDate" />
 
     <div class="body-wrap">
     <div class="body">

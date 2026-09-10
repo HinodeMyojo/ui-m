@@ -1,0 +1,611 @@
+/* Стили модуля «Дорожная карта проекта» — docs/venture-module.md (back-m).
+   Глобальный файл по образцу roadmap.css: компонентов много, и держать
+   одинаковые карточки/кнопки в scoped-стилях каждого — верный способ развести
+   их внешний вид. Все классы с префиксом vt-.
+
+   Не путать с roadmap.css (.rm-*): тот про учёбу, этот про разработку. */
+
+.vt {
+  --vt-bg: #101116;
+  --vt-card: #191b22;
+  --vt-card-2: #1f222b;
+  --vt-line: #282c37;
+  --vt-line-2: #333849;
+  --vt-text: #e8eaf2;
+  --vt-muted: #7a7f8e;
+  --vt-accent: #a855f7;
+  --vt-ok: #22c55e;
+  --vt-warn: #f59e0b;
+  --vt-bad: #ef4444;
+  --vt-info: #38bdf8;
+
+  width: 100%;
+  min-height: 100vh;
+  background: var(--vt-bg);
+  color: var(--vt-text);
+  padding: 16px clamp(10px, 3vw, 40px) 80px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  box-sizing: border-box;
+}
+
+/* --- Шапка --- */
+
+.vt-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.vt-title {
+  margin: 0;
+  font-size: clamp(22px, 3vw, 32px);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.vt-sub {
+  color: var(--vt-muted);
+  font-size: 13px;
+  margin-top: 2px;
+}
+
+.vt-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.vt-spacer {
+  flex: 1;
+}
+
+.vt-btn {
+  background: var(--vt-card-2);
+  color: var(--vt-text);
+  border: 1px solid var(--vt-line);
+  border-radius: 10px;
+  padding: 8px 12px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  white-space: nowrap;
+}
+
+.vt-btn:hover:not(:disabled) {
+  background: var(--vt-line);
+  border-color: var(--vt-line-2);
+}
+
+.vt-btn.is-primary {
+  background: var(--vt-accent);
+  border-color: var(--vt-accent);
+  color: #fff;
+}
+
+.vt-btn.is-danger {
+  color: var(--vt-bad);
+  border-color: rgba(239, 68, 68, 0.4);
+}
+
+.vt-btn.is-small {
+  padding: 5px 9px;
+  font-size: 12px;
+  border-radius: 8px;
+}
+
+.vt-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.vt-select {
+  background: var(--vt-card-2);
+  color: var(--vt-text);
+  border: 1px solid var(--vt-line);
+  border-radius: 10px;
+  padding: 8px 10px;
+  font-size: 13px;
+}
+
+/* --- Вкладки --- */
+
+.vt-tabs {
+  display: flex;
+  gap: 6px;
+  border-bottom: 1px solid var(--vt-line);
+  padding-bottom: 8px;
+  overflow-x: auto;
+}
+
+.vt-tab {
+  background: transparent;
+  border: none;
+  color: var(--vt-muted);
+  padding: 7px 12px;
+  border-radius: 8px;
+  font-size: 14px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.vt-tab.is-active {
+  background: var(--vt-card-2);
+  color: var(--vt-text);
+}
+
+/* --- Полотно --- */
+
+.vt-canvas-wrap {
+  position: relative;
+  background: var(--vt-card);
+  border: 1px solid var(--vt-line);
+  border-radius: 16px;
+  overflow: hidden;
+  min-height: 60vh;
+}
+
+.vt-canvas {
+  position: relative;
+  overflow: auto;
+  height: clamp(420px, 68vh, 900px);
+  cursor: grab;
+}
+
+.vt-canvas.is-panning {
+  cursor: grabbing;
+}
+
+.vt-canvas.is-linking {
+  cursor: crosshair;
+}
+
+/* Слой, который тянется зумом. Размер задаётся инлайном по разлёту узлов. */
+.vt-plane {
+  position: relative;
+  transform-origin: 0 0;
+}
+
+/* Полосы времени рисуются под узлами и подписаны сверху. */
+.vt-band {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-left: 1px dashed var(--vt-line-2);
+  pointer-events: none;
+}
+
+.vt-band.is-current {
+  background: rgba(168, 85, 247, 0.05);
+  border-left-color: var(--vt-accent);
+}
+
+.vt-band-title {
+  position: absolute;
+  top: 10px;
+  left: 12px;
+  font-size: 13px;
+  color: var(--vt-muted);
+  white-space: nowrap;
+}
+
+.vt-band.is-current .vt-band-title {
+  color: var(--vt-text);
+}
+
+.vt-band-budget {
+  position: absolute;
+  top: 30px;
+  left: 12px;
+  font-size: 11px;
+  color: var(--vt-muted);
+}
+
+.vt-links {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: visible;
+}
+
+/* --- Карточка узла --- */
+
+.vt-node {
+  position: absolute;
+  box-sizing: border-box;
+  background: var(--vt-card-2);
+  border: 1px solid var(--vt-line-2);
+  border-radius: 14px;
+  padding: 10px 12px;
+  cursor: grab;
+  user-select: none;
+  transition: box-shadow 0.15s, border-color 0.15s, transform 0.05s;
+}
+
+.vt-node:hover {
+  border-color: var(--vt-line-2);
+  box-shadow: 0 0 0 1px var(--vt-line-2);
+}
+
+.vt-node.is-dragging {
+  cursor: grabbing;
+  z-index: 5;
+}
+
+.vt-node.is-milestone {
+  padding: 12px 16px;
+  border-radius: 16px;
+}
+
+/* Выделенный и подсвеченный узел светятся цветом своего направления. */
+.vt-node.is-selected {
+  box-shadow: 0 0 0 2px var(--vt-node-color, var(--vt-accent)),
+    0 0 24px -4px var(--vt-node-color, var(--vt-accent));
+  border-color: var(--vt-node-color, var(--vt-accent));
+}
+
+.vt-node.is-link-source {
+  border-style: dashed;
+  border-color: var(--vt-info);
+}
+
+.vt-node-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Кружок статуса — тот же язык, что на референсе: галочка, точка, пустой круг. */
+.vt-dot {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 2px solid var(--vt-node-color, var(--vt-accent));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  flex-shrink: 0;
+  color: #fff;
+}
+
+.vt-node.is-milestone .vt-dot {
+  width: 32px;
+  height: 32px;
+}
+
+.vt-dot.is-done {
+  background: var(--vt-node-color, var(--vt-accent));
+}
+
+.vt-dot.is-progress::after {
+  content: "";
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--vt-node-color, var(--vt-accent));
+}
+
+.vt-node-title {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.vt-node.is-milestone .vt-node-title {
+  font-size: 18px;
+}
+
+.vt-node-subtitle {
+  font-size: 12px;
+  color: var(--vt-muted);
+  margin-top: 2px;
+}
+
+.vt-node-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--vt-muted);
+  flex-wrap: wrap;
+}
+
+.vt-chip {
+  background: var(--vt-line);
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.vt-chip.is-late {
+  background: rgba(239, 68, 68, 0.15);
+  color: #fca5a5;
+}
+
+.vt-chip.is-warn {
+  background: rgba(245, 158, 11, 0.15);
+  color: #fcd34d;
+}
+
+.vt-chip.is-ok {
+  background: rgba(34, 197, 94, 0.15);
+  color: #86efac;
+}
+
+.vt-bar {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--vt-line);
+  overflow: hidden;
+  flex: 1;
+  min-width: 60px;
+}
+
+.vt-bar > i {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--vt-node-color, var(--vt-accent));
+}
+
+.vt-node-progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--vt-muted);
+}
+
+/* --- Легенда и зум --- */
+
+.vt-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 10px 4px 0;
+}
+
+.vt-legend {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  font-size: 13px;
+  color: var(--vt-muted);
+}
+
+.vt-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.vt-legend-dot {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+}
+
+.vt-zoom {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--vt-card-2);
+  border: 1px solid var(--vt-line);
+  border-radius: 10px;
+  padding: 3px;
+}
+
+.vt-zoom button {
+  background: transparent;
+  border: none;
+  color: var(--vt-text);
+  width: 28px;
+  height: 26px;
+  border-radius: 7px;
+  cursor: pointer;
+  font-size: 15px;
+}
+
+.vt-zoom button:hover {
+  background: var(--vt-line);
+}
+
+.vt-zoom span {
+  font-size: 12px;
+  color: var(--vt-muted);
+  min-width: 44px;
+  text-align: center;
+}
+
+/* --- Списки и статистика --- */
+
+.vt-card {
+  background: var(--vt-card);
+  border: 1px solid var(--vt-line);
+  border-radius: 14px;
+  padding: 14px;
+}
+
+.vt-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+}
+
+.vt-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.vt-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--vt-card-2);
+  border: 1px solid var(--vt-line);
+  border-radius: 10px;
+  padding: 9px 12px;
+  font-size: 13px;
+}
+
+.vt-item.is-clickable {
+  cursor: pointer;
+}
+
+.vt-item.is-clickable:hover {
+  border-color: var(--vt-line-2);
+}
+
+.vt-muted {
+  color: var(--vt-muted);
+  font-size: 12px;
+}
+
+.vt-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.vt-table th,
+.vt-table td {
+  text-align: left;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--vt-line);
+}
+
+.vt-table th {
+  color: var(--vt-muted);
+  font-weight: 500;
+}
+
+/* --- Модалки и формы --- */
+
+.vt-modal-back {
+  position: fixed;
+  inset: 0;
+  background: rgba(6, 7, 10, 0.72);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  z-index: 60;
+}
+
+.vt-modal {
+  background: var(--vt-card);
+  border: 1px solid var(--vt-line);
+  border-radius: 16px;
+  padding: 16px;
+  width: min(720px, 100%);
+  max-height: 88vh;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.vt-form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+.vt-full {
+  grid-column: 1 / -1;
+}
+
+.vt-label {
+  display: block;
+  font-size: 12px;
+  color: var(--vt-muted);
+  margin-bottom: 4px;
+}
+
+.vt-input,
+.vt-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--vt-card-2);
+  color: var(--vt-text);
+  border: 1px solid var(--vt-line);
+  border-radius: 10px;
+  padding: 8px 10px;
+  font-size: 13px;
+  font-family: inherit;
+}
+
+.vt-textarea {
+  min-height: 90px;
+  resize: vertical;
+}
+
+.vt-error {
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  color: #fca5a5;
+  border-radius: 10px;
+  padding: 8px 10px;
+  font-size: 13px;
+}
+
+.vt-empty {
+  color: var(--vt-muted);
+  font-size: 13px;
+  padding: 24px;
+  text-align: center;
+}
+
+/* --- Телефон: вместо полотна вертикальная лента вех --- */
+
+.vt-mobile-node {
+  position: relative;
+  padding-left: 26px;
+}
+
+.vt-mobile-node::before {
+  content: "";
+  position: absolute;
+  left: 8px;
+  top: 22px;
+  bottom: -10px;
+  width: 2px;
+  background: var(--vt-line);
+}
+
+.vt-mobile-node:last-child::before {
+  display: none;
+}
+
+.vt-mobile-node::after {
+  content: "";
+  position: absolute;
+  left: 3px;
+  top: 14px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid var(--vt-node-color, var(--vt-accent));
+  background: var(--vt-bg);
+}
+
+@media (max-width: 720px) {
+  .vt {
+    padding: 12px 10px 90px;
+  }
+
+  .vt-canvas {
+    height: clamp(320px, 55vh, 600px);
+  }
+}
