@@ -87,6 +87,14 @@ function timeLabel(item) {
   }
   return "";
 }
+
+function dayWord(n) {
+  const tail = n % 100;
+  if (tail >= 11 && tail <= 14) return "дней";
+  if (n % 10 === 1) return "день";
+  if (n % 10 >= 2 && n % 10 <= 4) return "дня";
+  return "дней";
+}
 </script>
 
 <template>
@@ -129,6 +137,11 @@ function timeLabel(item) {
               <template v-if="item.emoji">{{ item.emoji }} </template>{{ item.title }}
             </span>
             <span v-if="timeLabel(item)" class="mtd-time">{{ timeLabel(item) }}</span>
+            <!-- Карточка кочует незакрытой уже не первый день — на телефоне
+                 места мало, поэтому одной короткой строкой. -->
+            <span v-if="item.staleDays >= 1" class="mtd-stale" :class="{ bad: item.staleDays >= 4 }">
+              🔁 не закрыта {{ item.staleDays }} {{ dayWord(item.staleDays) }}
+            </span>
           </button>
 
           <span v-if="item.openBlockers" class="mtd-blocked" title="Заблокировано">
@@ -250,6 +263,17 @@ function timeLabel(item) {
   font-weight: 600;
   color: #7a7f8e;
   flex-shrink: 0;
+}
+
+.mtd-stale {
+  font-size: 11px;
+  font-weight: 600;
+  color: #e07b39;
+  flex-shrink: 0;
+}
+
+.mtd-stale.bad {
+  color: #e5484d;
 }
 
 .mtd-carry {

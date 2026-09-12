@@ -441,6 +441,14 @@ function humanMinutes(minutes) {
         <span class="ws-stat">план <b>{{ humanMinutes(totals.estimateMinutes) }}</b></span>
         <span class="ws-stat">факт <b>{{ humanMinutes(totals.spentMinutes) }}</b></span>
         <span v-if="totals.overdueCount" class="ws-stat bad">просрочено {{ totals.overdueCount }}</span>
+        <span
+          v-if="totals.staleCount"
+          class="ws-stat"
+          :class="totals.staleMaxDays >= 4 ? 'bad' : 'warn'"
+          :title="`Самая старая карточка не закрыта ${totals.staleMaxDays} сут.`"
+        >
+          висит {{ totals.staleCount }}
+        </span>
         <label class="ws-cap">
           ёмкость
           <input v-model="dayCapacity" type="number" min="0" step="0.5" class="ws-cap-input" /> ч
@@ -751,6 +759,10 @@ function humanMinutes(minutes) {
 
 .ws-stat.bad {
   color: #e5484d;
+}
+
+.ws-stat.warn {
+  color: #e07b39;
 }
 
 .ws-cap {

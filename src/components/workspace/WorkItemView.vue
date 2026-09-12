@@ -71,6 +71,35 @@ const spanLabel = computed(() => {
   return `день ${props.item.spanIndex} из ${days}`;
 });
 
+// Сколько суток карточка кочует незакрытой, считает сервер (staleDays) — дата
+// размещения при переносе меняется, и по ней возраст уже не восстановить.
+const staleNote = computed(() => {
+  const days = props.item.staleDays || 0;
+  if (days < 1) return null;
+  const tail = days % 100;
+  const word =
+    tail >= 11 && tail <= 14
+      ? "дней"
+      : days % 10 === 1
+        ? "день"
+        : [2, 3, 4].includes(days % 10)
+          ? "дня"
+          : "дней";
+  const since = props.item.firstDate
+    ? new Date(props.item.firstDate + "T12:00:00").toLocaleDateString("ru-RU", {
+        day: "numeric",
+        month: "long",
+      })
+    : "";
+  return {
+    tone: days >= 4 ? "bad" : days >= 2 ? "hot" : "warn",
+    text:
+      days === 1
+        ? "Висит со вчера и всё ещё не закрыта."
+        : `Не закрыта ${days} ${word} — запланирована ещё ${since}.`,
+  };
+});
+
 const notes = computed(() =>
   [...(props.item.notes || [])].sort((a, b) => Number(b.pinned) - Number(a.pinned)),
 );
@@ -299,6 +328,12 @@ function toggleLog(taskId) {
         </span>
       </div>
     </header>
+
+    <!-- Карточка не закрыта с первого своего дня — говорим об этом прямо,
+         а не прячем в мелкий чип рядом с остальными. -->
+    <div v-if="staleNote" class="wiv-stale" :class="staleNote.tone">
+      🔁 {{ staleNote.text }}
+    </div>
 
     <div v-if="error" class="wiv-error">{{ error }}</div>
 
@@ -701,6 +736,25 @@ function toggleLog(taskId) {
   padding: 9px 22px;
   font-size: 12.5px;
   border-bottom: 1px solid #3a2427;
+}
+
+.wiv-stale {
+  padding: 9px 22px;
+  font-size: 12.5px;
+  border-bottom: 1px solid #3a2f24;
+  background: #241f1a;
+  color: #f4c79b;
+}
+
+.wiv-stale.hot {
+  background: #2a2018;
+  color: #ffd6a8;
+}
+
+.wiv-stale.bad {
+  background: #241a1c;
+  color: #ffc9cb;
+  border-bottom-color: #3a2427;
 }
 
 .wiv-body {

@@ -460,6 +460,76 @@ function spanLabel(item) {
   return (item.spanDays || 1) > 1 ? `${item.spanIndex}/${item.spanDays}` : "";
 }
 
+// --- «Висит уже который день» ---
+// Сколько суток однодневная карточка кочует незакрытой, считает сервер
+// (staleDays): дата размещения при переносе меняется, по ней возраст не
+// восстановить. Здесь только слова и накал цвета.
+
+function dayWord(n) {
+  const tail = n % 100;
+  if (tail >= 11 && tail <= 14) return "дней";
+  switch (n % 10) {
+    case 1:
+      return "день";
+    case 2:
+    case 3:
+    case 4:
+      return "дня";
+    default:
+      return "дней";
+  }
+}
+
+function cardWord(n) {
+  const tail = n % 100;
+  if (tail >= 11 && tail <= 14) return "карточек";
+  switch (n % 10) {
+    case 1:
+      return "карточка";
+    case 2:
+    case 3:
+    case 4:
+      return "карточки";
+    default:
+      return "карточек";
+  }
+}
+
+function dateWords(date) {
+  if (!date) return "";
+  return new Date(date + "T12:00:00").toLocaleDateString("ru-RU", {
+    day: "numeric",
+    month: "long",
+  });
+}
+
+// Чем дольше висит, тем громче: сутки — напоминание, двое — уже неприятно,
+// от четырёх дней карточка горит красным.
+function staleOf(item) {
+  const days = item?.staleDays || 0;
+  if (days < 1) return null;
+  const since = dateWords(item.firstDate);
+  const tone = days >= 4 ? "bad" : days >= 2 ? "hot" : "warn";
+  const label =
+    days === 1
+      ? "висит со вчера — так и не закрыта"
+      : `не закрыта ${days} ${dayWord(days)} — с ${since}`;
+  return { days, tone, label, since };
+}
+
+// Сводка в шапке доски: сколько дел тянется с прошлых дней и сколько висит
+// самое старое. Одна строка, чтобы это было видно раньше, чем начнёшь листать.
+const staleSummary = computed(() => {
+  const list = props.items.filter((i) => (i.staleDays || 0) >= 1);
+  if (!list.length) return null;
+  const max = list.reduce((m, i) => Math.max(m, i.staleDays || 0), 0);
+  return {
+    count: list.length,
+    max,
+    tone: max >= 4 ? "bad" : max >= 2 ? "hot" : "warn",
+  };
+});
+
 // --- Награда за закрытие ---
 
 const soundOn = ref(localStorage.getItem("wsCheerSound") !== "0");
@@ -816,6 +886,15 @@ onBeforeUnmount(() => {
       🚧 Открытых блокеров сегодня: <b>{{ blockersTotal }}</b>
     </div>
 
+    <div v-if="staleSummary" class="ovw-alert stale" :class="staleSummary.tone">
+      🔁 С прошлых дней висит: <b>{{ staleSummary.count }}</b>
+      {{ cardWord(staleSummary.count) }}
+      <span class="ovw-alert-dim">
+        — самая старая не закрыта {{ staleSummary.max }} {{ dayWord(staleSummary.max) }}.
+        Закройте её первой или отмените: она уже не про сегодня.
+      </span>
+    </div>
+
     <p class="ovw-hint">
       Перетащите карточку в другую колонку — на телефоне удержите её пальцем.
       Не успеваете — бросьте в «{{ nextTitle }}».
@@ -1019,6 +1098,17 @@ onBeforeUnmount(() => {
 
             <div v-if="item.openBlockers" class="ovw-card-blocked">
               🚧 заблокировано — {{ item.openBlockers }}
+            </div>
+
+            <!-- Карточка кочует из дня в день незакрытой: напоминаем об этом
+                 прямо в ней, счётчик дней ведёт сервер от первого дня. -->
+            <div
+              v-if="staleOf(item)"
+              class="ovw-card-stale"
+              :class="staleOf(item).tone"
+              :title="`Впервые запланирована ${staleOf(item).since}`"
+            >
+              🔁 {{ staleOf(item).label }}
             </div>
 
             <!-- Схлопнутая подзадача: отдельной строкой на доске её нет, но
@@ -1832,6 +1922,55 @@ onBeforeUnmount(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* «Висит с прошлого дня»: та же плашка, что у блокера, но своим накалом —
+   сутки предупреждают, от четырёх дней это уже красный флаг. */
+.ovw-card-stale {
+  border-radius: 5px;
+  padding: 4px 8px;
+  font-size: 11.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ovw-card-stale.warn {
+  background: rgba(224, 123, 57, 0.12);
+  border-left: 2px solid #e07b39;
+  color: #f4c79b;
+}
+
+.ovw-card-stale.hot {
+  background: rgba(224, 123, 57, 0.2);
+  border-left: 2px solid #f0932b;
+  color: #ffd6a8;
+  font-weight: 600;
+}
+
+.ovw-card-stale.bad {
+  background: rgba(229, 72, 77, 0.18);
+  border-left: 2px solid #e5484d;
+  color: #ffc9cb;
+  font-weight: 600;
+}
+
+.ovw-alert.stale {
+  background: linear-gradient(90deg, rgba(224, 123, 57, 0.18), transparent 70%);
+  border-color: #6b4526;
+  border-left-color: #e07b39;
+  color: #f4c79b;
+}
+
+.ovw-alert.stale.bad {
+  background: linear-gradient(90deg, rgba(229, 72, 77, 0.18), transparent 70%);
+  border-color: #6b2b2e;
+  border-left-color: #e5484d;
+  color: #ffc9cb;
+}
+
+.ovw-alert-dim {
+  opacity: 0.8;
 }
 
 .ovw-card-meta {
