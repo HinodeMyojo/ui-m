@@ -181,6 +181,9 @@ function ask() {
   if (teaching.value && !pauseStart) pauseStart = Date.now();
   shownAt.value = Date.now();
   phase.value = PHASE.ASK;
+  // Вопрос на слух без звука — пустой экран, поэтому произносим сами. Браузер
+  // вправе отказать (звук без жеста), кнопка «Послушать» остаётся рядом.
+  if (audioOnly.value) nextTick(say);
 }
 
 // «Заниматься дальше»: берём новое сверх дневной нормы, а если и его нет —
@@ -203,6 +206,38 @@ const mechanic = computed(() => {
 // Вопрос показывает сам знак: в обратных направлениях знак и есть ответ.
 const asksForKanji = computed(
   () => mechanic.value === JP_MECH_KANJI_BY_MEANING || mechanic.value === JP_MECH_KANJI_BY_READING,
+);
+
+// «Какой это знак» на слух: чтение не написано, а звучит. Узнать знак по
+// звуку — отдельное умение: в разговоре каны на экране не будет.
+//
+// Если браузер говорить не умеет, вопрос остался бы без условия вовсе, поэтому
+// чтение показывается текстом — так же, как «произнеси вслух» там, где нечем
+// слушать, превращается во ввод чтения.
+const audioOnly = computed(
+  () =>
+    mechanic.value === JP_MECH_KANJI_BY_READING &&
+    !!card.value?.audioOnly &&
+    !!speakable.value,
+);
+
+// Вопросы, где отвечают выбором. Если вариантов не приехало, отвечать нечем:
+// на экране остаются знак и «Не знаю», и сессия упирается в эту карточку.
+// Сервер такого больше не отдаёт, но карточка могла прийти и из старой
+// сессии, поэтому выход из тупика есть и здесь.
+const CHOICE_MECHANICS = [
+  JP_MECH_MEANING,
+  JP_MECH_READING_CHOICE,
+  JP_MECH_READING_IN_WORD,
+  JP_MECH_CLOZE,
+  JP_MECH_TELL_APART,
+  JP_MECH_KANJI_BY_MEANING,
+  JP_MECH_KANJI_BY_READING,
+  JP_MECH_BUILD,
+];
+
+const optionsMissing = computed(
+  () => CHOICE_MECHANICS.includes(mechanic.value) && !(card.value?.options?.length >= 2),
 );
 
 // Урок закончился — идём дальше без ответа: показ не оценивают, оценивают
@@ -750,16 +785,19 @@ onBeforeUnmount(() => {
 
         <!-- Обратные направления: сверху вопрос, знак лежит в вариантах. -->
         <template v-else-if="asksForKanji && phase === PHASE.ASK">
-          <div class="jps-ask-meaning">
+          <button v-if="audioOnly" class="jps-ear" @click="say">🔊</button>
+          <div v-else class="jps-ask-meaning">
             <template v-if="mechanic === JP_MECH_KANJI_BY_READING">
               {{ card.reading || card.mainReading }}
             </template>
             <template v-else>{{ meaning }}</template>
           </div>
           <div class="jps-hint jps-hint-sm">
-            {{ mechanic === JP_MECH_KANJI_BY_READING ? "какой это знак" : "какой знак это значит" }}
+            <template v-if="audioOnly">какой это знак — на слух</template>
+            <template v-else-if="mechanic === JP_MECH_KANJI_BY_READING">какой это знак</template>
+            <template v-else>какой знак это значит</template>
           </div>
-          <div v-if="mechanic === JP_MECH_KANJI_BY_READING && speakable" class="jps-tools">
+          <div v-if="mechanic === JP_MECH_KANJI_BY_READING && speakable && !audioOnly" class="jps-tools">
             <button class="jps-say-btn" @click="say">🔊 Послушать</button>
           </div>
         </template>
@@ -890,6 +928,22 @@ onBeforeUnmount(() => {
               📖 Примеры
             </button>
           </div>
+          <!-- Примеры после ответа. Просьба была прямая: «нужно, чтобы
+               постоянно перед глазами были примеры, которые можно прочитать».
+               Знак без слов — картинка, и чтение к нему не прирастает. -->
+          <div v-if="card.words?.length" class="jps-ex">
+            <div v-for="w in card.words" :key="w.text" class="jps-ex-word">
+              <span class="jps-ex-text">{{ w.text }}</span>
+              <span class="jps-ex-reading">{{ w.reading }}</span>
+              <span class="jps-ex-meaning">{{ w.meaningRu }}</span>
+            </div>
+          </div>
+          <div v-for="s in card.sentences || []" :key="s.text" class="jps-ex-sentence">
+            <div class="jps-ex-jp">{{ s.text }}</div>
+            <div v-if="s.reading" class="jps-ex-kana">{{ s.reading }}</div>
+            <div v-if="s.translationRu" class="jps-ex-ru">{{ s.translationRu }}</div>
+          </div>
+
           <!-- Разбор после ответа показывается всегда: карточку закрывают
                именно здесь, и это последняя возможность увидеть, из чего
                сложены слово или знак. -->
@@ -921,8 +975,14 @@ onBeforeUnmount(() => {
         </template>
 
         <template v-else-if="phase === PHASE.ASK">
+          <!-- Вариантов не приехало: вопрос сломан, но сессия не должна вставать. -->
+          <template v-if="optionsMissing">
+            <div class="jps-hint jps-hint-sm">Вопрос не собрался — вот ответ</div>
+            <button class="m-btn m-btn-accent jps-wide" @click="reveal('idk')">Показать ответ</button>
+          </template>
+
           <div
-            v-if="
+            v-else-if="
               mechanic === JP_MECH_MEANING ||
               mechanic === JP_MECH_READING_IN_WORD ||
               mechanic === JP_MECH_READING_CHOICE ||
@@ -971,8 +1031,19 @@ onBeforeUnmount(() => {
           </template>
 
           <template v-else-if="mechanic === JP_MECH_TRACE">
-            <div class="jps-trace-hint">Обведи знак по контуру, черту за чертой</div>
-            <JpTraceCanvas :paths="card.strokePaths || []" :char="card.char" @done="traceDone" />
+            <div class="jps-trace-hint">
+              {{
+                card.traceBlind
+                  ? "Напиши знак по памяти — контура нет"
+                  : "Обведи знак по контуру, черту за чертой"
+              }}
+            </div>
+            <JpTraceCanvas
+              :paths="card.strokePaths || []"
+              :char="card.char"
+              :guide="!card.traceBlind"
+              @done="traceDone"
+            />
           </template>
 
           <template v-else>
@@ -1300,6 +1371,78 @@ onBeforeUnmount(() => {
 
 /* Значок «есть что посмотреть»: без него строка выглядит подписью, и никто
    не догадается по ней тапнуть. */
+/* Примеры под ответом: слово, его чтение каной и значение в строку. Читать
+   их нужно глазами по-японски, поэтому запись крупнее подписи. */
+.jps-ex {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  margin-top: 8px;
+}
+
+.jps-ex-word {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 13px;
+}
+
+.jps-ex-text {
+  font-size: 17px;
+}
+
+.jps-ex-reading {
+  color: #b7a6ff;
+}
+
+.jps-ex-meaning {
+  color: var(--m-muted, #7a7f8e);
+}
+
+.jps-ex-sentence {
+  width: 100%;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  text-align: left;
+}
+
+.jps-ex-jp {
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.jps-ex-kana {
+  font-size: 12px;
+  color: #b7a6ff;
+  margin-top: 2px;
+}
+
+.jps-ex-ru {
+  font-size: 12px;
+  color: var(--m-muted, #7a7f8e);
+  margin-top: 2px;
+}
+
+/* Вопрос на слух: кроме динамика на экране нет ничего, и нажимать по нему
+   будут много раз — поэтому кнопка крупная, а не строчка с эмодзи. */
+.jps-ear {
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.05);
+  color: inherit;
+  font-size: 38px;
+  cursor: pointer;
+}
+
+.jps-ear:active {
+  background: rgba(255, 255, 255, 0.1);
+}
+
 .jps-break-more {
   margin-left: auto;
   flex-shrink: 0;
