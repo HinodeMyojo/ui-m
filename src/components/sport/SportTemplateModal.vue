@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted } from "vue";
+import { ref, computed, onMounted } from "vue";
 import {
   fetchSportTemplate,
   fetchSportExercises,
@@ -50,11 +50,102 @@ async function restoreVersion(no) {
 // Подпись подхода в истории: «15 повт.», «8 × 60 кг».
 function setLabel(set) {
   const parts = [];
-  if (set.reps != null) parts.push(`${set.reps} повт.`);
-  if (set.weight != null) parts.push(`${set.weight} кг`);
-  if (set.duration != null) parts.push(`${set.duration} с`);
-  if (set.distance != null) parts.push(`${set.distance} м`);
+  if (set.reps != null && set.reps !== "") parts.push(`${set.reps} повт.`);
+  if (set.weight != null && set.weight !== "") parts.push(`${set.weight} кг`);
+  if (set.duration != null && set.duration !== "") parts.push(`${set.duration} с`);
+  if (set.distance != null && set.distance !== "") parts.push(`${set.distance} м`);
   return parts.join(" × ") || "—";
+}
+
+// Подпись всего упражнения: «3 × 18 повт.», а если подходы разные — перечислением.
+function setsLabel(sets) {
+  const labels = (sets || []).map(setLabel);
+  if (!labels.length) return "без подходов";
+  const same = labels.every((l) => l === labels[0]);
+  return same && labels.length > 1 ? `${labels.length} × ${labels[0]}` : labels.join(" / ");
+}
+
+// --- Что именно поменялось ---
+//
+// Снимок пишется ПЕРЕД правкой, поэтому сам по себе он отвечает на вопрос
+// «как было», но не на «что сделали». Ответ — разница со следующим состоянием:
+// для самого свежего снимка это текущий состав, для остальных — снимок новее.
+// Без этого список версий читается как одинаковые строки с датами.
+
+function compositionOf(items) {
+  return (items || []).map((ex) => ({
+    id: ex.exerciseId,
+    title: ex.exercise?.title || exerciseById(ex.exerciseId).title || "упражнение удалено",
+    emoji: ex.exercise?.emoji || exerciseById(ex.exerciseId).emoji || "",
+    label: setsLabel(ex.sets),
+  }));
+}
+
+// Текущий состав берём из формы: он может быть уже поправлен, но не сохранён —
+// и тогда честнее показать разницу именно с тем, что на экране.
+const currentComposition = computed(() =>
+  compositionOf(
+    form.value.exercises.map((ex) => ({
+      exerciseId: ex.exerciseId,
+      sets: ex.sets.map((s) => {
+        const out = {};
+        for (const f of SPORT_SET_FIELDS) out[f.code] = numeric(s[f.code]);
+        return out;
+      }),
+    })),
+  ),
+);
+
+function diff(before, after) {
+  const out = [];
+  const beforeById = new Map(before.map((e) => [e.id, e]));
+  const afterById = new Map(after.map((e) => [e.id, e]));
+
+  for (const e of after) {
+    if (!beforeById.has(e.id)) {
+      out.push({ kind: "add", title: e.title, emoji: e.emoji, to: e.label });
+    }
+  }
+  for (const e of before) {
+    const now = afterById.get(e.id);
+    if (!now) {
+      out.push({ kind: "remove", title: e.title, emoji: e.emoji, from: e.label });
+    } else if (now.label !== e.label) {
+      out.push({ kind: "change", title: e.title, emoji: e.emoji, from: e.label, to: now.label });
+    }
+  }
+
+  // Перестановка — тоже правка, но упоминаем её только когда больше ничего
+  // не менялось: иначе она засоряет список настоящих изменений.
+  if (!out.length) {
+    const beforeOrder = before.map((e) => e.id).join(",");
+    const afterOrder = after.map((e) => e.id).join(",");
+    if (beforeOrder !== afterOrder) out.push({ kind: "order" });
+  }
+  return out;
+}
+
+// Лента версий сверху вниз: «Сейчас», затем снимки от свежего к старому.
+const timeline = computed(() =>
+  versions.value.map((v, i) => {
+    const before = compositionOf(v.exercises);
+    const after = i === 0 ? currentComposition.value : compositionOf(versions.value[i - 1].exercises);
+    return { ...v, composition: before, changes: diff(before, after), isLatest: i === 0 };
+  }),
+);
+
+const MONTHS = [
+  "января", "февраля", "марта", "апреля", "мая", "июня",
+  "июля", "августа", "сентября", "октября", "ноября", "декабря",
+];
+
+// createdAt приходит строкой «2026-09-12 11:04» — читаем её как есть,
+// без Date: разбирать её как UTC значило бы уехать на три часа.
+function whenLabel(raw) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/.exec(raw || "");
+  if (!m) return raw || "";
+  const [, , month, day, hh, mm] = m;
+  return `${Number(day)} ${MONTHS[Number(month) - 1]}, ${hh}:${mm}`;
 }
 
 function exerciseById(id) {
@@ -157,11 +248,101 @@ async function remove() {
   <div class="sp-modal-backdrop" @click.self="emit('close')">
     <div class="sp-modal is-wide">
       <div class="sp-modal-head">
-        <h3>{{ templateId ? "Шаблон тренировки" : "Новый шаблон" }}</h3>
+        <h3>
+          <template v-if="showVersions">История шаблона</template>
+          <template v-else>{{ templateId ? "Шаблон тренировки" : "Новый шаблон" }}</template>
+        </h3>
+        <button v-if="showVersions" class="sp-btn sp-btn-sm" @click="showVersions = false">
+          ‹ к составу
+        </button>
+        <div class="sp-spacer"></div>
         <button class="sp-btn sp-btn-sm" @click="emit('close')">✕</button>
       </div>
 
-      <div class="sp-modal-body">
+      <div v-if="showVersions" class="sp-modal-body">
+        <p class="sp-hist-intro">
+          Снимок состава пишется сам, перед каждым изменением. Ниже — что менялось
+          и когда: сверху самое свежее.
+        </p>
+
+        <div v-if="!versions.length" class="sp-empty">
+          Пока пусто: история появится после первой правки состава.
+        </div>
+
+        <div v-else class="sp-hist">
+          <!-- Голова ленты — то, что в шаблоне прямо сейчас. Без неё непонятно,
+               относительно чего показана разница у самой свежей версии. -->
+          <div class="sp-hist-item is-now">
+            <div class="sp-hist-dot"></div>
+            <div class="sp-hist-card">
+              <div class="sp-row">
+                <strong>Сейчас</strong>
+                <span class="sp-muted">состав, который открыт в редакторе</span>
+              </div>
+              <div v-for="(ex, i) in currentComposition" :key="i" class="sp-hist-line">
+                {{ ex.emoji }} {{ ex.title }} <span class="sp-muted">— {{ ex.label }}</span>
+              </div>
+            </div>
+          </div>
+
+          <div v-for="v in timeline" :key="v.no" class="sp-hist-item">
+            <div class="sp-hist-dot"></div>
+            <div class="sp-hist-card">
+              <div class="sp-row">
+                <strong>Версия {{ v.no }}</strong>
+                <span class="sp-muted">{{ whenLabel(v.createdAt) }} · {{ v.summary }}</span>
+                <div class="sp-spacer"></div>
+                <button
+                  class="sp-btn sp-btn-sm"
+                  @click="openVersion = openVersion === v.no ? null : v.no"
+                >
+                  {{ openVersion === v.no ? "Свернуть состав" : "Показать состав" }}
+                </button>
+                <button class="sp-btn sp-btn-sm" :disabled="busy" @click="restoreVersion(v.no)">
+                  Вернуть
+                </button>
+              </div>
+
+              <!-- Главное в истории: не «как было», а «что после этого сделали». -->
+              <div class="sp-hist-changes">
+                <span class="sp-hist-changes-title">
+                  Дальше {{ v.isLatest ? "стало" : "поменяли" }}:
+                </span>
+                <div v-if="!v.changes.length" class="sp-muted">состав не менялся</div>
+                <div
+                  v-for="(c, i) in v.changes"
+                  :key="i"
+                  class="sp-hist-change"
+                  :class="c.kind"
+                >
+                  <template v-if="c.kind === 'add'">
+                    ＋ {{ c.emoji }} {{ c.title }} <span class="sp-muted">— {{ c.to }}</span>
+                  </template>
+                  <template v-else-if="c.kind === 'remove'">
+                    − {{ c.emoji }} {{ c.title }} <span class="sp-muted">убрали</span>
+                  </template>
+                  <template v-else-if="c.kind === 'order'">
+                    ↕ поменяли порядок упражнений
+                  </template>
+                  <template v-else>
+                    {{ c.emoji }} {{ c.title }}:
+                    <s class="sp-hist-was">{{ c.from }}</s>
+                    <b class="sp-hist-now">→ {{ c.to }}</b>
+                  </template>
+                </div>
+              </div>
+
+              <div v-if="openVersion === v.no" class="sp-version-body">
+                <div v-for="(ex, i) in v.composition" :key="i" class="sp-hist-line">
+                  {{ ex.emoji }} {{ ex.title }} <span class="sp-muted">— {{ ex.label }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div v-else class="sp-modal-body">
         <div v-if="error" class="sp-error">{{ error }}</div>
 
         <div class="sp-row">
@@ -222,52 +403,28 @@ async function remove() {
         </div>
       </div>
 
-      <div v-if="templateId && showVersions" class="sp-versions">
-        <div class="sp-muted">
-          Снимок состава пишется сам, перед каждым изменением. Так видно, с чем
-          вы шли прошлый цикл: было пятнадцать повторений — стало восемнадцать.
-        </div>
-        <div v-if="!versions.length" class="sp-empty">
-          Пока пусто: история появится после первой правки состава.
-        </div>
-        <div v-for="v in versions" :key="v.no" class="sp-version">
-          <div class="sp-row">
-            <strong>Версия {{ v.no }}</strong>
-            <span class="sp-muted">{{ v.summary }} · {{ v.createdAt }}</span>
-            <div class="sp-spacer"></div>
-            <button
-              class="sp-btn sp-btn-sm"
-              @click="openVersion = openVersion === v.no ? null : v.no"
-            >
-              {{ openVersion === v.no ? "Свернуть" : "Что было" }}
-            </button>
-            <button class="sp-btn sp-btn-sm" :disabled="busy" @click="restoreVersion(v.no)">
-              Вернуть
-            </button>
-          </div>
-          <div v-if="openVersion === v.no" class="sp-version-body">
-            <div v-for="(ex, i) in v.exercises" :key="i" class="sp-muted">
-              {{ ex.exercise?.emoji }} {{ ex.exercise?.title || "упражнение удалено" }} —
-              {{ ex.sets.map(setLabel).join(", ") }}
-            </div>
-          </div>
-        </div>
-      </div>
-
       <div class="sp-modal-foot">
-        <button v-if="templateId" class="sp-btn is-danger" :disabled="busy" @click="remove">
-          Удалить
-        </button>
-        <button
-          v-if="templateId"
-          class="sp-btn sp-btn-sm"
-          @click="showVersions = !showVersions"
-        >
-          История ({{ versions.length }})
-        </button>
-        <div class="sp-spacer"></div>
-        <button class="sp-btn" @click="emit('close')">Отмена</button>
-        <button class="sp-btn is-primary" :disabled="busy" @click="save">Сохранить</button>
+        <template v-if="showVersions">
+          <div class="sp-spacer"></div>
+          <button class="sp-btn is-primary" @click="showVersions = false">Вернуться к составу</button>
+        </template>
+        <template v-else>
+          <button v-if="templateId" class="sp-btn is-danger" :disabled="busy" @click="remove">
+            Удалить
+          </button>
+          <button
+            v-if="templateId"
+            class="sp-btn sp-btn-sm"
+            :disabled="!versions.length"
+            :title="versions.length ? 'Что менялось в составе' : 'История появится после первой правки'"
+            @click="showVersions = true"
+          >
+            🕘 История ({{ versions.length }})
+          </button>
+          <div class="sp-spacer"></div>
+          <button class="sp-btn" @click="emit('close')">Отмена</button>
+          <button class="sp-btn is-primary" :disabled="busy" @click="save">Сохранить</button>
+        </template>
       </div>
     </div>
   </div>
@@ -286,25 +443,117 @@ async function remove() {
   padding: 3px 6px;
 }
 
-.sp-versions {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 10px 14px;
-  border-top: 1px solid #2e2e3a;
-  max-height: 260px;
-  overflow-y: auto;
+.sp-hist-intro {
+  margin: 0;
+  font-size: 12.5px;
+  color: #8b90a0;
+  line-height: 1.5;
 }
 
-.sp-version {
+/* Лента с вертикальной нитью: история — это порядок событий, а не список
+   карточек. Нить рисуется на элементе, точка — на ней. */
+.sp-hist {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-left: 6px;
+}
+
+.sp-hist-item {
+  position: relative;
+  padding-left: 20px;
+}
+
+.sp-hist-item::before {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 14px;
+  bottom: -16px;
+  width: 2px;
+  background: #2a2d38;
+}
+
+.sp-hist-item:last-child::before {
+  display: none;
+}
+
+.sp-hist-dot {
+  position: absolute;
+  left: 0;
+  top: 9px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #2e2660;
+  border: 2px solid #6e4aff;
+}
+
+.sp-hist-item.is-now .sp-hist-dot {
+  background: #63c94f;
+  border-color: #9ff08c;
+}
+
+.sp-hist-card {
   border: 1px solid #262a35;
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: #1b1d24;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sp-hist-item.is-now .sp-hist-card {
+  border-color: #34502f;
+}
+
+.sp-hist-line {
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.sp-hist-changes {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 7px 9px;
   border-radius: 8px;
-  padding: 8px;
+  background: #16181e;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.sp-hist-changes-title {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #6b7080;
+}
+
+.sp-hist-change.add {
+  color: #9ff08c;
+}
+
+.sp-hist-change.remove {
+  color: #e5848a;
+}
+
+.sp-hist-change.order {
+  color: #8b90a0;
+}
+
+.sp-hist-was {
+  color: #8b90a0;
+}
+
+.sp-hist-now {
+  color: #ffd666;
 }
 
 .sp-version-body {
-  margin-top: 6px;
-  padding-left: 8px;
+  margin-top: 2px;
+  padding-left: 9px;
   border-left: 2px solid #2e2660;
   line-height: 1.5;
 }

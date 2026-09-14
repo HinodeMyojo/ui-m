@@ -15,6 +15,7 @@ import { Line, Bar } from "vue-chartjs";
 
 import {
   fetchSportDashboard,
+  fetchSportCalendar,
   fetchSportChart,
   setSportEntry,
   updateSportSet,
@@ -62,6 +63,90 @@ const weightMetric = computed(() =>
 );
 
 const activeGoal = computed(() => (data.value?.goals || [])[0] || null);
+
+// --- Месяц одним взглядом ---
+//
+// Цифры «6 тренировок за месяц» не отвечают на вопрос, который задаёшь себе
+// на самом деле: я держу режим или уже вторую неделю сползаю? Ответ даёт
+// только картинка всего месяца — где сделано, где пропущено, где впереди план.
+// Данные берём у /calendar: он уже считает статус дня как самый сильный из
+// тренировок этого дня.
+
+const MONTH_NAMES = [
+  "январь", "февраль", "март", "апрель", "май", "июнь",
+  "июля", "август", "сентябрь", "октябрь", "ноябрь", "декабрь",
+];
+const WEEKDAYS = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
+
+const monthOffset = ref(0);
+const monthDays = ref([]);
+const monthLoading = ref(false);
+
+function monthBounds(offset) {
+  const base = new Date(props.today + "T12:00:00");
+  const first = new Date(base.getFullYear(), base.getMonth() + offset, 1);
+  const last = new Date(first.getFullYear(), first.getMonth() + 1, 0);
+  const iso = (d) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  return { first, last, from: iso(first), to: iso(last) };
+}
+
+const monthTitle = computed(() => {
+  const { first } = monthBounds(monthOffset.value);
+  return `${MONTH_NAMES[first.getMonth()]} ${first.getFullYear()}`;
+});
+
+async function loadMonth() {
+  monthLoading.value = true;
+  const { from, to } = monthBounds(monthOffset.value);
+  try {
+    monthDays.value = await fetchSportCalendar(from, to);
+  } catch {
+    monthDays.value = [];
+  } finally {
+    monthLoading.value = false;
+  }
+}
+
+function shiftMonth(step) {
+  monthOffset.value += step;
+  loadMonth();
+}
+
+// Сетка с понедельника: пустые ячейки в начале, чтобы числа встали под
+// своими днями недели. Иначе месяц читается как лента и теряет ритм недели.
+const monthGrid = computed(() => {
+  const { first } = monthBounds(monthOffset.value);
+  const lead = (first.getDay() + 6) % 7;
+  return [...Array(lead).fill(null), ...monthDays.value];
+});
+
+const monthStats = computed(() => {
+  const s = { done: 0, partial: 0, skipped: 0, planned: 0, volume: 0 };
+  for (const d of monthDays.value) {
+    if (d.workoutStatus && s[d.workoutStatus] !== undefined) s[d.workoutStatus]++;
+    s.volume += d.volumeKg || 0;
+  }
+  return s;
+});
+
+function dayNo(date) {
+  return Number(date.slice(8, 10));
+}
+
+function dayTitle(d) {
+  const parts = [d.date];
+  if (d.workoutStatus) {
+    parts.push(SPORT_STATUS_LABELS[d.workoutStatus] || d.workoutStatus);
+    if (d.volumeKg) parts.push(`${d.volumeKg} кг`);
+  } else {
+    parts.push("тренировок нет");
+  }
+  if (d.weight != null) parts.push(`вес ${d.weight}`);
+  if (d.photoCount) parts.push(`фото: ${d.photoCount}`);
+  if (d.hasNote) parts.push("есть заметка");
+  return parts.join(" · ");
+}
 
 async function load() {
   loading.value = true;
@@ -221,13 +306,77 @@ function aheadLabel(metric) {
     : `отставание ${Math.abs(v).toFixed(1)} ${metric.metric.unit}`;
 }
 
-onMounted(load);
+onMounted(() => {
+  load();
+  loadMonth();
+});
 </script>
 
 <template>
   <div class="sp-grid">
     <div v-if="loadError" class="sp-error" style="grid-column: 1 / -1">{{ loadError }}</div>
     <div v-if="loading && !data" class="sp-empty" style="grid-column: 1 / -1">Загрузка…</div>
+
+    <!-- Месяц активности. Стоит первым и во всю ширину: это единственное место,
+         где видно режим целиком, а не отдельный день. -->
+    <div class="sp-card" style="grid-column: 1 / -1">
+      <div class="sp-row">
+        <h3 style="margin: 0">Месяц</h3>
+        <span class="sp-muted">{{ monthTitle }}</span>
+        <div class="sp-spacer"></div>
+        <button class="sp-btn sp-btn-sm" title="Предыдущий месяц" @click="shiftMonth(-1)">‹</button>
+        <button
+          class="sp-btn sp-btn-sm"
+          :disabled="monthOffset === 0"
+          @click="monthOffset = 0; loadMonth()"
+        >
+          Текущий
+        </button>
+        <button
+          class="sp-btn sp-btn-sm"
+          :disabled="monthOffset >= 0"
+          title="Следующий месяц"
+          @click="shiftMonth(1)"
+        >
+          ›
+        </button>
+      </div>
+
+      <div class="spm-week">
+        <span v-for="w in WEEKDAYS" :key="w">{{ w }}</span>
+      </div>
+
+      <div class="spm-grid" :class="{ 'is-loading': monthLoading }">
+        <span v-for="(d, i) in monthGrid" :key="i">
+          <span v-if="!d" class="spm-cell is-blank"></span>
+          <span
+            v-else
+            class="spm-cell"
+            :class="[
+              d.workoutStatus ? 'st-' + d.workoutStatus : 'st-none',
+              { 'is-today': d.date === today, 'is-future': d.date > today },
+            ]"
+            :title="dayTitle(d)"
+          >
+            <b>{{ dayNo(d.date) }}</b>
+            <span class="spm-marks">
+              <i v-if="d.weight != null" class="spm-mark w" title="есть замер веса"></i>
+              <i v-if="d.photoCount" class="spm-mark p" title="есть фото"></i>
+              <i v-if="d.hasNote" class="spm-mark n" title="есть заметка"></i>
+            </span>
+          </span>
+        </span>
+      </div>
+
+      <div class="spm-legend">
+        <span><i class="spm-key st-done"></i> сделал {{ monthStats.done }}</span>
+        <span><i class="spm-key st-partial"></i> частично {{ monthStats.partial }}</span>
+        <span><i class="spm-key st-skipped"></i> пропустил {{ monthStats.skipped }}</span>
+        <span><i class="spm-key st-planned"></i> запланировано {{ monthStats.planned }}</span>
+        <div class="sp-spacer"></div>
+        <span class="sp-muted">тоннаж за месяц {{ Math.round(monthStats.volume) }} кг</span>
+      </div>
+    </div>
 
     <template v-for="code in widgets" :key="code">
       <!-- Вес -->
@@ -454,6 +603,168 @@ onMounted(load);
 </template>
 
 <style scoped>
+/* --- Месяц активности --- */
+
+.spm-week,
+.spm-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 5px;
+}
+
+.spm-week {
+  margin-top: 12px;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #6b7080;
+  text-align: center;
+}
+
+.spm-grid {
+  margin-top: 5px;
+  transition: opacity 0.15s;
+}
+
+.spm-grid.is-loading {
+  opacity: 0.45;
+}
+
+.spm-cell {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  aspect-ratio: 1;
+  border-radius: 8px;
+  border: 1px solid #262a35;
+  background: #1b1d24;
+  font-size: 12px;
+  color: #8b90a0;
+  cursor: default;
+}
+
+.spm-cell.is-blank {
+  border: none;
+  background: none;
+}
+
+.spm-cell b {
+  font-weight: 600;
+  line-height: 1;
+}
+
+/* Цвет заливки = что было с тренировкой. Пустой день намеренно остаётся
+   пустым: «ничего не планировал» и «пропустил» — разные вещи. */
+.spm-cell.st-done {
+  background: rgba(99, 201, 79, 0.9);
+  border-color: #63c94f;
+  color: #0d1a0c;
+}
+
+.spm-cell.st-partial {
+  background: rgba(255, 214, 102, 0.85);
+  border-color: #ffd666;
+  color: #221b05;
+}
+
+.spm-cell.st-skipped {
+  background: rgba(229, 72, 77, 0.75);
+  border-color: #e5484d;
+  color: #2a0f10;
+}
+
+.spm-cell.st-planned {
+  background: #22252e;
+  border-color: #5b616e;
+  border-style: dashed;
+  color: #aeb3c0;
+}
+
+/* Будущее — только контур: план ещё не факт, и закрашивать его нечестно. */
+.spm-cell.is-future.st-planned {
+  background: transparent;
+}
+
+.spm-cell.is-today {
+  box-shadow: 0 0 0 2px #ffd666;
+}
+
+.spm-marks {
+  display: flex;
+  gap: 2px;
+  height: 4px;
+}
+
+.spm-mark {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  display: block;
+}
+
+.spm-mark.w {
+  background: #6e9cff;
+}
+
+.spm-mark.p {
+  background: #c38bff;
+}
+
+.spm-mark.n {
+  background: #8b90a0;
+}
+
+.spm-legend {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 12px;
+  font-size: 11.5px;
+  color: #8b90a0;
+}
+
+.spm-key {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 3px;
+  margin-right: 4px;
+  vertical-align: -1px;
+}
+
+.spm-key.st-done {
+  background: #63c94f;
+}
+
+.spm-key.st-partial {
+  background: #ffd666;
+}
+
+.spm-key.st-skipped {
+  background: #e5484d;
+}
+
+.spm-key.st-planned {
+  background: transparent;
+  border: 1px dashed #5b616e;
+}
+
+@media (max-width: 560px) {
+  .spm-week,
+  .spm-grid {
+    gap: 3px;
+  }
+
+  .spm-cell {
+    font-size: 11px;
+    border-radius: 6px;
+  }
+}
+
 .sp-goal {
   border-top: 1px solid #232631;
   padding-top: 10px;

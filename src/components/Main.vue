@@ -604,6 +604,12 @@ async function updateTask(id, patch) {
 }
 
 function handleKeydown(e) {
+  // Окно с плитками закрывается по Esc — крестик есть, но рука тянется к клавише.
+  if (showNyamaModals.value) {
+    if (e.key === "Escape") showNyamaModals.value = false;
+    return;
+  }
+
   if (showAddModal.value || showEditModal.value || openedTask.value != null) {
     return;
   }
@@ -1113,23 +1119,40 @@ function closeTimeStats() {
   </transition>
   <transition name="modal-fade">
     <div v-if="showNyamaModals" class="modal-nyama-backdrop" @click.self="showNyamaModals = false">
-      <div class="modal-nyama">
-        <button
-          v-for="tile in tiles"
-          :key="tile.key"
-          class="nyamaaa"
-          @click="openTile(tile)"
-        >
-          <div class="icon">
-            <img v-if="TILE_GIFS[tile.key]" :src="TILE_GIFS[tile.key]" alt="" />
-            <template v-else>{{ tile.icon }}</template>
+      <div class="modal-nyama" role="dialog" aria-label="Разделы">
+        <header class="modal-nyama-head">
+          <div class="modal-nyama-head-text">
+            <h2>Вкусняхи</h2>
+            <p>{{ tiles.length }} разделов · состав и порядок настраиваются в админке</p>
           </div>
-          <p class="text">{{ tile.title }}</p>
-        </button>
-        <button class="nyamaaa nyamaaa-soon nyamaaa-unknown" disabled>
-          <div class="icon">❓</div>
-          <span class="nyama-badge">Неизвестно</span>
-        </button>
+          <button
+            class="modal-nyama-close"
+            title="Закрыть · Esc"
+            @click="showNyamaModals = false"
+          >
+            ✕
+          </button>
+        </header>
+
+        <div class="modal-nyama-grid">
+          <button
+            v-for="tile in tiles"
+            :key="tile.key"
+            class="nyamaaa"
+            @click="openTile(tile)"
+          >
+            <div class="icon">
+              <img v-if="TILE_GIFS[tile.key]" :src="TILE_GIFS[tile.key]" alt="" />
+              <template v-else>{{ tile.icon }}</template>
+            </div>
+            <p class="text">{{ tile.title }}</p>
+          </button>
+          <button class="nyamaaa nyamaaa-soon nyamaaa-unknown" disabled>
+            <div class="icon">❓</div>
+            <p class="text">Ещё будет</p>
+            <span class="nyama-badge">Неизвестно</span>
+          </button>
+        </div>
       </div>
     </div>
   </transition>
@@ -1322,23 +1345,79 @@ function closeTimeStats() {
   justify-content: center;
 }
 
+/* Плиток полтора десятка и их число растёт — окно обязано быть окном:
+   с шапкой, крестиком и собственной прокруткой. Раньше сетка просто вываливалась
+   за экран, и верхний ряд вместе с нижним оказывались за краем. */
 .modal-nyama {
   display: flex;
-  flex-direction: row;
-  flex-wrap: wrap;
-  gap: 20px;
-  padding: 32px 36px;
-  background: rgba(24, 25, 31, 0.96);
-  border-radius: 32px;
-  border: 1px solid rgba(255,255,255,0.07);
-  box-shadow: 0 32px 80px rgba(0,0,0,0.6);
-  max-width: 700px;
-  justify-content: center;
+  flex-direction: column;
+  background: rgba(24, 25, 31, 0.97);
+  border-radius: 28px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 32px 80px rgba(0, 0, 0, 0.6);
+  width: min(760px, calc(100vw - 32px));
+  max-height: min(86vh, 860px);
+  overflow: hidden;
+}
+
+.modal-nyama-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 20px 24px 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  flex-shrink: 0;
+}
+
+.modal-nyama-head-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.modal-nyama-head h2 {
+  margin: 0;
+  font-size: 19px;
+  color: #fff;
+}
+
+.modal-nyama-head p {
+  margin: 3px 0 0;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.modal-nyama-close {
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 15px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.modal-nyama-close:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+/* auto-fill вместо flex-wrap: ряды остаются ровными на любой ширине,
+   а на телефоне плитки сами ужимаются до двух в ряд. */
+.modal-nyama-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 14px;
+  padding: 20px 24px 24px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .nyamaaa {
-  width: 160px;
-  height: 160px;
+  width: 100%;
+  aspect-ratio: 1;
   border-radius: 22px;
   background: hwb(231.43 10.2% 56.86% / 0.82);
   border: 1px solid rgba(255,255,255,0.1);
@@ -1365,13 +1444,13 @@ function closeTimeStats() {
 }
 
 .nyamaaa img {
-  width: 80px;
-  height: 80px;
+  width: 62px;
+  height: 62px;
   object-fit: contain;
 }
 
 .nyamaaa .icon {
-  font-size: 52px;
+  font-size: 44px;
   line-height: 1;
   display: flex;
   align-items: center;
@@ -1380,11 +1459,46 @@ function closeTimeStats() {
 
 .nyamaaa p {
   font-weight: 700;
-  font-size: 12px;
+  font-size: 11px;
   color: #fff;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.04em;
   margin: 0;
+  padding: 0 8px;
+  text-align: center;
+  line-height: 1.25;
   text-transform: uppercase;
+}
+
+@media (max-width: 560px) {
+  .modal-nyama {
+    width: calc(100vw - 20px);
+    max-height: min(90vh, 900px);
+    border-radius: 22px;
+  }
+
+  .modal-nyama-head {
+    padding: 16px 16px 12px;
+  }
+
+  .modal-nyama-grid {
+    grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+    gap: 10px;
+    padding: 14px 16px 20px;
+  }
+
+  .nyamaaa .icon {
+    font-size: 34px;
+  }
+
+  .nyamaaa img {
+    width: 48px;
+    height: 48px;
+  }
+
+  .nyamaaa p {
+    font-size: 10px;
+    padding: 0 4px;
+  }
 }
 
 /* Inactive / coming soon */

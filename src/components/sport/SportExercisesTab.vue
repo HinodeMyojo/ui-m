@@ -10,6 +10,8 @@ import {
   Legend,
 } from "chart.js";
 import { Line } from "vue-chartjs";
+import SportDemo from "@/components/sport/SportDemo.vue";
+import SportExerciseCatalog from "@/components/sport/SportExerciseCatalog.vue";
 import {
   fetchSportExercises,
   createSportExercise,
@@ -85,6 +87,8 @@ function openNew() {
     emoji: "🏋️",
     note: "",
     fields: ["reps", "weight"],
+    demoUrls: [],
+    demoSource: "",
     archived: false,
   };
 }
@@ -94,10 +98,54 @@ function openEdit(ex) {
     ...ex,
     muscleGroups: [...ex.muscleGroups],
     fields: [...ex.fields],
+    demoUrls: [...(ex.demoUrls || [])],
+    demoSource: ex.demoSource || "",
     // null на бэке означает «не задано» и считается как 1.0 — показываем так же.
     bodyweightFactor: ex.bodyweightFactor ?? 1,
   };
 }
+
+// --- Демонстрация движения ---
+// Ссылки правятся текстом, по одной в строке: так же, как они лежат на сервере.
+// Каталог — просто быстрый способ их набрать, руками можно вписать любые.
+
+const catalogFor = ref(null);
+
+const demoText = computed({
+  get: () => (editing.value?.demoUrls || []).join("\n"),
+  set: (v) => {
+    editing.value.demoUrls = v
+      .split("\n")
+      .map((x) => x.trim())
+      .filter(Boolean);
+    editing.value.demoSource = editing.value.demoUrls.length ? "manual" : "";
+  },
+});
+
+function applyCatalogPick(pick) {
+  editing.value.demoUrls = pick.demoUrls;
+  editing.value.demoSource = pick.demoSource;
+  // Готовое описание подставляем только в пустую заметку: своё, написанное
+  // руками, ценнее машинного перевода из каталога и затирать его нельзя.
+  if (pick.note && !String(editing.value.note || "").trim()) {
+    editing.value.note = pick.note;
+  }
+  catalogFor.value = null;
+}
+
+// Подпись правообладателя: медиа перевыложено с его разрешения ровно на этом
+// условии, поэтому она обязана быть рядом с картинками, а не только в каталоге.
+const DEMO_SOURCES = {
+  gymvisual: { label: "© Gym visual", url: "https://gymvisual.com/" },
+};
+
+const demoCredit = computed(() => DEMO_SOURCES[editing.value?.demoSource] || null);
+
+// Хотя бы одна картинка на экране — значит подпись нужна и на самом экране.
+const listCredit = computed(() => {
+  const codes = new Set(filtered.value.filter((e) => e.demoUrls?.length).map((e) => e.demoSource));
+  return [...codes].map((c) => DEMO_SOURCES[c]).filter(Boolean);
+});
 
 // Подсказка «сколько выйдет» на реальном весе: абстрактный коэффициент
 // понять сложнее, чем «15 повторов дадут столько-то килограммов».
@@ -132,6 +180,8 @@ async function save() {
     emoji: editing.value.emoji,
     note: editing.value.note || null,
     fields: editing.value.fields,
+    demoUrls: editing.value.demoUrls || [],
+    demoSource: editing.value.demoSource || "",
     archived: editing.value.archived,
   };
   try {
@@ -244,6 +294,7 @@ onMounted(load);
     <div class="sp-grid">
       <div v-for="ex in filtered" :key="ex.id" class="sp-card" :class="{ 'is-archived': ex.archived }">
         <div class="sp-row">
+          <SportDemo :urls="ex.demoUrls" size="52px" />
           <strong>{{ ex.emoji }} {{ ex.title }}</strong>
           <div class="sp-spacer"></div>
           <span v-if="ex.archived" class="sp-muted">архив</span>
@@ -294,6 +345,42 @@ onMounted(load);
             <div class="sp-field" style="flex: 1">
               <label>Снаряд</label>
               <input v-model="editing.equipment" class="sp-input" placeholder="barbell / dumbbell" />
+            </div>
+          </div>
+
+          <!-- Как выглядит движение. Одна ссылка — картинка или гифка,
+               несколько — кадры, которые интерфейс сам перещёлкивает. -->
+          <div class="sp-field">
+            <label>Демонстрация движения</label>
+            <div class="sp-row">
+              <SportDemo :urls="editing.demoUrls" size="86px" />
+              <div style="flex: 1; min-width: 180px">
+                <textarea
+                  v-model="demoText"
+                  class="sp-input spx-demo"
+                  rows="3"
+                  placeholder="https://…/0.jpg&#10;https://…/1.jpg"
+                ></textarea>
+                <div class="sp-muted" style="margin-top: 4px">
+                  По одной ссылке в строке. Две и больше — станут анимацией.
+                </div>
+              </div>
+            </div>
+            <div class="sp-row" style="margin-top: 6px">
+              <button class="sp-btn sp-btn-sm" @click="catalogFor = editing">
+                🔍 Найти в каталоге
+              </button>
+              <button
+                v-if="editing.demoUrls?.length"
+                class="sp-btn sp-btn-sm is-danger"
+                @click="editing.demoUrls = []; editing.demoSource = ''"
+              >
+                Убрать
+              </button>
+              <span v-if="demoCredit" class="sp-muted">
+                <a :href="demoCredit.url" target="_blank" rel="noopener">{{ demoCredit.label }}</a>
+              </span>
+              <span v-else-if="editing.demoSource" class="sp-muted">источник: вручную</span>
             </div>
           </div>
 
@@ -417,11 +504,46 @@ onMounted(load);
         </div>
       </div>
     </div>
+
+    <!-- Подпись правообладателя анимаций: условие, на котором их разрешено
+         перевыкладывать. Показываем, только если картинки на экране есть. -->
+    <p v-if="listCredit.length" class="spx-credit">
+      Анимации:
+      <template v-for="(c, i) in listCredit" :key="c.url">
+        <template v-if="i"> · </template>
+        <a :href="c.url" target="_blank" rel="noopener">{{ c.label }}</a>
+      </template>
+    </p>
+
+    <SportExerciseCatalog
+      v-if="catalogFor"
+      :hint="catalogFor.title"
+      @close="catalogFor = null"
+      @pick="applyCatalogPick"
+    />
   </div>
 </template>
 
 <style scoped>
 .is-archived {
   opacity: 0.6;
+}
+
+.spx-credit {
+  margin: 0;
+  font-size: 11px;
+  color: #6b7080;
+}
+
+.spx-credit a {
+  color: #8b90a0;
+}
+
+.spx-demo {
+  width: 100%;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  resize: vertical;
 }
 </style>

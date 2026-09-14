@@ -122,7 +122,14 @@ async function applyTemplate() {
 // промежуток: перекладывать план обычно приходится не один раз подряд.
 const rolloutFor = ref(null); // { id, from, to, mode }
 
+// Кнопка работает как выключатель: второе нажатие сворачивает панель.
+// Раньше она только открывала, и закрыть раскатку было нечем — приходилось
+// уходить с вкладки.
 function openRollout(program) {
+  if (rolloutFor.value && rolloutFor.value.id === program.id) {
+    rolloutFor.value = null;
+    return;
+  }
   const weeks = program.weeks || 4;
   rolloutFor.value = {
     id: program.id,
@@ -271,13 +278,32 @@ onMounted(load);
             </span>
             <div class="sp-spacer"></div>
             <button class="sp-btn sp-btn-sm" @click="programModal = { id: p.id }">Изменить</button>
-            <button class="sp-btn sp-btn-sm" :disabled="busy" @click="openRollout(p)">План на календарь…</button>
+            <button
+              class="sp-btn sp-btn-sm"
+              :class="{ 'is-primary': rolloutFor?.id === p.id }"
+              :disabled="busy"
+              @click="openRollout(p)"
+            >
+              {{ rolloutFor?.id === p.id ? "▴ Свернуть" : "▾ План на календарь" }}
+            </button>
           </div>
 
           <!-- Раскатка. Собрана в одном месте, потому что все три действия —
                про одно и то же: что программа кладёт в календарь и на какие
                дни. Порознь их приходилось бы искать по разным экранам. -->
           <div v-if="rolloutFor && rolloutFor.id === p.id" class="sp-rollout">
+            <div class="sp-row sp-rollout-head">
+              <strong>📅 {{ p.title }} → календарь</strong>
+              <span class="sp-muted">программа раскладывает тренировки по дням</span>
+              <div class="sp-spacer"></div>
+              <button class="sp-btn sp-btn-sm" title="Свернуть" @click="rolloutFor = null">✕</button>
+            </div>
+
+            <div class="sp-rollout-step">
+              <span class="sp-step-no">1</span>
+              <span>За какой отрезок раскладываем</span>
+            </div>
+
             <div class="sp-row">
               <div class="sp-field" style="width: 150px">
                 <label>С</label>
@@ -309,7 +335,12 @@ onMounted(load);
               </button>
             </div>
 
-            <div class="sp-row" style="border-top: 1px solid #2e2e3a; padding-top: 10px">
+            <div class="sp-rollout-step" style="border-top: 1px solid #2e2e3a; padding-top: 12px">
+              <span class="sp-step-no">2</span>
+              <span>Программа кончилась и её надо повторить</span>
+            </div>
+
+            <div class="sp-row">
               <div class="sp-field" style="width: 150px">
                 <label>Начать заново с</label>
                 <input v-model="rolloutFor.restartFrom" class="sp-input" type="date" />
@@ -504,6 +535,36 @@ onMounted(load);
   border: 1px solid #2e2660;
   border-radius: 10px;
   background: #1b1d24;
+}
+
+.sp-rollout-head {
+  padding-bottom: 8px;
+  border-bottom: 1px solid #2e2e3a;
+}
+
+/* Панель делает два разных дела: раскладывает отрезок и перезапускает цикл.
+   Без нумерации они читаются как одна каша из полей с датами. */
+.sp-rollout-step {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #c9ccd8;
+}
+
+.sp-step-no {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: #2e2660;
+  color: #b9aaff;
+  font-size: 11px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .sp-howto {

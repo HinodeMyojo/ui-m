@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed, onMounted } from "vue";
 import confetti from "@/composables/useConfetti.js";
+import SportDemo from "@/components/sport/SportDemo.vue";
 import {
   fetchSportWorkout,
   fetchSportExercises,
@@ -376,6 +377,9 @@ onMounted(async () => {
 
           <div v-for="(ex, exIndex) in workout.exercises" :key="ex.id" class="sp-ex">
             <div class="sp-row">
+              <!-- Момент, ради которого демонстрация и нужна: стоишь над
+                   штангой и не помнишь, как это делается. -->
+              <SportDemo :urls="ex.exercise.demoUrls" size="40px" />
               <strong>{{ ex.exercise.emoji }} {{ ex.exercise.title }}</strong>
               <span v-if="ex.done" style="color: #63c94f">✓</span>
               <div class="sp-spacer"></div>
