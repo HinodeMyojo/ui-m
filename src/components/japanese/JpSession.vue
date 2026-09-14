@@ -540,6 +540,23 @@ watch(
   { immediate: true }
 );
 
+// Новая карточка обязана открываться сверху.
+//
+// У длинного урока (знак, чтения, порядок черт, слова, фраза, состав) вопрос
+// прокручивается — это нормально. Ненормально было другое: карточка
+// показывалась не с начала. Первая причина — flex с justify-content: center,
+// который при переполнении срезает содержимое сверху и делает его
+// недостижимым (лечится safe center в стилях). Вторая — прокрутка,
+// оставшаяся от предыдущей карточки: элемент тот же самый, Vue его
+// переиспользует, и scrollTop переезжает вместе с ним.
+const midEl = ref(null);
+
+watch([card, phase, teaching], () => {
+  nextTick(() => {
+    if (midEl.value) midEl.value.scrollTop = 0;
+  });
+});
+
 onMounted(() => {
   sessionFocus.value = true;
   primeJapaneseVoice();
@@ -642,7 +659,7 @@ onBeforeUnmount(() => {
 
     <template v-else-if="card">
       <!-- Вопрос -->
-      <div class="jps-mid">
+      <div ref="midEl" class="jps-mid">
         <div class="jps-kind">
           {{ jpItemLabel(card.itemType) }}
           <span v-if="teaching" class="jps-new">знакомимся {{ lessonNo }} из {{ lessonTotal }}</span>
@@ -652,11 +669,23 @@ onBeforeUnmount(() => {
         <!-- Урок: единицу видят впервые. Сначала показываем всё, что о ней
              знаем, и только по «понял» спрашиваем. -->
         <template v-if="teaching">
-          <div class="jps-char-box">
-            <div v-if="readingNow" class="jps-furigana">{{ readingNow }}</div>
-            <div class="jps-char" :class="{ 'is-word': card.itemType === 'word' }">
-              {{ card.char }}
+          <!-- Знак и его начертание — рядом, как две фотографии: слева что
+               написано, справа как это пишется. Порядок черт под знаком
+               означал, что до него надо доскроллить и там ещё нажать. -->
+          <div class="jps-lesson-visual">
+            <div class="jps-char-box">
+              <div v-if="readingNow" class="jps-furigana">{{ readingNow }}</div>
+              <div class="jps-char" :class="{ 'is-word': card.itemType === 'word' }">
+                {{ card.char }}
+              </div>
             </div>
+
+            <JpStrokeOrder
+              v-if="card.strokePaths?.length"
+              :paths="card.strokePaths"
+              :groups="card.strokeGroups || []"
+              :size="132"
+            />
           </div>
           <div class="jps-lesson-meaning">{{ meaning }}</div>
           <div v-if="lessonReadings" class="jps-lesson-readings">{{ lessonReadings }}</div>
@@ -666,15 +695,6 @@ onBeforeUnmount(() => {
               ✍️ Написать самому
             </button>
           </div>
-
-          <!-- Порядок черт: знак, которого не видел в движении, остаётся
-               картинкой, а картинку рукой не воспроизвести. -->
-          <JpStrokeOrder
-            v-if="card.strokePaths?.length"
-            :paths="card.strokePaths"
-            :groups="card.strokeGroups || []"
-            :size="140"
-          />
 
           <!-- Слова с этим знаком — ради них знак и учат. -->
           <template v-if="card.words?.length">
@@ -1085,13 +1105,21 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   align-items: center;
+  /* Короткая карточка стоит по центру, длинная — прижимается к верху.
+     Обычный center при переполнении срезает содержимое с ОБЕИХ сторон, и
+     верхняя часть уезжает за край, куда прокрутка уже не достаёт: у урока
+     это значило, что знак и чтения не увидеть вообще. safe center снимает
+     центрирование ровно в тот момент, когда содержимое перестало влезать.
+     Первая строка — запасная для клиентов, которые safe не понимают. */
   justify-content: center;
+  justify-content: safe center;
   gap: 10px;
   text-align: center;
   min-height: 0;
   /* Раскрытый разбор — это ещё три-четыре строки: пусть прокручивается вопрос,
      а не выдавливаются кнопки ответа из нижней трети. */
   overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .jps-kind {
@@ -1115,6 +1143,17 @@ onBeforeUnmount(() => {
   flex-direction: column;
   align-items: center;
   gap: 2px;
+}
+
+/* Знак слева, его начертание справа. Оба — картинки одного размера, и
+   смотреть их надо вместе: глаз сверяет написанное с тем, как оно строится. */
+.jps-lesson-visual {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  width: 100%;
+  flex-wrap: wrap;
 }
 
 /* Чтение стоит над словом и заметно мельче его: читают знак, а кана — подпись

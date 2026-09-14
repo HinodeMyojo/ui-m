@@ -16,6 +16,11 @@ const props = defineProps({
   // Черты каждой части рисуются своим цветом — так «語 это 言 плюс 吾» видно
   // на самом знаке, а не только списком под ним.
   groups: { type: Array, default: () => [] },
+  // Порядок черт сам по себе бесполезен статичной картинкой: знак в таком
+  // виде и так стоит рядом. Поэтому по умолчанию он сразу рисуется и
+  // повторяется — нажимать ничего не нужно, смотри и повторяй.
+  autoplay: { type: Boolean, default: true },
+  loop: { type: Boolean, default: true },
 });
 
 // Цвет по чертам нужен там, где есть граница между частями. Одна
@@ -55,9 +60,18 @@ const legend = computed(() =>
 const svg = ref(null);
 const lengths = ref([]);
 const shown = ref(0);
+// Мгновенная перемотка: при повторе черты обязаны исчезнуть сразу, иначе
+// анимация «стирания» читается как ещё один порядок, только задом наперёд.
+const instant = ref(false);
+// Черта, которую рисуют прямо сейчас. Раньше подсветка висела на i === shown,
+// то есть на ещё не нарисованной черте — а она полностью «стёрта» и потому
+// невидима. Пока анимацию включали кнопкой, этого никто не замечал.
+const activeStroke = ref(-1);
 let timer = null;
 
 const STROKE_MS = 380;
+// Пауза перед повтором: без неё готовый знак не успевает отпечататься.
+const REPLAY_MS = 1200;
 
 async function measure() {
   await nextTick();
@@ -74,29 +88,54 @@ async function measure() {
 }
 
 function stop() {
-  if (timer) clearInterval(timer);
+  if (timer) clearTimeout(timer);
   timer = null;
+}
+
+// Шаг анимации таймаутом, а не интервалом: между повторами нужна пауза
+// другой длины, а интервал умеет только одну.
+function step() {
+  if (shown.value >= props.paths.length) {
+    activeStroke.value = -1; // знак дописан: подсвечивать больше нечего
+    if (!props.loop) return stop();
+    timer = setTimeout(restart, REPLAY_MS);
+    return;
+  }
+  shown.value += 1;
+  activeStroke.value = shown.value - 1;
+  timer = setTimeout(step, STROKE_MS);
+}
+
+async function restart() {
+  instant.value = true;
+  shown.value = 0;
+  activeStroke.value = -1;
+  await nextTick();
+  // Кадр на то, чтобы браузер применил отключённый переход к нулевой длине,
+  // и только потом возвращаем анимацию — иначе перемотка сама анимируется.
+  requestAnimationFrame(() => {
+    instant.value = false;
+    timer = setTimeout(step, 80);
+  });
 }
 
 function play() {
   stop();
-  shown.value = 0;
-  timer = setInterval(() => {
-    shown.value += 1;
-    if (shown.value >= props.paths.length) stop();
-  }, STROKE_MS);
+  restart();
 }
 
 function showAll() {
   stop();
   shown.value = props.paths.length;
+  activeStroke.value = -1;
 }
 
 watch(
   () => props.paths,
   async () => {
     await measure();
-    showAll();
+    if (props.autoplay) play();
+    else showAll();
   },
   { immediate: true },
 );
@@ -112,6 +151,8 @@ onBeforeUnmount(stop);
       :width="size"
       :height="size"
       class="jso-svg"
+      :class="{ 'is-instant': instant }"
+      @click="play"
     >
       <!-- Сетка как в прописях: без неё непонятно, где центр знака. -->
       <g class="jso-guide">
@@ -123,7 +164,7 @@ onBeforeUnmount(stop);
         :key="i"
         :d="d"
         class="jso-stroke"
-        :class="{ 'is-next': i === shown }"
+        :class="{ 'is-next': i === activeStroke }"
         :style="{
           stroke: strokeColors[i] || undefined,
           strokeDasharray: lengths[i] || 'none',
@@ -140,11 +181,7 @@ onBeforeUnmount(stop);
       </span>
     </div>
 
-    <div class="jso-tools">
-      <button class="jp-btn jp-btn-sm" @click="play">▶ По чертам</button>
-      <button class="jp-btn jp-btn-sm" @click="showAll">Целиком</button>
-      <span class="jp-muted">{{ paths.length }} черт</span>
-    </div>
+    <div class="jso-caption">{{ paths.length }} черт · нажмите, чтобы повторить</div>
   </div>
 </template>
 
@@ -160,6 +197,18 @@ onBeforeUnmount(stop);
   background: #16171d;
   border: 1px solid #2a2d38;
   border-radius: 12px;
+  cursor: pointer;
+}
+
+/* Перемотка на начало повтора: переходы выключены на один кадр. */
+.jso-svg.is-instant .jso-stroke {
+  transition: none;
+}
+
+.jso-caption {
+  font-size: 10.5px;
+  color: var(--m-muted, #7a7f8e);
+  text-align: center;
 }
 
 .jso-guide line {

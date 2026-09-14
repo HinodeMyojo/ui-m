@@ -47,6 +47,10 @@ function leave() {
   width: 100%;
   height: 100vh;
   height: 100dvh;
+  /* Внутри мини-аппа 100dvh считается по окну, а не по видимой части, и экран
+     получается выше того, что показано: верх карточки оказывается срезан.
+     Настоящую высоту присылает Telegram — telegram.js кладёт её сюда. */
+  height: var(--tg-viewport, 100dvh);
   padding: 8px 12px 12px;
   box-sizing: border-box;
   background: var(--m-bg, #14151b);
