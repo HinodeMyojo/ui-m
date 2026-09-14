@@ -130,6 +130,27 @@ const monthStats = computed(() => {
   return s;
 });
 
+// Сводка рядом с сеткой. Процент считаем только по прошедшим дням: если
+// сложить в знаменатель ещё не наступившие тренировки, первого числа любой
+// месяц выглядит проваленным.
+const MONTH_SUMMARY = [
+  { key: "done", label: "сделал" },
+  { key: "partial", label: "частично" },
+  { key: "skipped", label: "пропустил" },
+  { key: "planned", label: "впереди" },
+];
+
+const monthSummary = computed(() =>
+  MONTH_SUMMARY.map((r) => ({ ...r, count: monthStats.value[r.key] })),
+);
+
+const monthRate = computed(() => {
+  const s = monthStats.value;
+  const past = s.done + s.partial + s.skipped;
+  if (!past) return null;
+  return Math.round(((s.done + s.partial * 0.5) / past) * 100);
+});
+
 function dayNo(date) {
   return Number(date.slice(8, 10));
 }
@@ -317,9 +338,12 @@ onMounted(() => {
     <div v-if="loadError" class="sp-error" style="grid-column: 1 / -1">{{ loadError }}</div>
     <div v-if="loading && !data" class="sp-empty" style="grid-column: 1 / -1">Загрузка…</div>
 
-    <!-- Месяц активности. Стоит первым и во всю ширину: это единственное место,
-         где видно режим целиком, а не отдельный день. -->
-    <div class="sp-card" style="grid-column: 1 / -1">
+    <!-- Месяц активности. Стоит первым: это единственное место, где видно режим
+         целиком, а не отдельный день. Но карточку во всю ширину не растягиваем —
+         календарь на весь экран превращается в стену цветных плит и перестаёт
+         читаться с одного взгляда. Рядом с сеткой — сводка: она отвечает цифрой
+         на вопрос «держу режим или нет». -->
+    <div class="sp-card" style="grid-column: span 2; min-width: 0">
       <div class="sp-row">
         <h3 style="margin: 0">Месяц</h3>
         <span class="sp-muted">{{ monthTitle }}</span>
@@ -342,39 +366,59 @@ onMounted(() => {
         </button>
       </div>
 
-      <div class="spm-week">
-        <span v-for="w in WEEKDAYS" :key="w">{{ w }}</span>
-      </div>
+      <div class="spm-body">
+        <div class="spm-cal" :class="{ 'is-loading': monthLoading }">
+          <div class="spm-week">
+            <span v-for="w in WEEKDAYS" :key="w">{{ w }}</span>
+          </div>
 
-      <div class="spm-grid" :class="{ 'is-loading': monthLoading }">
-        <span v-for="(d, i) in monthGrid" :key="i">
-          <span v-if="!d" class="spm-cell is-blank"></span>
-          <span
-            v-else
-            class="spm-cell"
-            :class="[
-              d.workoutStatus ? 'st-' + d.workoutStatus : 'st-none',
-              { 'is-today': d.date === today, 'is-future': d.date > today },
-            ]"
-            :title="dayTitle(d)"
-          >
-            <b>{{ dayNo(d.date) }}</b>
-            <span class="spm-marks">
-              <i v-if="d.weight != null" class="spm-mark w" title="есть замер веса"></i>
-              <i v-if="d.photoCount" class="spm-mark p" title="есть фото"></i>
-              <i v-if="d.hasNote" class="spm-mark n" title="есть заметка"></i>
+          <div class="spm-grid">
+            <template v-for="(d, i) in monthGrid" :key="i">
+              <span v-if="!d" class="spm-cell is-blank"></span>
+              <span
+                v-else
+                class="spm-cell"
+                :class="[
+                  d.workoutStatus ? 'st-' + d.workoutStatus : 'st-none',
+                  { 'is-today': d.date === today, 'is-future': d.date > today },
+                ]"
+                :title="dayTitle(d)"
+              >
+                <b>{{ dayNo(d.date) }}</b>
+                <span class="spm-marks">
+                  <i v-if="d.weight != null" class="spm-mark w" title="есть замер веса"></i>
+                  <i v-if="d.photoCount" class="spm-mark p" title="есть фото"></i>
+                  <i v-if="d.hasNote" class="spm-mark n" title="есть заметка"></i>
+                </span>
+              </span>
+            </template>
+          </div>
+        </div>
+
+        <div class="spm-side">
+          <div class="spm-rate">
+            <b>{{ monthRate === null ? "—" : monthRate + "%" }}</b>
+            <span class="sp-stat-label">режим за прошедшие дни</span>
+          </div>
+
+          <div class="spm-sums">
+            <div v-for="r in monthSummary" :key="r.key" class="spm-sum">
+              <i class="spm-key" :class="'st-' + r.key"></i>
+              <span>{{ r.label }}</span>
+              <div class="sp-spacer"></div>
+              <b>{{ r.count }}</b>
+            </div>
+          </div>
+
+          <div class="spm-foot">
+            <span>тоннаж за месяц <b>{{ Math.round(monthStats.volume) }}</b> кг</span>
+            <span class="spm-legend-marks">
+              <i class="spm-mark w"></i> вес
+              <i class="spm-mark p"></i> фото
+              <i class="spm-mark n"></i> заметка
             </span>
-          </span>
-        </span>
-      </div>
-
-      <div class="spm-legend">
-        <span><i class="spm-key st-done"></i> сделал {{ monthStats.done }}</span>
-        <span><i class="spm-key st-partial"></i> частично {{ monthStats.partial }}</span>
-        <span><i class="spm-key st-skipped"></i> пропустил {{ monthStats.skipped }}</span>
-        <span><i class="spm-key st-planned"></i> запланировано {{ monthStats.planned }}</span>
-        <div class="sp-spacer"></div>
-        <span class="sp-muted">тоннаж за месяц {{ Math.round(monthStats.volume) }} кг</span>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -605,16 +649,35 @@ onMounted(() => {
 <style scoped>
 /* --- Месяц активности --- */
 
+.spm-body {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  margin-top: 12px;
+}
+
+/* Ширину задаём сетке, а не ячейке: размер дня считается от неё и не зависит
+   от того, насколько широк монитор. */
+.spm-cal {
+  flex: 0 1 336px;
+  min-width: 230px;
+  max-width: 336px;
+  transition: opacity 0.15s;
+}
+
+.spm-cal.is-loading {
+  opacity: 0.45;
+}
+
 .spm-week,
 .spm-grid {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
-  gap: 5px;
+  gap: 4px;
 }
 
 .spm-week {
-  margin-top: 12px;
-  font-size: 10.5px;
+  font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: #6b7080;
@@ -622,12 +685,7 @@ onMounted(() => {
 }
 
 .spm-grid {
-  margin-top: 5px;
-  transition: opacity 0.15s;
-}
-
-.spm-grid.is-loading {
-  opacity: 0.45;
+  margin-top: 4px;
 }
 
 .spm-cell {
@@ -638,10 +696,10 @@ onMounted(() => {
   justify-content: center;
   gap: 3px;
   aspect-ratio: 1;
-  border-radius: 8px;
+  border-radius: 7px;
   border: 1px solid #262a35;
   background: #1b1d24;
-  font-size: 12px;
+  font-size: 11.5px;
   color: #8b90a0;
   cursor: default;
 }
@@ -656,31 +714,33 @@ onMounted(() => {
   line-height: 1;
 }
 
-/* Цвет заливки = что было с тренировкой. Пустой день намеренно остаётся
-   пустым: «ничего не планировал» и «пропустил» — разные вещи. */
+/* Цвет заливки = что было с тренировкой. Заливка приглушённая: на сетке из
+   тридцати ячеек насыщенный цвет кричит, а различать статусы нужно, не
+   разглядывая. Пустой день намеренно остаётся пустым: «ничего не планировал»
+   и «пропустил» — разные вещи. */
 .spm-cell.st-done {
-  background: rgba(99, 201, 79, 0.9);
-  border-color: #63c94f;
-  color: #0d1a0c;
+  background: rgba(99, 201, 79, 0.18);
+  border-color: rgba(99, 201, 79, 0.45);
+  color: #a3dd92;
 }
 
 .spm-cell.st-partial {
-  background: rgba(255, 214, 102, 0.85);
-  border-color: #ffd666;
-  color: #221b05;
+  background: rgba(255, 214, 102, 0.16);
+  border-color: rgba(255, 214, 102, 0.42);
+  color: #e6c76a;
 }
 
 .spm-cell.st-skipped {
-  background: rgba(229, 72, 77, 0.75);
-  border-color: #e5484d;
-  color: #2a0f10;
+  background: rgba(229, 72, 77, 0.15);
+  border-color: rgba(229, 72, 77, 0.42);
+  color: #ef9699;
 }
 
 .spm-cell.st-planned {
-  background: #22252e;
-  border-color: #5b616e;
+  background: #20232b;
+  border-color: #464c5b;
   border-style: dashed;
-  color: #aeb3c0;
+  color: #9aa0b0;
 }
 
 /* Будущее — только контур: план ещё не факт, и закрашивать его нечестно. */
@@ -689,7 +749,7 @@ onMounted(() => {
 }
 
 .spm-cell.is-today {
-  box-shadow: 0 0 0 2px #ffd666;
+  box-shadow: 0 0 0 1.5px rgba(255, 214, 102, 0.8);
 }
 
 .spm-marks {
@@ -703,6 +763,7 @@ onMounted(() => {
   height: 4px;
   border-radius: 50%;
   display: block;
+  flex: none;
 }
 
 .spm-mark.w {
@@ -717,14 +778,47 @@ onMounted(() => {
   background: #8b90a0;
 }
 
-.spm-legend {
+/* Сводка справа. Шире 300px ей нечего показывать — пусть остаётся компактным
+   блоком рядом с сеткой, а не растягивается до края карточки. */
+.spm-side {
+  flex: 1 1 220px;
+  min-width: 200px;
+  max-width: 300px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.spm-rate b {
+  display: block;
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--sp-text);
+}
+
+.spm-sums {
+  display: flex;
+  flex-direction: column;
+}
+
+.spm-sum {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 12px;
-  margin-top: 12px;
-  font-size: 11.5px;
-  color: #8b90a0;
+  gap: 8px;
+  padding: 5px 0;
+  font-size: 12.5px;
+  color: #9aa0b0;
+  border-top: 1px solid #232631;
+}
+
+.spm-sum:first-child {
+  border-top: none;
+}
+
+.spm-sum b {
+  color: #cfd3e0;
+  font-variant-numeric: tabular-nums;
 }
 
 .spm-key {
@@ -732,20 +826,19 @@ onMounted(() => {
   width: 9px;
   height: 9px;
   border-radius: 3px;
-  margin-right: 4px;
-  vertical-align: -1px;
+  flex: none;
 }
 
 .spm-key.st-done {
-  background: #63c94f;
+  background: rgba(99, 201, 79, 0.55);
 }
 
 .spm-key.st-partial {
-  background: #ffd666;
+  background: rgba(255, 214, 102, 0.55);
 }
 
 .spm-key.st-skipped {
-  background: #e5484d;
+  background: rgba(229, 72, 77, 0.55);
 }
 
 .spm-key.st-planned {
@@ -753,10 +846,44 @@ onMounted(() => {
   border: 1px dashed #5b616e;
 }
 
+.spm-foot {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 11.5px;
+  color: #7a7f8e;
+}
+
+.spm-foot b {
+  color: #cfd3e0;
+}
+
+.spm-legend-marks {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.spm-legend-marks i {
+  margin-left: 6px;
+}
+
+.spm-legend-marks i:first-child {
+  margin-left: 0;
+}
+
 @media (max-width: 560px) {
-  .spm-week,
-  .spm-grid {
-    gap: 3px;
+  .spm-body {
+    gap: 14px;
+  }
+
+  .spm-cal {
+    flex-basis: 100%;
+    max-width: none;
+  }
+
+  .spm-side {
+    max-width: none;
   }
 
   .spm-cell {
