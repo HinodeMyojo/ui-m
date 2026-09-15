@@ -1,6 +1,6 @@
 <script setup>
 import { ref, onBeforeUnmount } from "vue";
-import { jpNormalizeReading } from "@/components/japaneseApi.js";
+import { jpSpeechMatches, markSpeechRecognitionBroken } from "@/components/japaneseApi.js";
 
 // Произнести знак вслух — единственный режим, где проверяется речь, а не
 // нажатие.
@@ -18,8 +18,13 @@ const props = defineProps({
   expect: { type: String, required: true },
   // Прочие допустимые чтения: он и кун у знака не один.
   alsoAccept: { type: Array, default: () => [] },
+  // Сам знак или запись слова. Распознавание японского возвращает не кану, а
+  // текст: на «はく» приедет 白. Без этого сверка не проходила никогда.
+  char: { type: String, default: "" },
 });
-const emit = defineEmits(["done"]);
+// unavailable — распознавания в этом браузере нет: карточку надо отдать другой
+// механике, а не засчитывать провал.
+const emit = defineEmits(["done", "unavailable"]);
 
 const listening = ref(false);
 const heard = ref("");
@@ -34,6 +39,8 @@ function start() {
   const Ctor = ctor();
   if (!Ctor) {
     error.value = "Этот браузер не умеет распознавать речь";
+    markSpeechRecognitionBroken();
+    emit("unavailable");
     return;
   }
   stop();
@@ -57,10 +64,19 @@ function start() {
   };
   recognition.onerror = (event) => {
     listening.value = false;
-    error.value =
-      event.error === "not-allowed"
-        ? "Микрофон запрещён — разреши доступ или отвечай кнопкой"
-        : "Не расслышал";
+    // Отказы бывают двух родов. «Не расслышал» — это про попытку, её можно
+    // повторить. А вот запрет и отсутствие службы — это про устройство: в
+    // мини-аппе Telegram на iOS распознавание не разрешено приложению вовсе, и
+    // повторять тут нечего. Такой отказ запоминается, и вопрос дальше
+    // спрашивается вводом чтения.
+    const dead = ["not-allowed", "service-not-allowed", "audio-capture", "language-not-supported"];
+    if (dead.includes(event.error)) {
+      markSpeechRecognitionBroken();
+      error.value = "Микрофон здесь недоступен — отвечаю вводом чтения";
+      emit("unavailable");
+      return;
+    }
+    error.value = "Не расслышал";
   };
   recognition.onend = () => {
     listening.value = false;
@@ -76,20 +92,17 @@ function start() {
 }
 
 function finish(alternatives) {
-  const want = jpNormalizeReading(props.expect);
-  const also = props.alsoAccept.map((r) => jpNormalizeReading(r)).filter(Boolean);
-
   let verdict = "wrong";
   for (const raw of alternatives) {
-    const said = jpNormalizeReading(raw);
-    if (!said) continue;
-    // Распознавание любит дописывать частицы и склеивать слова, поэтому
-    // засчитывается и вхождение: «やま» внутри «やまです» — это то же чтение.
-    if (said === want || said.includes(want)) {
+    if (!raw) continue;
+    // Верным считается и чтение, и сама запись: распознаватель чаще отдаёт
+    // иероглиф, чем кану, и «сказал не то» от «записал иначе» отличается
+    // только этим.
+    if (jpSpeechMatches(raw, props.expect) || (props.char && jpSpeechMatches(raw, props.char))) {
       verdict = "right";
       break;
     }
-    if (also.some((r) => said === r || said.includes(r))) {
+    if (props.alsoAccept.some((r) => jpSpeechMatches(raw, r))) {
       verdict = "close";
     }
   }

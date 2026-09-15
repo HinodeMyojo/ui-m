@@ -1,6 +1,13 @@
 <script setup>
 import { ref, computed, onMounted, watch, nextTick } from "vue";
-import { JP_STROKE_BOX } from "@/components/japaneseApi.js";
+import {
+  JP_STROKE_BOX,
+  JP_GROUP_COLORS,
+  JP_WRITE_BY_KEYS,
+  JP_WRITE_OUTLINE,
+  JP_WRITE_ZONES,
+  JP_WRITE_STAGE_LABELS,
+} from "@/components/japaneseApi.js";
 
 // Обводка знака пальцем. Проверка идёт по KanjiVG — тем же путям черт, что
 // рисует анимация порядка: эталон уже лежит в базе, сравнивать есть с чем.
@@ -14,12 +21,24 @@ import { JP_STROKE_BOX } from "@/components/japaneseApi.js";
 // проверяются концы: 一 справа налево — это не 一, а зеркало, и по среднему
 // расстоянию оно проходит на ура.
 
+// Лестница помощи. Один и тот же холст проверяет разное в зависимости от того,
+// что на нём осталось: по видимому контуру знак «пишет» и тот, кто его не
+// помнит, а на пустом квадрате — только тот, кто помнит.
+//
+// Ступени ровно те, о которых просил пользователь: «первая итерация — тебе
+// показывают порядок написания ключей; следующая — просто иероглиф; следующая —
+// только зоны по цветам, где были ключи; дальше — сам, без помощи». Номера
+// ступеней общие с сервером и лежат в japaneseApi.js.
+
 const props = defineProps({
   paths: { type: Array, default: () => [] },
   char: { type: String, default: "" },
-  // Показывать ли контур целиком. На ранней стадии обводят по видимому
-  // образцу, дальше остаётся только уже проведённое.
-  guide: { type: Boolean, default: true },
+  // Ступень письма, 1..4. Ноль и отсутствие — обычная обводка по контуру,
+  // как её открывает лист знака вне сессии.
+  stage: { type: Number, default: 0 },
+  // Какие черты какому ключу принадлежат: [{char, meaningRu, strokes:[..]}].
+  // Нужны первой ступени (раскрасить) и третьей (оставить одни зоны).
+  groups: { type: Array, default: () => [] },
 });
 const emit = defineEmits(["done"]);
 
@@ -33,12 +52,39 @@ const SAMPLES = 24;
 const svg = ref(null);
 const box = ref(null);
 const refPoints = ref([]); // точки эталонных черт
+const zones = ref([]); // прямоугольники ключей для третьей ступени
 const doneCount = ref(0); // сколько черт уже принято
 const drawing = ref(false);
 const current = ref([]); // текущий жест в координатах KanjiVG
 const shake = ref(false); // черта не принята — короткая тряска вместо вибрации
 const attempts = ref(0);
 const misses = ref(0);
+
+// Что видно на этой ступени. Вне сессии (stage = 0) остаётся прежнее
+// поведение: контур показан целиком.
+const showOutline = computed(() => props.stage === 0 || props.stage <= JP_WRITE_OUTLINE);
+const showColors = computed(() => props.stage === JP_WRITE_BY_KEYS && props.groups.length > 0);
+const showZones = computed(() => props.stage === JP_WRITE_ZONES && zones.value.length > 0);
+const stageLabel = computed(() => JP_WRITE_STAGE_LABELS[props.stage] || "");
+
+// Цвет черты по ключу, которому она принадлежит. Цвета те же, что в разборе
+// состава и в анимации порядка: глаз не должен искать соответствие заново.
+const strokeColor = computed(() => {
+  const out = new Array(props.paths.length).fill("");
+  props.groups.forEach((group, gi) => {
+    const color = JP_GROUP_COLORS[gi % JP_GROUP_COLORS.length];
+    for (const index of group.strokes || []) out[index] = color;
+  });
+  return out;
+});
+
+// Какой ключ пишется прямо сейчас — подпись к первой ступени. Порядок черт без
+// имени ключа остаётся порядком палочек; с именем это уже «сначала человек,
+// потом дерево».
+const currentGroup = computed(() => {
+  if (!showColors.value) return null;
+  return props.groups.find((g) => (g.strokes || []).includes(doneCount.value)) || null;
+});
 
 const total = computed(() => props.paths.length);
 const finished = computed(() => total.value > 0 && doneCount.value >= total.value);
@@ -48,6 +94,7 @@ const finished = computed(() => total.value > 0 && doneCount.value >= total.valu
 async function measure() {
   await nextTick();
   const nodes = svg.value?.querySelectorAll("path.jtc-ref") || [];
+  const boxes = [];
   refPoints.value = Array.from(nodes).map((node) => {
     try {
       const len = node.getTotalLength();
@@ -56,11 +103,49 @@ async function measure() {
         const p = node.getPointAtLength((len * i) / (SAMPLES - 1));
         pts.push([p.x, p.y]);
       }
+      boxes.push(node.getBBox());
       return pts;
     } catch {
+      boxes.push(null);
       return [];
     }
   });
+  zones.value = measureZones(boxes);
+}
+
+// Зоны третьей ступени — охватывающие прямоугольники ключей. Считаются по
+// настоящим границам черт (getBBox), а не по разметке: где именно на квадрате
+// стоит ключ, знает только начертание.
+//
+// Прямоугольник чуть шире черт: обводка по самой кромке читается как контур, а
+// зона должна говорить «здесь», а не «вот так».
+function measureZones(boxes) {
+  const PAD = 3;
+  const out = [];
+  props.groups.forEach((group, gi) => {
+    let x1 = Infinity;
+    let y1 = Infinity;
+    let x2 = -Infinity;
+    let y2 = -Infinity;
+    for (const index of group.strokes || []) {
+      const b = boxes[index];
+      if (!b) continue;
+      x1 = Math.min(x1, b.x);
+      y1 = Math.min(y1, b.y);
+      x2 = Math.max(x2, b.x + b.width);
+      y2 = Math.max(y2, b.y + b.height);
+    }
+    if (!Number.isFinite(x1) || !Number.isFinite(x2)) return;
+    out.push({
+      char: group.char,
+      color: JP_GROUP_COLORS[gi % JP_GROUP_COLORS.length],
+      x: Math.max(0, x1 - PAD),
+      y: Math.max(0, y1 - PAD),
+      w: Math.min(JP_STROKE_BOX, x2 - x1 + PAD * 2),
+      h: Math.min(JP_STROKE_BOX, y2 - y1 + PAD * 2),
+    });
+  });
+  return out;
 }
 
 function reset() {
@@ -70,10 +155,21 @@ function reset() {
   misses.value = 0;
 }
 
-watch(() => props.paths, async () => {
-  reset();
-  await measure();
-}, { immediate: true });
+// Следим за приметами знака, а не за самим массивом путей.
+//
+// Это не придирка к стилю: родитель отдаёт `card.strokePaths || []`, и при
+// отсутствии путей это каждый раз новый массив. Слежка за ссылкой срабатывала
+// на каждой перерисовке, measure() писала зоны, зоны перерисовывали холст — и
+// вкладка падала целиком. Поймано живым прогоном: браузер умирал на второй
+// обводке.
+watch(
+  () => `${props.char}|${props.stage}|${props.paths.length}`,
+  async () => {
+    reset();
+    await measure();
+  },
+  { immediate: true },
+);
 
 // --- Ввод ---
 
@@ -238,13 +334,36 @@ defineExpose({ reset });
           <line x1="0" :y1="JP_STROKE_BOX / 2" :x2="JP_STROKE_BOX" :y2="JP_STROKE_BOX / 2" />
         </g>
 
-        <!-- Эталон: измеряется всегда, видно — только если просили образец. -->
+        <!-- Зоны ключей: третья ступень. Контура нет, но видно, где что
+             стоит, — это подсказка про расположение, а не про начертание. -->
+        <g v-if="showZones" class="jtc-zones">
+          <rect
+            v-for="z in zones"
+            :key="`zone-${z.char}`"
+            :x="z.x"
+            :y="z.y"
+            :width="z.w"
+            :height="z.h"
+            :stroke="z.color"
+            :fill="z.color"
+            rx="3"
+          />
+        </g>
+
+        <!-- Эталон: измеряется всегда, видно — только если ступень это
+             позволяет. Черты первой ступени раскрашены по ключам: видно не
+             только порядок, но и то, какой ключ сейчас пишется. -->
         <path
           v-for="(d, i) in paths"
           :key="`ref-${i}`"
           :d="d"
           class="jtc-ref"
-          :class="{ 'is-hidden': !guide && i >= doneCount, 'is-next': guide && i === doneCount }"
+          :class="{
+            'is-hidden': !showOutline && i >= doneCount,
+            'is-next': showOutline && i === doneCount,
+          }"
+          :style="showColors && i >= doneCount ? { stroke: strokeColor[i] || undefined } : null"
+          :opacity="showColors && i > doneCount ? 0.35 : null"
         />
 
         <!-- Уже принятые черты остаются на месте: знак собирается на глазах. -->
@@ -252,6 +371,23 @@ defineExpose({ reset });
 
         <path v-if="currentPath" :d="currentPath" class="jtc-ink" />
       </svg>
+    </div>
+
+    <!-- Лестница ступеней: видно, где ты и сколько осталось. Без неё письмо
+         четыре раза подряд выглядит как заевшая пластинка. -->
+    <div v-if="stage" class="jtc-stairs">
+      <span
+        v-for="s in 4"
+        :key="s"
+        class="jtc-stair"
+        :class="{ 'is-done': s < stage, 'is-now': s === stage }"
+      ></span>
+      <span class="jtc-stage-label">{{ stage }}/4 — {{ stageLabel }}</span>
+    </div>
+
+    <div v-if="currentGroup" class="jtc-now">
+      <span class="jtc-now-char">{{ currentGroup.char }}</span>
+      <span v-if="currentGroup.meaningRu" class="jtc-now-meaning">{{ currentGroup.meaningRu }}</span>
     </div>
 
     <div class="jtc-bar">
@@ -332,6 +468,63 @@ defineExpose({ reset });
 
 .jtc-ref.is-hidden {
   stroke: transparent;
+}
+
+/* Зоны ключей: заливка едва заметная, рамка пунктиром. Сплошной прямоугольник
+   поверх пустого квадрата читается как рамка для рисования, а не как «здесь
+   стоял ключ». */
+.jtc-zones rect {
+  fill-opacity: 0.08;
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+  stroke-opacity: 0.55;
+}
+
+.jtc-stairs {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  max-width: 300px;
+  font-size: 12px;
+  color: var(--m-muted, #7a7f8e);
+}
+
+.jtc-stair {
+  width: 22px;
+  height: 4px;
+  border-radius: 2px;
+  background: #2a2d38;
+}
+
+.jtc-stair.is-done {
+  background: #63c94f;
+}
+
+.jtc-stair.is-now {
+  background: var(--m-accent, #6e4aff);
+}
+
+.jtc-stage-label {
+  margin-left: 4px;
+}
+
+.jtc-now {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  width: 100%;
+  max-width: 300px;
+  font-size: 13px;
+  color: #cfd3e0;
+}
+
+.jtc-now-char {
+  font-size: 19px;
+}
+
+.jtc-now-meaning {
+  color: var(--m-muted, #7a7f8e);
 }
 
 /* Следующая черта подсвечена: обводят её, а не любую. */

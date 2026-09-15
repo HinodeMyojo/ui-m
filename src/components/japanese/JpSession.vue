@@ -40,6 +40,8 @@ import {
   speakJapanese,
   primeJapaneseSpeech,
   speakableOf,
+  jpAutoSpeakEnabled,
+  JP_WRITE_BY_KEYS,
 } from "@/components/japaneseApi.js";
 
 // Сессия изучения — общий экран для телефона и десктопа.
@@ -172,6 +174,7 @@ function stopTicker() {
 
 function ask() {
   picked.value = null;
+  noSpeech.value = false;
   typed.value = "";
   tiles.value = [];
   verdict.value = null;
@@ -183,7 +186,11 @@ function ask() {
   phase.value = PHASE.ASK;
   // Вопрос на слух без звука — пустой экран, поэтому произносим сами. Браузер
   // вправе отказать (звук без жеста), кнопка «Послушать» остаётся рядом.
-  if (audioOnly.value) nextTick(say);
+  //
+  // Всё остальное озвучивается по настройке, включённой по умолчанию: «когда
+  // показываешь иероглиф, всегда включай озвучку». Молчим только там, где
+  // чтение и есть ответ, — там звук его просто выдал бы.
+  if (audioOnly.value || (jpAutoSpeakEnabled() && speakableNow.value)) nextTick(say);
 }
 
 // «Заниматься дальше»: берём новое сверх дневной нормы, а если и его нет —
@@ -197,11 +204,23 @@ function studyAhead() {
 // Режим, по которому спрашиваем прямо сейчас. Пока идёт урок, вопроса нет.
 // «Произнести вслух» там, где браузер не умеет слушать, превращается во ввод
 // чтения: иначе карточка была бы неотвечаемой.
+//
+// Отказ выясняется двумя путями: конструктора нет вовсе или API отказал на
+// старте. Второй — это как раз мини-апп Telegram на iOS, где распознавание
+// формально есть, а разрешения у приложения нет.
+const noSpeech = ref(false);
+
 const mechanic = computed(() => {
   const m = card.value?.mechanic;
-  if (m === JP_MECH_SPEAK && !canHearJapanese()) return JP_MECH_READING;
+  if (m === JP_MECH_SPEAK && (noSpeech.value || !canHearJapanese())) return JP_MECH_READING;
   return m;
 });
+
+// Распознавание отвалилось прямо на карточке: подменяем вопрос вводом чтения,
+// не засчитывая провал. Человек не виноват, что браузер не слушает.
+function speechUnavailable() {
+  noSpeech.value = true;
+}
 
 // Вопрос показывает сам знак: в обратных направлениях знак и есть ответ.
 const asksForKanji = computed(
@@ -279,6 +298,13 @@ const canSubmit = computed(() => {
 // «готово» после последней черты — лишний тап на ровном месте.
 // Промахи решают оценку: провёл начисто — «верно», лазил в подсказку или
 // мазал — «почти», и карточка вернётся раньше.
+// Пути и разбор по ключам — вычисляемыми, а не выражением в шаблоне: `|| []`
+// создаёт новый массив на каждую перерисовку, и следящий за ним потомок уходит
+// в бесконечный круг. Так и случилось: вкладка падала на второй обводке.
+const EMPTY = [];
+const tracePaths = computed(() => card.value?.strokePaths || EMPTY);
+const traceGroups = computed(() => card.value?.strokeGroups || EMPTY);
+
 function traceDone({ misses }) {
   reveal(misses === 0 ? "right" : "close");
 }
@@ -338,6 +364,12 @@ function reveal(v) {
   verdict.value = v;
   phase.value = PHASE.REVEAL;
   jpPlay(soundFor(v));
+  // Ответ показан — теперь чтение можно и произнести. Это как раз те механики,
+  // где до ответа звук молчал: ввод чтения, «он или кун», «какой это знак».
+  // Знак, которого ни разу не слышал, так и остаётся картинкой.
+  if (jpAutoSpeakEnabled() && speakable.value && !speakableNow.value) {
+    setTimeout(say, 420); // после щелчка «верно/неверно», а не поверх него
+  }
   // Вибрация в довесок к звуку. В мини-аппе Telegram это единственный отклик,
   // который дойдёт наверняка: звук человек глушит, а на iOS в WebView он ещё и
   // отваливается сам. Вне Telegram вызов ничего не делает.
@@ -366,13 +398,26 @@ async function rate(rating) {
       cardId: current.cardId,
       rating,
       mechanic: current.mechanic,
+      writeStage: current.writeStage || 0,
       thinkMs: Math.max(0, Date.now() - shownAt.value),
     });
     // Провал возвращает карточку в конец этой же сессии — так и задумано,
     // ошибку надо переспросить, пока она свежая. Варианты перетасовываются:
     // тот же порядок запоминается как «третья кнопка», а не как ответ.
     if (answer?.againInSession) {
-      queue.value.push(reshuffled(current));
+      // Провал письма возвращает на ступень назад: помощь возвращается ровно в
+      // том объёме, которого не хватило. Заваленная ступень идёт следом — иначе
+      // «сброс на шаг назад» означал бы, что её можно пропустить.
+      const back = reshuffled(current);
+      if (current.mechanic === JP_MECH_TRACE && answer.writeStage) {
+        back.writeStage = answer.writeStage;
+        queue.value.push(back);
+        if (answer.writeStage < (current.writeStage || 0)) {
+          queue.value.push({ ...reshuffled(current) });
+        }
+      } else {
+        queue.value.push(back);
+      }
     }
     advance();
   } catch (e) {
@@ -562,6 +607,23 @@ const readingNow = computed(() => {
 function say() {
   speakJapanese(speakable.value);
 }
+
+// Фразу произносим по чтению каной, а не по записи: синтезатор сам выбирает
+// чтение иероглифов и на 生 или 何 ошибается. Чтение приходит с сервера и
+// только когда собралось целиком, поэтому запись — запасной путь.
+function saySentence(sentence) {
+  speakJapanese(sentence?.reading || sentence?.text || "");
+}
+
+// Звук фразы заказывается заранее, как и звук знака: между тапом и ответом
+// сервера жест на iOS «остывает», и play() отклоняется.
+watch(
+  () => card.value?.sentences,
+  (list) => {
+    for (const s of list || []) primeJapaneseSpeech(s.reading || s.text || "");
+  },
+  { immediate: true }
+);
 
 // Звук заказывается, как только карточка показана, а не по нажатию кнопки.
 // Это не про скорость: на iOS проиграть можно только то, что запущено внутри
@@ -938,10 +1000,27 @@ onBeforeUnmount(() => {
               <span class="jps-ex-meaning">{{ w.meaningRu }}</span>
             </div>
           </div>
+          <!-- Фраза-пример: запись, чтение каной, перевод и кнопка озвучки.
+               Перевод обязателен, и русский тут не всегда: корпус Танака даёт
+               только английский, русские переводы добыты в Tatoeba и легли на
+               восьмую часть фраз. Английский лучше пустоты — без перевода
+               строка знаков не учит ничему. -->
           <div v-for="s in card.sentences || []" :key="s.text" class="jps-ex-sentence">
-            <div class="jps-ex-jp">{{ s.text }}</div>
+            <div class="jps-ex-row">
+              <span class="jps-ex-jp">{{ s.text }}</span>
+              <button
+                v-if="canSpeakJapanese()"
+                class="jps-ex-say"
+                :aria-label="`Произнести «${s.text}»`"
+                @click="saySentence(s)"
+              >
+                🔊
+              </button>
+            </div>
             <div v-if="s.reading" class="jps-ex-kana">{{ s.reading }}</div>
-            <div v-if="s.translationRu" class="jps-ex-ru">{{ s.translationRu }}</div>
+            <div v-if="s.translationRu || s.translationEn" class="jps-ex-ru">
+              {{ s.translationRu || s.translationEn }}
+            </div>
           </div>
 
           <!-- Разбор после ответа показывается всегда: карточку закрывают
@@ -1017,8 +1096,10 @@ onBeforeUnmount(() => {
           <template v-else-if="mechanic === JP_MECH_SPEAK">
             <JpSpeakCheck
               :expect="card.mainReading"
+              :char="card.char"
               :also-accept="[...(card.onReadings || []), ...(card.kunReadings || [])]"
               @done="reveal($event.verdict)"
+              @unavailable="speechUnavailable"
             />
           </template>
 
@@ -1039,9 +1120,10 @@ onBeforeUnmount(() => {
               }}
             </div>
             <JpTraceCanvas
-              :paths="card.strokePaths || []"
+              :paths="tracePaths"
               :char="card.char"
-              :guide="!card.traceBlind"
+              :stage="card.writeStage || JP_WRITE_BY_KEYS"
+              :groups="traceGroups"
               @done="traceDone"
             />
           </template>
@@ -1399,6 +1481,22 @@ onBeforeUnmount(() => {
 
 .jps-ex-meaning {
   color: var(--m-muted, #7a7f8e);
+}
+
+.jps-ex-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.jps-ex-say {
+  flex-shrink: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font-size: 14px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .jps-ex-sentence {

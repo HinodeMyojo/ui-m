@@ -9,6 +9,8 @@ import {
   primeJapaneseVoice,
   speakJapanese,
   japaneseVoiceName,
+  jpAutoSpeakEnabled,
+  setJpAutoSpeakEnabled,
 } from "@/components/japaneseApi.js";
 import { jpSoundEnabled, setJpSoundEnabled, jpPlay } from "./jpSound.js";
 import JpStudySettings from "./JpStudySettings.vue";
@@ -20,6 +22,9 @@ import JpStudySettings from "./JpStudySettings.vue";
 const SESSION_PRESETS = [
   { sec: 180, label: "3 мин" },
   { sec: 360, label: "6 мин" },
+  // Восемь минут — новое умолчание: письмо знака идёт четырьмя ступенями, и в
+  // шесть минут оно вместе с повторениями не помещалось.
+  { sec: 480, label: "8 мин" },
   { sec: 900, label: "15 мин" },
   { sec: 0, label: "Без потолка" },
 ];
@@ -31,6 +36,15 @@ const sound = ref(jpSoundEnabled());
 watch(sound, (on) => {
   setJpSoundEnabled(on);
   if (on) jpPlay("right");
+});
+
+// Автоозвучка знака — по умолчанию включена: «когда показываешь иероглиф,
+// всегда включай озвучку». Тоже на устройстве: в метро без наушников её
+// выключают, дома включают обратно.
+const autoSpeak = ref(jpAutoSpeakEnabled());
+watch(autoSpeak, (on) => {
+  setJpAutoSpeakEnabled(on);
+  if (on) speakJapanese("にほんご");
 });
 
 const loading = ref(true);
@@ -245,6 +259,10 @@ onMounted(() => {
         <label class="jp-check" style="margin-top: 8px">
           <input v-model="sound" type="checkbox" />
           Звуки ответов (на этом устройстве)
+        </label>
+        <label class="jp-check" style="margin-top: 8px">
+          <input v-model="autoSpeak" type="checkbox" />
+          Произносить знак сразу, без нажатия
         </label>
       </section>
 

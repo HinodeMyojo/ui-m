@@ -105,8 +105,54 @@ export const JP_MECH_SPEAK = "speak";
 // Умеет ли браузер распознавать речь. Без этого режим «произнести вслух»
 // просто не показывается: в Safari он есть с iOS 14.5, в Chrome давно, но
 // далеко не везде.
+// Распознавание речи. Наличие конструктора ничего не доказывает: в WebView
+// Telegram на iOS webkitSpeechRecognition есть, а start() отказывает —
+// приложению не выдано разрешение на распознавание, и вопрос «произнеси вслух»
+// там не отвечается вовсе. Поэтому отказ запоминается на устройстве, и дальше
+// механика молча превращается во ввод чтения.
+const SPEECH_BROKEN_KEY = "jp.speechBroken";
+
+function speechBroken() {
+  try {
+    return localStorage.getItem(SPEECH_BROKEN_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
 export function canHearJapanese() {
+  if (speechBroken()) return false;
   return !!(globalThis.SpeechRecognition || globalThis.webkitSpeechRecognition);
+}
+
+// markSpeechRecognitionBroken — распознавание в этом браузере не работает.
+// Вызывается по ответу самого API, а не по догадке о браузере.
+export function markSpeechRecognitionBroken() {
+  try {
+    localStorage.setItem(SPEECH_BROKEN_KEY, "1");
+  } catch {
+    // не запомнится до перезагрузки — механика просто отвалится ещё раз
+  }
+}
+
+// jpSpeechMatches — сказал ли человек то, что от него ждали.
+//
+// Распознавание японского возвращает не кану, а нормальный текст: на «はく»
+// приедет 白 или 博. Сверять его с чтением бессмысленно — совпадений не будет
+// никогда, и это была настоящая причина, по которой режим всегда отвечал
+// «неверно». Поэтому засчитывается и сам знак, и запись слова, и чтение.
+//
+// Вхождение, а не равенство: распознавание любит дописывать частицы и
+// склеивать слова, «やま» внутри «やまです» — то же самое чтение.
+export function jpSpeechMatches(heard, expected) {
+  const said = jpNormalizeReading(heard);
+  const want = jpNormalizeReading(expected);
+  if (!said || !want) return false;
+  if (said.includes(want) || want.includes(said)) return true;
+  // Запись знаком или словом: сравниваем как есть, без приведения каны.
+  const rawSaid = String(heard || "").replace(/[\s.,。、！？!?]/g, "");
+  const rawWant = String(expected || "").replace(/[\s.,。、！？!?]/g, "");
+  return !!rawWant && rawSaid.includes(rawWant);
 }
 
 // Оценки FSRS. На телефоне из них видны три: «не знал» ставится самим фактом
@@ -146,6 +192,21 @@ export const JP_STROKE_BOX = 109;
 // Порядок постоянный, поэтому первая часть знака всегда одного цвета — и
 // глаз перестаёт искать соответствие заново на каждом знаке.
 export const JP_GROUP_COLORS = ["#ff7a7a", "#59a5ff", "#63c94f", "#ffd666", "#c58bff"];
+
+// Ступени письма. Номера общие с сервером (jp_modes.go): помощь убирается
+// частями, а не разом — обвести по видимому контуру умеет и тот, кто знака не
+// помнит.
+export const JP_WRITE_BY_KEYS = 1;
+export const JP_WRITE_OUTLINE = 2;
+export const JP_WRITE_ZONES = 3;
+export const JP_WRITE_BLIND = 4;
+
+export const JP_WRITE_STAGE_LABELS = {
+  [JP_WRITE_BY_KEYS]: "по ключам",
+  [JP_WRITE_OUTLINE]: "по контуру",
+  [JP_WRITE_ZONES]: "по зонам",
+  [JP_WRITE_BLIND]: "по памяти",
+};
 
 // --- Озвучка ---
 //
@@ -248,6 +309,35 @@ export function primeJapaneseSpeech(text) {
   })();
 
   pending.set(key, task);
+}
+
+// Автоозвучка: знак произносится сам, как только показан, без тапа по кнопке.
+//
+// По умолчанию включена — просьба была прямая: «когда показываешь иероглиф,
+// всегда включать озвучку». Выключается в настройках, значение живёт в
+// localStorage, а не на сервере: звук — свойство устройства, а не человека.
+// Так же хранится и тумблер звуков сессии.
+const AUTO_SPEAK_KEY = "jp.autoSpeak";
+let autoSpeak = null;
+
+export function jpAutoSpeakEnabled() {
+  if (autoSpeak === null) {
+    try {
+      autoSpeak = localStorage.getItem(AUTO_SPEAK_KEY) !== "off";
+    } catch {
+      autoSpeak = true;
+    }
+  }
+  return autoSpeak;
+}
+
+export function setJpAutoSpeakEnabled(value) {
+  autoSpeak = !!value;
+  try {
+    localStorage.setItem(AUTO_SPEAK_KEY, autoSpeak ? "on" : "off");
+  } catch {
+    // не переживёт перезагрузку — не беда
+  }
 }
 
 export function canSpeakJapanese() {
