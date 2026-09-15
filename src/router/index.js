@@ -157,6 +157,17 @@ const router = createRouter({
       component: () => import("../views/JapaneseView.vue"),
     },
     {
+      path: "/arabic",
+      name: "Arabic",
+      component: () => import("../views/ArabicView.vue"),
+    },
+    {
+      // Экран сессии для телефона: отдельная раскладка, не адаптив.
+      path: "/arabic/today",
+      name: "ArabicToday",
+      component: () => import("../views/ArabicTodayView.vue"),
+    },
+    {
       // Блокеры всех задач и карточек в одном списке — и когда о них напомнит бот.
       path: "/blockers",
       name: "Blockers",

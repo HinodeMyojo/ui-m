@@ -1,0 +1,264 @@
+/* Общие стили раздела «Арабский». Файл глобальный намеренно — тем же приёмом,
+   что japanese.css и sport.css: вкладок пять, и держать одинаковые карточки в
+   scoped-стилях каждой значит развести их вид за две правки.
+   Все классы с префиксом ar-.
+
+   Акцент здесь бирюзово-золотой, а не индиго японского: рядом в меню два
+   языковых раздела, и одинаковый цвет читался бы как один и тот же. */
+
+.ar {
+  --ar-bg: #18191f;
+  --ar-card: #1e2027;
+  --ar-card-2: #22242d;
+  --ar-line: #2a2d38;
+  --ar-line-2: #2f3340;
+  --ar-text: #e8eaf2;
+  --ar-muted: #7a7f8e;
+  --ar-accent: #18a999;
+  --ar-gold: #d9a441;
+  --ar-ok: #63c94f;
+  --ar-warn: #ffd666;
+  --ar-bad: #e5484d;
+
+  width: 100%;
+  min-height: 100vh;
+  background: var(--ar-bg);
+  color: var(--ar-text);
+  padding: 16px clamp(10px, 3vw, 40px) 80px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  box-sizing: border-box;
+}
+
+.ar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.ar-header h1 {
+  margin: 0;
+  font-size: 22px;
+}
+
+/* Полоса вкладок листается вбок, а не переносится: пять кнопок в 390px во
+   вторую строку выглядят как сломанная вёрстка, а не как навигация. */
+.ar-tabs {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding-bottom: 2px;
+}
+
+.ar-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.ar-tab {
+  flex: 0 0 auto;
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--ar-line);
+  background: var(--ar-card);
+  color: var(--ar-muted);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.ar-tab.is-on {
+  background: var(--ar-accent);
+  border-color: var(--ar-accent);
+  color: #06201d;
+}
+
+.ar-card {
+  background: var(--ar-card);
+  border: 1px solid var(--ar-line);
+  border-radius: 16px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ar-card-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.ar-muted {
+  color: var(--ar-muted);
+  font-size: 13px;
+}
+
+.ar-btn {
+  padding: 10px 16px;
+  border-radius: 12px;
+  border: 1px solid var(--ar-line-2);
+  background: var(--ar-card-2);
+  color: var(--ar-text);
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.ar-btn:active {
+  transform: translateY(1px);
+}
+
+.ar-btn-accent {
+  background: var(--ar-accent);
+  border-color: var(--ar-accent);
+  color: #06201d;
+}
+
+.ar-btn-gold {
+  background: var(--ar-gold);
+  border-color: var(--ar-gold);
+  color: #2a1e04;
+}
+
+.ar-btn-sm {
+  padding: 6px 10px;
+  font-size: 13px;
+  border-radius: 10px;
+}
+
+.ar-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* Арабский текст: всегда справа налево и всегда крупнее русского. Мелкая
+   арабица на телефоне нечитаема — точки под ب и ي сливаются, а по ним слово
+   и различается. */
+.ar-ar {
+  direction: rtl;
+  unicode-bidi: isolate;
+  font-family: "Geeza Pro", "Noto Naskh Arabic", "Traditional Arabic", "Segoe UI", serif;
+  line-height: 1.7;
+}
+
+.ar-word-big {
+  font-size: clamp(34px, 11vw, 56px);
+  font-weight: 600;
+}
+
+.ar-letter-big {
+  font-size: clamp(56px, 20vw, 96px);
+  font-weight: 600;
+}
+
+.ar-translit {
+  color: var(--ar-muted);
+  font-size: 15px;
+  font-style: italic;
+}
+
+.ar-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.ar-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+}
+
+.ar-bar {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--ar-line);
+  overflow: hidden;
+}
+
+.ar-bar span {
+  display: block;
+  height: 100%;
+  background: var(--ar-accent);
+}
+
+.ar-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--ar-line-2);
+  background: var(--ar-card-2);
+  font-size: 13px;
+}
+
+.ar-chip-gold {
+  border-color: #6a5320;
+  background: #2a2214;
+  color: var(--ar-gold);
+}
+
+.ar-input {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--ar-line-2);
+  background: var(--ar-card-2);
+  color: var(--ar-text);
+  font-size: 15px;
+  box-sizing: border-box;
+}
+
+.ar-textarea {
+  min-height: 110px;
+  resize: vertical;
+}
+
+.ar-err {
+  color: var(--ar-bad);
+  font-size: 13px;
+}
+
+/* Сетка алфавита: клетка достаточно большая, чтобы буква читалась, и
+   достаточно маленькая, чтобы все тридцать влезли в один экран. */
+.ar-alphabet {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(56px, 1fr));
+  gap: 8px;
+}
+
+.ar-cell {
+  aspect-ratio: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  border-radius: 12px;
+  border: 1px solid var(--ar-line);
+  background: var(--ar-card-2);
+  color: var(--ar-muted);
+  cursor: pointer;
+  font-size: 26px;
+}
+
+.ar-cell small {
+  font-size: 10px;
+}
+
+.ar-cell.is-started {
+  color: var(--ar-text);
+  border-color: var(--ar-gold);
+}
+
+.ar-cell.is-learned {
+  background: rgba(24, 169, 153, 0.18);
+  border-color: var(--ar-accent);
+  color: var(--ar-text);
+}
