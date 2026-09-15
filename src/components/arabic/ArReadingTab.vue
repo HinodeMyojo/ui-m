@@ -32,6 +32,24 @@ async function load() {
   }
 }
 
+// Строка разбирается на видимые куски: фраза показывается целиком, а
+// словарные слова в ней становятся нажимаемыми. Раньше рисовался только список
+// найденных слов — и фраза приходила рваной, без предлогов и без знаков.
+function chunks(sentence) {
+  const byForm = new Map();
+  for (const w of sentence.words || []) byForm.set(w.form, w);
+  return (sentence.text || "")
+    .split(/(\s+)/)
+    .filter((part) => part !== "")
+    .map((part) => {
+      if (/^\s+$/.test(part)) return { space: true, text: part };
+      // Знаки препинания прилипают к слову: «مكانكم.» в словаре не найдётся,
+      // поэтому ищем и очищенный вариант, а показываем как есть.
+      const clean = part.replace(/[.,!؟?؛:«»"']/g, "");
+      return { text: part, word: byForm.get(part) || byForm.get(clean) || null };
+    });
+}
+
 function tapWord(w) {
   // Второй тап по тому же слову открывает лист целиком: первый — подсказка на
   // месте, чтобы не терять строку из виду.
@@ -69,15 +87,18 @@ onMounted(load);
 
       <section v-for="(s, i) in data.sentences" :key="i" class="ar-card ar-read">
         <p class="ar-ar ar-read-text" dir="rtl">
-          <button
-            v-for="(w, j) in s.words"
-            :key="j"
-            class="ar-read-word"
-            :class="{ known: w.known, active: word?.bare === w.bare }"
-            @click="tapWord(w)"
-          >
-            {{ w.form }}
-          </button>
+          <template v-for="(part, j) in chunks(s)" :key="j">
+            <span v-if="part.space" class="ar-read-space"> </span>
+            <button
+              v-else-if="part.word"
+              class="ar-read-word"
+              :class="{ known: part.word.known, active: word?.bare === part.word.bare }"
+              @click="tapWord(part.word)"
+            >
+              {{ part.text }}
+            </button>
+            <span v-else class="ar-read-plain">{{ part.text }}</span>
+          </template>
         </p>
 
         <p v-if="word && s.words.some((w) => w.bare === word.bare)" class="ar-read-hint">
@@ -132,6 +153,17 @@ onMounted(load);
 
 .ar-read-word.known {
   color: #e8eaf2;
+}
+
+/* Слово, которого нет в словаре, всё равно на своём месте: фраза должна
+   читаться целиком, а не рассыпаться на найденное. */
+.ar-read-plain {
+  color: #5b6070;
+  padding: 0 2px;
+}
+
+.ar-read-space {
+  width: 4px;
 }
 
 .ar-read-word.active {
