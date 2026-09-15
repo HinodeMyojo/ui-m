@@ -195,8 +195,9 @@ onMounted(load);
             {{ p.label }}
           </button>
         </div>
-        <label class="ar-check">
+        <label class="ar-switch">
           <input v-model="form.autoPace" type="checkbox" />
+          <i></i>
           Подбирать темп новых слов по долгу повторений
         </label>
         <p class="ar-muted">
@@ -221,8 +222,9 @@ onMounted(load);
           {{ VOWELS.find((v) => v.code === form.vowels)?.hint }}. В живом тексте харакятов нет, и
           привыкать читать без них всё равно придётся — но не с первого дня.
         </p>
-        <label class="ar-check">
+        <label class="ar-switch">
           <input v-model="form.showTranslit" type="checkbox" />
+          <i></i>
           Показывать транслитерацию латиницей
         </label>
       </section>
@@ -244,8 +246,9 @@ onMounted(load);
         <div v-for="study in studies" :key="study.id" class="ar-study">
           <div class="ar-row">
             <b>{{ study.emoji }} {{ study.name }}</b>
-            <label class="ar-check">
+            <label class="ar-switch">
               <input v-model="study.enabled" type="checkbox" @change="saveStudy(study)" />
+              <i></i>
               включена
             </label>
           </div>
@@ -282,8 +285,9 @@ onMounted(load);
 
       <section class="ar-card">
         <h3 class="ar-card-title">Напоминания в телеграме</h3>
-        <label class="ar-check">
+        <label class="ar-switch">
           <input v-model="form.notifyEnabled" type="checkbox" />
+          <i></i>
           Напоминать, если день не закрыт
         </label>
         <label class="ar-field ar-field-col">
@@ -358,8 +362,9 @@ onMounted(load);
           нужна.
           <template v-if="!canHear"> Арабского голоса в этом браузере нет, звук работать не будет. </template>
         </p>
-        <label class="ar-check">
+        <label class="ar-switch">
           <input v-model="autoSpeak" type="checkbox" :disabled="!canHear" />
+          <i></i>
           Произносить слово, когда оно появляется
         </label>
       </section>
@@ -379,13 +384,6 @@ onMounted(load);
   display: flex;
   flex-direction: column;
   gap: 12px;
-}
-
-.ar-check {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 14px;
 }
 
 .ar-field {

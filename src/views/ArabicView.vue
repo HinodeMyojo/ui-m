@@ -69,6 +69,24 @@ const minutes = computed(() =>
 );
 const burning = computed(() => (overview.value?.dueNow || 0) + (overview.value?.newLeft || 0));
 
+// Цвет и текст состояния — те же, что у виджета на главной: один ответ на
+// вопрос «горит или нет», и читаться он должен цветом, а не абзацем.
+const tone = computed(() => {
+  if (overview.value?.studiedToday && !burning.value) return "#63c94f";
+  if ((overview.value?.debt || 0) > 60) return "#e5484d";
+  if (burning.value > 0) return "#d9a441";
+  return "#7a7f8e";
+});
+
+const statusText = computed(() => {
+  const o = overview.value;
+  if (!o) return "";
+  if (!burning.value && o.studiedToday) return "День закрыт, повторять нечего";
+  if (!burning.value) return "Ничего не горит";
+  if (o.studiedToday) return `Ещё ${burning.value} — если есть силы`;
+  return `Горит ${burning.value} · это минут ${minutes.value}`;
+});
+
 const lettersPct = computed(() => {
   const o = overview.value;
   if (!o?.lettersTotal) return 0;
@@ -120,7 +138,7 @@ onMounted(load);
 
     <template v-else>
       <header class="ar-header">
-        <h1>ع Арабский</h1>
+        <h1><span class="ar-badge">ع</span> Арабский</h1>
         <div class="ar-row">
           <span v-if="overview?.streak" class="ar-chip ar-chip-gold">🔥 {{ overview.streak }}</span>
           <span v-if="overview?.level" class="ar-chip">ур. {{ overview.level }}</span>
@@ -142,21 +160,35 @@ onMounted(load);
       <p v-if="error" class="ar-err">{{ error }}</p>
 
       <template v-if="tab === 'study'">
-        <section v-if="overview" class="ar-card">
-          <h3 class="ar-card-title">
-            {{ burning ? `Горит ${burning}` : overview.studiedToday ? "День закрыт" : "Ничего не горит" }}
-          </h3>
-          <div class="ar-row ar-nums">
-            <div><b>{{ overview.dueNow }}</b><span>к повторению</span></div>
-            <div><b>{{ overview.newLeft }}</b><span>новых сегодня</span></div>
-            <div><b>{{ overview.wordsLearned }}</b><span>слов закреплено</span></div>
+        <section v-if="overview" class="ar-card ar-hero">
+          <div class="ar-hero-status" :style="{ color: tone, borderColor: tone + '55' }">
+            <span class="ar-hero-dot" :style="{ background: tone }"></span>
+            {{ statusText }}
           </div>
-          <p v-if="overview.atRiskTomorrow" class="ar-muted">
+
+          <!-- Числа плитками, а не строкой: на широком экране строка растягивает
+               три цифры на метр, и они перестают читаться как одно целое. -->
+          <div class="ar-tiles">
+            <div class="ar-tile">
+              <b>{{ overview.dueNow }}</b><span>к повторению</span>
+            </div>
+            <div class="ar-tile">
+              <b>{{ overview.newLeft }}</b><span>новых сегодня</span>
+            </div>
+            <div class="ar-tile">
+              <b>{{ overview.wordsLearned }}</b><span>слов закреплено</span>
+            </div>
+            <div class="ar-tile">
+              <b>{{ overview.streak }}</b><span>дней подряд</span>
+            </div>
+          </div>
+
+          <p v-if="overview.atRiskTomorrow" class="ar-hero-risk">
             Без занятия завтра посыплется {{ overview.atRiskTomorrow }} карточек
           </p>
 
-          <div class="ar-row">
-            <button class="ar-btn ar-btn-accent" @click="start('mix')">
+          <div class="ar-row ar-hero-btns">
+            <button class="ar-btn ar-btn-accent ar-hero-go" @click="start('mix')">
               Заниматься {{ minutes }} мин
             </button>
             <button class="ar-btn" @click="start('review')">Только повторение</button>
@@ -165,8 +197,7 @@ onMounted(load);
               Мини-экзамен
             </button>
             <button class="ar-btn" @click="start('arena')">
-              Арена
-              <small v-if="overview?.bestArena"> · рекорд {{ overview.bestArena }}</small>
+              Арена<small v-if="overview?.bestArena"> · {{ overview.bestArena }}</small>
             </button>
           </div>
         </section>
@@ -237,22 +268,75 @@ onMounted(load);
   height: calc(100dvh - 150px);
 }
 
-.ar-nums {
-  justify-content: space-between;
+.ar-hero {
+  gap: 12px;
 }
 
-.ar-nums div {
+.ar-hero-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  align-self: flex-start;
+  padding: 6px 13px;
+  border-radius: 999px;
+  border: 1px solid;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.ar-hero-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.ar-tiles {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.ar-tile {
   display: flex;
   flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--ar-card-2);
+  border: 1px solid var(--ar-line);
 }
 
-.ar-nums b {
+.ar-tile b {
   font-size: 22px;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
 }
 
-.ar-nums span {
+.ar-tile span {
   font-size: 12px;
   color: var(--ar-muted);
+}
+
+.ar-hero-risk {
+  margin: 0;
+  font-size: 13px;
+  color: var(--ar-gold);
+}
+
+.ar-hero-btns {
+  gap: 8px;
+}
+
+/* Главная кнопка шире прочих, но не во всю строку: растянутая на полметра,
+   она перестаёт читаться как кнопка. */
+.ar-hero-go {
+  flex: 0 1 260px;
+}
+
+@media (max-width: 560px) {
+  .ar-tiles {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 .ar-progress-line {

@@ -1,5 +1,5 @@
 /* Общие стили раздела «Арабский». Файл глобальный намеренно — тем же приёмом,
-   что japanese.css и sport.css: вкладок пять, и держать одинаковые карточки в
+   что japanese.css и sport.css: вкладок шесть, и держать одинаковые карточки в
    scoped-стилях каждой значит развести их вид за две правки.
    Все классы с префиксом ar-.
 
@@ -13,9 +13,12 @@
   --ar-line: #2a2d38;
   --ar-line-2: #2f3340;
   --ar-text: #e8eaf2;
+  --ar-dim: #b9bdc9;
   --ar-muted: #7a7f8e;
   --ar-accent: #18a999;
+  --ar-accent-soft: rgba(24, 169, 153, 0.16);
   --ar-gold: #d9a441;
+  --ar-gold-soft: rgba(217, 164, 65, 0.14);
   --ar-ok: #63c94f;
   --ar-warn: #ffd666;
   --ar-bad: #e5484d;
@@ -24,11 +27,19 @@
   min-height: 100vh;
   background: var(--ar-bg);
   color: var(--ar-text);
-  padding: 16px clamp(10px, 3vw, 40px) 80px;
+  padding: 16px clamp(10px, 3vw, 24px) 80px;
   display: flex;
   flex-direction: column;
   gap: 14px;
   box-sizing: border-box;
+}
+
+/* Содержимое держится колонкой посередине: на широком мониторе карточка во всю
+   ширину — это строка текста в полтора метра и пустота вокруг неё. */
+.ar > * {
+  width: 100%;
+  max-width: 940px;
+  margin-inline: auto;
 }
 
 .ar-header {
@@ -40,11 +51,32 @@
 }
 
 .ar-header h1 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   margin: 0;
   font-size: 22px;
+  letter-spacing: -0.01em;
 }
 
-/* Полоса вкладок листается вбок, а не переносится: пять кнопок в 390px во
+/* Буква ع в шапке — не текст, а знак раздела: в общем ряду заголовков она
+   иначе читается как опечатка. */
+.ar-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  background: linear-gradient(145deg, var(--ar-accent), #0f7f73);
+  color: #06201d;
+  font-size: 24px;
+  line-height: 1;
+  padding-bottom: 4px;
+  box-sizing: border-box;
+}
+
+/* Полоса вкладок листается вбок, а не переносится: шесть кнопок в 390px во
    вторую строку выглядят как сломанная вёрстка, а не как навигация. */
 .ar-tabs {
   display: flex;
@@ -60,7 +92,7 @@
 
 .ar-tab {
   flex: 0 0 auto;
-  padding: 8px 14px;
+  padding: 8px 15px;
   border-radius: 999px;
   border: 1px solid var(--ar-line);
   background: var(--ar-card);
@@ -68,19 +100,29 @@
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
+  transition:
+    background 0.15s,
+    color 0.15s,
+    border-color 0.15s;
+}
+
+.ar-tab:hover {
+  color: var(--ar-dim);
+  border-color: var(--ar-line-2);
 }
 
 .ar-tab.is-on {
   background: var(--ar-accent);
   border-color: var(--ar-accent);
   color: #06201d;
+  box-shadow: 0 6px 18px -8px var(--ar-accent);
 }
 
 .ar-card {
   background: var(--ar-card);
   border: 1px solid var(--ar-line);
   border-radius: 16px;
-  padding: 14px;
+  padding: 14px 16px;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -90,11 +132,13 @@
   margin: 0;
   font-size: 15px;
   font-weight: 700;
+  letter-spacing: -0.01em;
 }
 
 .ar-muted {
   color: var(--ar-muted);
   font-size: 13px;
+  line-height: 1.5;
 }
 
 .ar-btn {
@@ -106,6 +150,15 @@
   font-size: 15px;
   font-weight: 600;
   cursor: pointer;
+  transition:
+    background 0.15s,
+    border-color 0.15s,
+    transform 0.05s;
+}
+
+.ar-btn:hover:not(:disabled) {
+  border-color: #3a3f4f;
+  background: #272a34;
 }
 
 .ar-btn:active {
@@ -118,6 +171,11 @@
   color: #06201d;
 }
 
+.ar-btn-accent:hover:not(:disabled) {
+  background: #1cbcaa;
+  border-color: #1cbcaa;
+}
+
 .ar-btn-gold {
   background: var(--ar-gold);
   border-color: var(--ar-gold);
@@ -125,7 +183,7 @@
 }
 
 .ar-btn-sm {
-  padding: 6px 10px;
+  padding: 6px 11px;
   font-size: 13px;
   border-radius: 10px;
 }
@@ -146,12 +204,12 @@
 }
 
 .ar-word-big {
-  font-size: clamp(34px, 11vw, 56px);
+  font-size: clamp(34px, 11vw, 52px);
   font-weight: 600;
 }
 
 .ar-letter-big {
-  font-size: clamp(56px, 20vw, 96px);
+  font-size: clamp(56px, 20vw, 92px);
   font-weight: 600;
 }
 
@@ -171,20 +229,23 @@
 .ar-grid {
   display: grid;
   gap: 10px;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
 }
 
 .ar-bar {
-  height: 6px;
+  height: 8px;
   border-radius: 999px;
-  background: var(--ar-line);
+  background: #24262f;
   overflow: hidden;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.03);
 }
 
 .ar-bar span {
   display: block;
   height: 100%;
+  border-radius: 999px;
   background: var(--ar-accent);
+  transition: width 0.3s ease;
 }
 
 .ar-chip {
@@ -196,12 +257,19 @@
   border: 1px solid var(--ar-line-2);
   background: var(--ar-card-2);
   font-size: 13px;
+  color: var(--ar-dim);
 }
 
 .ar-chip-gold {
-  border-color: #6a5320;
-  background: #2a2214;
+  border-color: rgba(217, 164, 65, 0.45);
+  background: var(--ar-gold-soft);
   color: var(--ar-gold);
+}
+
+.ar-chip-accent {
+  border-color: rgba(24, 169, 153, 0.45);
+  background: var(--ar-accent-soft);
+  color: var(--ar-accent);
 }
 
 .ar-input {
@@ -215,9 +283,15 @@
   box-sizing: border-box;
 }
 
+.ar-input:focus {
+  outline: none;
+  border-color: var(--ar-accent);
+}
+
 .ar-textarea {
   min-height: 110px;
   resize: vertical;
+  line-height: 1.5;
 }
 
 .ar-err {
@@ -225,11 +299,107 @@
   font-size: 13px;
 }
 
+/* Ползунок веса. Системный синий посреди бирюзового раздела выглядит как
+   чужая деталь, а тонкая дорожка на телефоне не нащупывается пальцем. */
+.ar input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 22px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.ar input[type="range"]::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 999px;
+  background: #2b2e39;
+}
+
+.ar input[type="range"]::-moz-range-track {
+  height: 6px;
+  border-radius: 999px;
+  background: #2b2e39;
+}
+
+.ar input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  margin-top: -6px;
+  border-radius: 50%;
+  background: var(--ar-accent);
+  border: 3px solid #1b1d24;
+  box-shadow: 0 2px 8px -2px #000;
+}
+
+.ar input[type="range"]::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--ar-accent);
+  border: 3px solid #1b1d24;
+}
+
+/* Флажок-переключатель. Системный квадратик в тёмной теме на айфоне рисуется
+   белым пятном и выглядит чужим. */
+.ar-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  font-size: 15px;
+  user-select: none;
+}
+
+.ar-switch input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.ar-switch i {
+  flex: 0 0 auto;
+  width: 38px;
+  height: 22px;
+  border-radius: 999px;
+  background: #2b2e39;
+  border: 1px solid var(--ar-line-2);
+  position: relative;
+  transition:
+    background 0.15s,
+    border-color 0.15s;
+}
+
+.ar-switch i::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #8b90a0;
+  transition:
+    transform 0.15s,
+    background 0.15s;
+}
+
+.ar-switch input:checked + i {
+  background: var(--ar-accent-soft);
+  border-color: var(--ar-accent);
+}
+
+.ar-switch input:checked + i::after {
+  transform: translateX(16px);
+  background: var(--ar-accent);
+}
+
 /* Сетка алфавита: клетка достаточно большая, чтобы буква читалась, и
    достаточно маленькая, чтобы все тридцать влезли в один экран. */
 .ar-alphabet {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(56px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(58px, 1fr));
   gap: 8px;
 }
 
@@ -246,6 +416,15 @@
   color: var(--ar-muted);
   cursor: pointer;
   font-size: 26px;
+  transition:
+    border-color 0.15s,
+    background 0.15s,
+    color 0.15s;
+}
+
+.ar-cell:hover {
+  border-color: var(--ar-line-2);
+  color: var(--ar-dim);
 }
 
 .ar-cell small {
@@ -254,11 +433,11 @@
 
 .ar-cell.is-started {
   color: var(--ar-text);
-  border-color: var(--ar-gold);
+  border-color: rgba(217, 164, 65, 0.5);
 }
 
 .ar-cell.is-learned {
-  background: rgba(24, 169, 153, 0.18);
+  background: var(--ar-accent-soft);
   border-color: var(--ar-accent);
   color: var(--ar-text);
 }
