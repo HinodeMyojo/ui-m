@@ -85,10 +85,66 @@ function localDay(value) {
   ).padStart(2, "0")}`;
 }
 
+// Дедлайн подзадачи — это «сделать до», поэтому в дне стоят не только
+// сегодняшние сроки: то, что надо успеть до завтра или до послезавтра, уже
+// сегодня на виду. На неделю вперёд — дальше доска превращается в список всего
+// на свете. Просроченное висит, пока его не закроют или не передвинут.
+const SUB_HORIZON_DAYS = 7;
+
+// Смещение срока от этого дня в целых сутках: 0 — сегодня, 1 — завтра,
+// отрицательное — просрочка. Считаем по календарным дням, а не по часам:
+// иначе переход на зимнее время сдвигал бы всё на день.
+function subOffset(sub) {
+  const day = localDay(sub.deadline);
+  if (!day || !props.date) return null;
+  const diff = new Date(`${day}T00:00:00`) - new Date(`${props.date}T00:00:00`);
+  if (Number.isNaN(diff)) return null;
+  return Math.round(diff / 86400000);
+}
+
+// Плашка срока: у сегодняшних — время или обратный отсчёт последнего часа,
+// у остальных — на сколько дней дело отстоит от этого дня.
+function computeSubDue(sub) {
+  const offset = subOffset(sub);
+  if (offset === null) return { offset: null, tone: "", label: "" };
+  if (offset < 0) {
+    return { offset, tone: "bad", label: `просрочено на ${-offset} ${dayWord(-offset)}` };
+  }
+  if (offset === 0) {
+    const urgency = urgencyOf(sub.deadline, sub.done);
+    return {
+      offset,
+      tone: urgency?.tone === "over" ? "bad" : urgency?.tone === "soon" ? "soon" : "",
+      label: urgency?.label || subTime(sub),
+    };
+  }
+  if (offset === 1) return { offset, tone: "later", label: `завтра, ${subTime(sub)}` };
+  if (offset === 2) return { offset, tone: "later", label: `послезавтра, ${subTime(sub)}` };
+  return { offset, tone: "later", label: `через ${offset} ${dayWord(offset)}` };
+}
+
+const subDueMap = computed(() => {
+  const map = new Map();
+  for (const sub of props.mainSubtasks) map.set(sub.id, computeSubDue(sub));
+  return map;
+});
+const subDue = (sub) => subDueMap.value.get(sub.id) || { offset: null, tone: "", label: "" };
+
+// Сервер отдаёт окно с запасом, окончательный отбор — здесь. Закрытую
+// просрочку не поднимаем: она уже история своего дня.
+const visibleSubs = computed(() =>
+  props.mainSubtasks
+    .filter((sub) => {
+      const offset = subDue(sub).offset;
+      if (offset === null || offset > SUB_HORIZON_DAYS) return false;
+      return offset >= 0 || !sub.done;
+    })
+    .sort((a, b) => subDue(a).offset - subDue(b).offset),
+);
+
 const subsByColumn = computed(() => {
   const byColumn = {};
-  for (const sub of props.mainSubtasks) {
-    if (!sub.deadline || localDay(sub.deadline) !== props.date) continue;
+  for (const sub of visibleSubs.value) {
     const key = sub.column || "todo";
     (byColumn[key] = byColumn[key] || []).push(sub);
   }
@@ -398,7 +454,6 @@ function urgencyOf(deadline, closed) {
 const itemUrgency = (item) =>
   urgencyOf(item.deadline, item.status === "done" || item.status === "dropped");
 
-const subUrgency = (sub) => urgencyOf(sub.deadline, sub.done);
 
 // --- Карточка ---
 
@@ -428,7 +483,7 @@ const blockersTotal = computed(() =>
       sum +
       (i.openBlockers || 0) +
       (i.tasks || []).reduce((s, t) => s + (t.openBlockers || 0), 0),
-    props.mainSubtasks.reduce((s, sub) => s + (sub.openBlockers || 0), 0),
+    visibleSubs.value.reduce((s, sub) => s + (sub.openBlockers || 0), 0),
   ),
 );
 
@@ -922,9 +977,11 @@ onBeforeUnmount(() => {
           {{ EMPTY_HINT[g.key] || "пусто" }}
         </div>
 
-        <!-- Подзадачи с главной страницы: не карточки дня, но сегодня их срок,
-             поэтому стоят вверху колонки своего статуса и выделены. Ниже них
-             карточки дня свободно двигаются между собой. -->
+        <!-- Подзадачи с главной страницы: не карточки дня, но их срок упирается
+             в этот день, поэтому стоят вверху колонки своего статуса и
+             выделены. Просроченные идут первыми, сегодняшние следом, дела на
+             ближайшие дни — приглушённо в хвосте. Ниже них карточки дня
+             свободно двигаются между собой. -->
         <article
           v-for="sub in g.subs"
           :key="'sub-' + sub.id"
@@ -933,8 +990,9 @@ onBeforeUnmount(() => {
             muted: sub.done,
             pop: popped.has(sub.id),
             ghosted: drag?.id === sub.id,
-            'due-soon': subUrgency(sub)?.tone === 'soon',
-            'due-over': subUrgency(sub)?.tone === 'over',
+            future: subDue(sub).offset > 0,
+            'due-soon': subDue(sub).tone === 'soon',
+            'due-over': subDue(sub).tone === 'bad',
           }"
           :style="{ '--accent': sub.parentColor || sub.color || '#e07b39' }"
           :data-sub-id="sub.id"
@@ -948,9 +1006,13 @@ onBeforeUnmount(() => {
             </span>
             <span
               class="ovw-sub-flag due"
-              :class="{ soon: subUrgency(sub)?.tone === 'soon', bad: subUrgency(sub)?.tone === 'over' }"
+              :class="{
+                soon: subDue(sub).tone === 'soon',
+                bad: subDue(sub).tone === 'bad',
+                later: subDue(sub).tone === 'later',
+              }"
             >
-              ⏳ {{ subUrgency(sub)?.label || subTime(sub) }}
+              ⏳ {{ subDue(sub).label }}
             </span>
           </div>
 
@@ -2129,6 +2191,14 @@ onBeforeUnmount(() => {
   background: rgba(229, 72, 77, 0.12);
 }
 
+/* Срок не сегодня: плашка спокойная — это не крик, а напоминание, что дело уже
+   на подходе. */
+.ovw-sub-flag.due.later {
+  color: #8fb8d8;
+  border-color: rgba(74, 168, 255, 0.35);
+  background: rgba(74, 168, 255, 0.1);
+}
+
 /* --- Подзадача с главной страницы --- */
 
 /* Стоит в колонке своего статуса, но карточкой дня не притворяется: тёплая
@@ -2171,6 +2241,17 @@ onBeforeUnmount(() => {
 
 .ovw-sub.ghosted {
   opacity: 0.25;
+}
+
+/* Дело со сроком на ближайшие дни стоит в дне, но не спорит за внимание с тем,
+   что горит сегодня. Под курсором — в полную силу: читать его всё равно надо. */
+.ovw-sub.future:not(.muted) {
+  opacity: 0.62;
+  border-style: dotted;
+}
+
+.ovw-sub.future:not(.muted):hover {
+  opacity: 1;
 }
 
 .ovw-sub.pop {
