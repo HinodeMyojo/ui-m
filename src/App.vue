@@ -52,6 +52,11 @@ watch(
 // каждый пиксель под текст), печать резюме и гостевая ссылка на поездку.
 const FULLSCREEN = ["/login", "/pdfReader"];
 
+// Разделы со своим задником: у арабского ночная пустыня, и осенние листья,
+// летящие над барханами, — это не «два слоя», а сломанная картинка.
+const OWN_SCENERY = ["/arabic", "/arabic/today"];
+const hasOwnScenery = computed(() => OWN_SCENERY.includes(route.path));
+
 const showTabBar = computed(() => {
   if (!isMobile.value) return false;
   if (sessionFocus.value) return false;
@@ -70,7 +75,7 @@ const showTabBar = computed(() => {
   <!-- Печать резюме — экран без вайба: листья попадут в PDF. Учебная сессия —
        тоже: листья летали по кнопкам ответа. -->
   <template v-if="!route.path.endsWith('/print')">
-    <AutumnLayer v-if="!sessionFocus && isOn('layer.autumn')" />
+    <AutumnLayer v-if="!sessionFocus && !hasOwnScenery && isOn('layer.autumn')" />
     <WeatherPanel v-if="!route.meta?.public && isOn('layer.weather')" />
   </template>
 </template>

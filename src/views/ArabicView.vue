@@ -4,12 +4,19 @@ import { useRouter } from "vue-router";
 import { isMobile } from "@/composables/useIsMobile.js";
 import "@/styles/arabic.css";
 
-import { fetchArOverview, fetchArStudies, fetchArSettings } from "@/components/arabicApi.js";
+import {
+  fetchArOverview,
+  fetchArStudies,
+  fetchArSettings,
+  setArProfile,
+  AR_PROFILES,
+} from "@/components/arabicApi.js";
 import ArSession from "@/components/arabic/ArSession.vue";
 import ArDecksTab from "@/components/arabic/ArDecksTab.vue";
 import ArAnalyzeTab from "@/components/arabic/ArAnalyzeTab.vue";
 import ArProgressTab from "@/components/arabic/ArProgressTab.vue";
 import ArReadingTab from "@/components/arabic/ArReadingTab.vue";
+import ArScenery from "@/components/arabic/ArScenery.vue";
 import ArSettingsTab from "@/components/arabic/ArSettingsTab.vue";
 
 // Раздел «Арабский». Первый экран отвечает на вопрос «где я и что дальше», а
@@ -114,6 +121,23 @@ function endSession() {
   load();
 }
 
+// Что учим: буквы, слова или сперва одно, потом другое. Вопрос задаётся на
+// первом же экране тому, кто ещё не выбирал: без ответа раздел ведёт всех
+// через алфавит, а это нужно не всем.
+const profileBusy = ref(false);
+
+async function chooseProfile(mode) {
+  profileBusy.value = true;
+  try {
+    await setArProfile(mode);
+    await load();
+  } catch (e) {
+    error.value = e.message || "режим не переключился";
+  } finally {
+    profileBusy.value = false;
+  }
+}
+
 function selectStudy(id) {
   studyId.value = id;
   localStorage.setItem("arabicStudy", id);
@@ -124,6 +148,8 @@ onMounted(load);
 
 <template>
   <div class="ar">
+    <ArScenery :dim="inSession" />
+
     <template v-if="inSession">
       <div class="ar-session-wrap">
         <ArSession
@@ -160,6 +186,24 @@ onMounted(load);
       <p v-if="error" class="ar-err">{{ error }}</p>
 
       <template v-if="tab === 'study'">
+        <!-- Первый экран того, кто ещё не выбирал: вопрос вместо карточек. -->
+        <section v-if="settings && !settings.profile" class="ar-card ar-profile">
+          <h3 class="ar-card-title">С чего начать?</h3>
+          <p class="ar-muted">
+            Ответ решает, что попадёт в сессию. Поменять можно когда угодно — в настройках.
+          </p>
+          <button
+            v-for="p in AR_PROFILES"
+            :key="p.mode"
+            class="ar-profile-item"
+            :disabled="profileBusy"
+            @click="chooseProfile(p.mode)"
+          >
+            <b>{{ p.title }}</b>
+            <span>{{ p.hint }}</span>
+          </button>
+        </section>
+
         <section v-if="overview" class="ar-card ar-hero">
           <div class="ar-hero-status" :style="{ color: tone, borderColor: tone + '55' }">
             <span class="ar-hero-dot" :style="{ background: tone }"></span>
@@ -266,6 +310,43 @@ onMounted(load);
      его отступ, и сессия должна помещаться между ними целиком. */
   min-height: 72vh;
   height: calc(100dvh - 150px);
+}
+
+.ar-profile {
+  gap: 8px;
+}
+
+/* Выбор режима — три больших ответа, а не выпадающий список: это первое, что
+   человек делает в разделе, и делает он это один раз. */
+.ar-profile-item {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  text-align: left;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--ar-line-2);
+  background: var(--ar-card-2);
+  color: inherit;
+  cursor: pointer;
+  transition:
+    border-color 0.15s,
+    background 0.15s;
+}
+
+.ar-profile-item:hover {
+  border-color: var(--ar-gold);
+  background: var(--ar-gold-soft);
+}
+
+.ar-profile-item b {
+  font-size: 16px;
+}
+
+.ar-profile-item span {
+  font-size: 13px;
+  color: var(--ar-muted);
+  line-height: 1.45;
 }
 
 .ar-hero {

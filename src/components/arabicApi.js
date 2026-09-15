@@ -65,6 +65,27 @@ export const fetchArAchievements = () => request("/achievements");
 export const fetchArSettings = () => request("/settings");
 export const saveArSettings = (body) => put("/settings", body);
 export const knowArAlphabet = () => post("/know-alphabet");
+export const setArProfile = (mode) => post("/profile", { mode });
+
+// Режимы обучения. Выбор настоящий: он решает, что попадёт в очередь, и
+// закрывать ли алфавит — слово не выдаётся, пока его буквы не закрепились.
+export const AR_PROFILES = [
+  {
+    mode: "letters-first",
+    title: "С нуля",
+    hint: "Сначала алфавит, потом слова. Слово не выдаётся, пока не закрепились его буквы.",
+  },
+  {
+    mode: "words-only",
+    title: "Только слова",
+    hint: "Арабицу уже читаю. Алфавит закроется разом, в сессии будут одни слова — со звуком и примерами.",
+  },
+  {
+    mode: "letters-only",
+    title: "Только буквы",
+    hint: "Разобраться с алфавитом: звук, позиционные формы, письмо пальцем.",
+  },
+];
 
 // --- Механики ---
 

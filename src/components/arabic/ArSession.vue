@@ -621,6 +621,12 @@ onBeforeUnmount(() => {
               <button class="ars-link ar-ar" @click="openSheet('root', card.root)">{{ card.root }}</button>
               <span v-if="card.rootMeaning"> — {{ card.rootMeaning }}</span>
             </p>
+            <!-- Пример после ответа: слово в живой строке запоминается иначе,
+                 чем слово из списка. -->
+            <div v-if="card.examples?.length && card.itemType === 'word'" class="ars-verdict-example">
+              <p class="ar-ar">{{ card.examples[0].text }}</p>
+              <p class="ar-muted">{{ card.examples[0].translationRu }}</p>
+            </div>
             <p v-if="lastAnswer?.writeStage && card.itemType === 'letter'" class="ar-muted">
               письмо: {{ ["", "по контуру", "по бледному следу", "по памяти"][lastAnswer.writeStage] }}
             </p>
@@ -969,6 +975,16 @@ onBeforeUnmount(() => {
 
 .ars-verdict p {
   margin: 0;
+}
+
+.ars-verdict-example {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.ars-verdict-example .ar-ar {
+  font-size: 19px;
 }
 
 .ars-center {

@@ -4,6 +4,7 @@ import { useRoute, useRouter } from "vue-router";
 import "@/styles/mobile.css";
 import "@/styles/arabic.css";
 import ArSession from "@/components/arabic/ArSession.vue";
+import ArScenery from "@/components/arabic/ArScenery.vue";
 import { fetchArSettings } from "@/components/arabicApi.js";
 
 // Экран сессии для телефона: /arabic/today. Отдельная раскладка, как у
@@ -36,7 +37,11 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="at-screen">
+  <div class="at-screen ar">
+    <!-- Пустыня остаётся и в сессии, но приглушённой: во время ответа задник
+         не должен тянуть взгляд. -->
+    <ArScenery dim />
+
     <ArSession
       :kind="kind"
       :vowels="settings?.vowels || 'early'"
@@ -60,8 +65,16 @@ onMounted(async () => {
   /* Внутри мини-аппа 100dvh считается по окну, а не по видимой части: верх
      карточки оказывается срезан. Настоящую высоту присылает Telegram. */
   height: var(--tg-viewport, 100dvh);
+  position: relative;
   padding: 8px 12px 12px;
   box-sizing: border-box;
-  background: var(--m-bg, #14151b);
+  background: #16131d;
+}
+
+/* Сессия лежит поверх задника. */
+.at-screen > :not(.ars-scene) {
+  position: relative;
+  z-index: 1;
+  width: 100%;
 }
 </style>

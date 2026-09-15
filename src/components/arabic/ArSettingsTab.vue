@@ -4,6 +4,8 @@ import {
   fetchArSettings,
   saveArSettings,
   knowArAlphabet,
+  setArProfile,
+  AR_PROFILES,
   fetchArPendingTranslations,
   importArTranslations,
   fetchArStudies,
@@ -115,6 +117,21 @@ async function save() {
   }
 }
 
+async function chooseProfile(mode) {
+  saving.value = true;
+  error.value = "";
+  try {
+    await setArProfile(mode);
+    form.value.profile = mode;
+    await load();
+    emit("changed");
+  } catch (e) {
+    error.value = e.message || "режим не переключился";
+  } finally {
+    saving.value = false;
+  }
+}
+
 async function closeAlphabet() {
   try {
     const result = await knowArAlphabet();
@@ -182,6 +199,27 @@ onMounted(load);
     <p v-if="error" class="ar-err">{{ error }}</p>
 
     <template v-if="form">
+      <section class="ar-card">
+        <h3 class="ar-card-title">Что учим</h3>
+        <div class="ar-profiles">
+          <button
+            v-for="p in AR_PROFILES"
+            :key="p.mode"
+            class="ar-profile-btn"
+            :class="{ on: form.profile === p.mode }"
+            :disabled="saving"
+            @click="chooseProfile(p.mode)"
+          >
+            <b>{{ p.title }}</b>
+            <span>{{ p.hint }}</span>
+          </button>
+        </div>
+        <p class="ar-muted">
+          Переключение меняет сразу три вещи: состав учёбы, включённые наборы и — в режиме
+          «только слова» — состояние карточек алфавита, иначе очередь осталась бы пустой.
+        </p>
+      </section>
+
       <section class="ar-card">
         <h3 class="ar-card-title">Сессия</h3>
         <div class="ar-row">
@@ -397,6 +435,36 @@ onMounted(load);
 .ar-input-sm {
   width: 78px;
   padding: 6px 8px;
+}
+
+.ar-profiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 8px;
+}
+
+.ar-profile-btn {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  text-align: left;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid #3d3347;
+  background: rgba(44, 37, 51, 0.9);
+  color: inherit;
+  cursor: pointer;
+}
+
+.ar-profile-btn.on {
+  border-color: #e2b463;
+  background: rgba(226, 180, 99, 0.14);
+}
+
+.ar-profile-btn span {
+  font-size: 12px;
+  color: #8b8190;
+  line-height: 1.4;
 }
 
 .ar-field-col {

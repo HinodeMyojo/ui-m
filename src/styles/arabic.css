@@ -7,22 +7,27 @@
    языковых раздела, и одинаковый цвет читался бы как один и тот же. */
 
 .ar {
-  --ar-bg: #18191f;
-  --ar-card: #1e2027;
-  --ar-card-2: #22242d;
-  --ar-line: #2a2d38;
-  --ar-line-2: #2f3340;
-  --ar-text: #e8eaf2;
-  --ar-dim: #b9bdc9;
-  --ar-muted: #7a7f8e;
+  /* Цвета ночной пустыни: небо, песок в тени, оазис. Раздел о языке, у
+     которого есть свой вид, и общая серая тема проекта ему ничего не
+     добавляет — а тёплая подложка добавляет. */
+  --ar-bg: #16131d;
+  --ar-card: rgba(36, 30, 43, 0.86);
+  --ar-card-2: rgba(44, 37, 51, 0.9);
+  --ar-line: #332b3c;
+  --ar-line-2: #3d3347;
+  --ar-text: #f1e9dd;
+  --ar-dim: #c3b8ad;
+  --ar-muted: #8b8190;
   --ar-accent: #18a999;
   --ar-accent-soft: rgba(24, 169, 153, 0.16);
-  --ar-gold: #d9a441;
-  --ar-gold-soft: rgba(217, 164, 65, 0.14);
+  --ar-gold: #e2b463;
+  --ar-gold-soft: rgba(226, 180, 99, 0.14);
+  --ar-sand: #c9a06a;
   --ar-ok: #63c94f;
   --ar-warn: #ffd666;
   --ar-bad: #e5484d;
 
+  position: relative;
   width: 100%;
   min-height: 100vh;
   background: var(--ar-bg);
@@ -34,9 +39,17 @@
   box-sizing: border-box;
 }
 
+/* Содержимое лежит поверх пустыни. Сам задник — первый ребёнок раздела и
+   остаётся под ним. */
+.ar > *:not(.ars-scene) {
+  position: relative;
+  z-index: 1;
+}
+
 /* Содержимое держится колонкой посередине: на широком мониторе карточка во всю
-   ширину — это строка текста в полтора метра и пустота вокруг неё. */
-.ar > * {
+   ширину — это строка текста в полтора метра и пустота вокруг неё. Задник в
+   колонку не загоняем: пустыня должна идти от края до края. */
+.ar > *:not(.ars-scene) {
   width: 100%;
   max-width: 940px;
   margin-inline: auto;
@@ -68,12 +81,14 @@
   width: 38px;
   height: 38px;
   border-radius: 12px;
-  background: linear-gradient(145deg, var(--ar-accent), #0f7f73);
-  color: #06201d;
+  /* Песок на солнце: знак раздела — единственное тёплое пятно в шапке. */
+  background: linear-gradient(145deg, #e8c179, #b3833c);
+  color: #2a1c07;
   font-size: 24px;
   line-height: 1;
   padding-bottom: 4px;
   box-sizing: border-box;
+  box-shadow: 0 6px 18px -8px rgba(226, 180, 99, 0.8);
 }
 
 /* Полоса вкладок листается вбок, а не переносится: шесть кнопок в 390px во
@@ -112,10 +127,17 @@
 }
 
 .ar-tab.is-on {
-  background: var(--ar-accent);
-  border-color: var(--ar-accent);
-  color: #06201d;
+  background: linear-gradient(145deg, #1fbcab, #0f7f73);
+  border-color: #1fbcab;
+  color: #04201d;
   box-shadow: 0 6px 18px -8px var(--ar-accent);
+}
+
+/* Вкладки и карточки лежат на пустыне, поэтому у невыбранной вкладки тоже
+   есть подложка: прозрачная кнопка над барханом не читается. */
+.ar-tab {
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
 }
 
 .ar-card {
@@ -126,6 +148,14 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
+  /* Карточка полупрозрачная и размывает задник: так пустыня видна, а текст
+     на ней читается. Без размытия барханы просвечивают сквозь буквы. */
+  backdrop-filter: blur(9px);
+  -webkit-backdrop-filter: blur(9px);
+  /* Восьмиконечная звезда — самый простой узор арабской геометрии. Держим её
+     почти невидимой: орнамент здесь настроение, а не содержание. */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='44' height='44' viewBox='0 0 44 44'%3E%3Cg fill='none' stroke='%23e2b463' stroke-opacity='0.05' stroke-width='1'%3E%3Cpath d='M6 6h32v32H6z'/%3E%3Cpath d='M22 2l20 20-20 20L2 22z'/%3E%3C/g%3E%3C/svg%3E");
+  background-blend-mode: normal;
 }
 
 .ar-card-title {
