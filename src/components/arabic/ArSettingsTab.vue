@@ -4,6 +4,8 @@ import {
   fetchArSettings,
   saveArSettings,
   knowArAlphabet,
+  fetchArPendingTranslations,
+  importArTranslations,
   fetchArStudies,
   saveArStudy,
   canSpeakArabic,
@@ -40,6 +42,13 @@ const saving = ref(false);
 const saved = ref(false);
 const error = ref("");
 const alphabetDone = ref(0);
+// Перевод хвоста словаря: приложение отдаёт кусок, готовый к вставке в чат, и
+// принимает ответ строками. Ключа к переводчику у нас нет — это тот же путь,
+// что сработал в японском.
+const pending = ref(null);
+const pasted = ref("");
+const pasteResult = ref(null);
+const pasteBusy = ref(false);
 
 // Звук — свойство устройства, а не человека: в метро без наушников его
 // выключают, дома включают обратно. Поэтому он в localStorage, а не на сервере.
@@ -113,6 +122,38 @@ async function closeAlphabet() {
     emit("changed");
   } catch (e) {
     error.value = e.message || "не получилось";
+  }
+}
+
+async function loadPending() {
+  try {
+    pending.value = await fetchArPendingTranslations();
+  } catch (e) {
+    error.value = e.message || "кусок не собрался";
+  }
+}
+
+async function copyPending() {
+  if (!pending.value?.text) return;
+  try {
+    await navigator.clipboard.writeText(pending.value.text);
+  } catch {
+    // Буфер недоступен (нет https или отказано) — текст и так на экране.
+  }
+}
+
+async function sendTranslations() {
+  if (!pasted.value.trim()) return;
+  pasteBusy.value = true;
+  pasteResult.value = null;
+  try {
+    pasteResult.value = await importArTranslations(pasted.value);
+    pasted.value = "";
+    await loadPending();
+  } catch (e) {
+    error.value = e.message || "перевод не принялся";
+  } finally {
+    pasteBusy.value = false;
   }
 }
 
@@ -240,6 +281,64 @@ onMounted(load);
       </section>
 
       <section class="ar-card">
+        <h3 class="ar-card-title">Напоминания в телеграме</h3>
+        <label class="ar-check">
+          <input v-model="form.notifyEnabled" type="checkbox" />
+          Напоминать, если день не закрыт
+        </label>
+        <label class="ar-field ar-field-col">
+          чат
+          <input v-model="form.telegramChatId" class="ar-input" placeholder="напишите боту /start" />
+        </label>
+        <div class="ar-row">
+          <label class="ar-field">
+            тихо с
+            <input v-model="form.quietFrom" class="ar-input ar-input-sm" placeholder="23:30" />
+          </label>
+          <label class="ar-field">
+            до
+            <input v-model="form.quietTo" class="ar-input ar-input-sm" placeholder="08:30" />
+          </label>
+        </div>
+        <p class="ar-muted">
+          Бот у арабского свой: два опроса на одном токене разбирают сообщения по половине
+          каждый. А лимит общий с японским — между любыми двумя сообщениями четыре часа, иначе
+          два модуля пишут по очереди.
+        </p>
+      </section>
+
+      <section class="ar-card">
+        <h3 class="ar-card-title">Русские значения для хвоста словаря</h3>
+        <p class="ar-muted">
+          Двадцать тысяч слов из Викисловаря пришли с английскими значениями — русских в
+          свободных источниках нет. Их не учат, они нужны разбору текста; перевести можно
+          кусками: скопировать, отправить в чат, вставить ответ обратно.
+        </p>
+        <div class="ar-row">
+          <button class="ar-btn ar-btn-sm" @click="loadPending">Собрать кусок</button>
+          <span v-if="pending" class="ar-muted">
+            в куске {{ pending.count }}, всего осталось {{ pending.left }} ({{ pending.chunks }} кусков)
+          </span>
+        </div>
+        <template v-if="pending?.text">
+          <textarea class="ar-input ar-textarea" readonly :value="pending.text"></textarea>
+          <button class="ar-btn ar-btn-sm" @click="copyPending">Скопировать</button>
+        </template>
+        <textarea
+          v-model="pasted"
+          class="ar-input ar-textarea"
+          placeholder="вставьте ответ: строки «слово    значения через запятую»"
+        ></textarea>
+        <button class="ar-btn ar-btn-accent ar-btn-sm" :disabled="pasteBusy || !pasted.trim()" @click="sendTranslations">
+          Принять перевод
+        </button>
+        <p v-if="pasteResult" class="ar-muted">
+          принято {{ pasteResult.updated }}, пропущено {{ pasteResult.skipped }}, не нашлось
+          {{ pasteResult.unknown?.length || 0 }} · осталось {{ pasteResult.left }}
+        </p>
+      </section>
+
+      <section class="ar-card">
         <h3 class="ar-card-title">Трекер дисциплины</h3>
         <select v-model="form.disciplineActivityId" class="ar-input">
           <option :value="null">не отмечать</option>
@@ -300,6 +399,12 @@ onMounted(load);
 .ar-input-sm {
   width: 78px;
   padding: 6px 8px;
+}
+
+.ar-field-col {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
 }
 
 .ar-study {

@@ -9,6 +9,7 @@ import ArSession from "@/components/arabic/ArSession.vue";
 import ArDecksTab from "@/components/arabic/ArDecksTab.vue";
 import ArAnalyzeTab from "@/components/arabic/ArAnalyzeTab.vue";
 import ArProgressTab from "@/components/arabic/ArProgressTab.vue";
+import ArReadingTab from "@/components/arabic/ArReadingTab.vue";
 import ArSettingsTab from "@/components/arabic/ArSettingsTab.vue";
 
 // Раздел «Арабский». Первый экран отвечает на вопрос «где я и что дальше», а
@@ -21,6 +22,7 @@ import ArSettingsTab from "@/components/arabic/ArSettingsTab.vue";
 const TABS = [
   { code: "study", title: "Учить" },
   { code: "decks", title: "Наборы" },
+  { code: "reading", title: "Чтение" },
   { code: "analyze", title: "Разбор" },
   { code: "progress", title: "Прогресс" },
   { code: "settings", title: "Настройки" },
@@ -162,6 +164,10 @@ onMounted(load);
             <button v-if="study?.examDue" class="ar-btn ar-btn-gold" @click="start('exam')">
               Мини-экзамен
             </button>
+            <button class="ar-btn" @click="start('arena')">
+              Арена
+              <small v-if="overview?.bestArena"> · рекорд {{ overview.bestArena }}</small>
+            </button>
           </div>
         </section>
 
@@ -210,6 +216,7 @@ onMounted(load);
       </template>
 
       <ArDecksTab v-else-if="tab === 'decks'" @changed="load" />
+      <ArReadingTab v-else-if="tab === 'reading'" />
       <ArAnalyzeTab v-else-if="tab === 'analyze'" />
       <ArProgressTab v-else-if="tab === 'progress'" />
       <ArSettingsTab v-else-if="tab === 'settings'" @changed="load" />

@@ -14,7 +14,7 @@ const route = useRoute();
 const router = useRouter();
 
 // Список разрешённых типов — защита от произвольной строки в адресе.
-const SESSION_KINDS = ["mix", "review", "weak", "ahead", "exam"];
+const SESSION_KINDS = ["mix", "review", "weak", "ahead", "exam", "arena"];
 
 const kind = ref(SESSION_KINDS.includes(route.query.kind) ? route.query.kind : "mix");
 // Правило показа огласовок приезжает из настроек: без него экран рисует их

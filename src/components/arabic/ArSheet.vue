@@ -96,6 +96,9 @@ const title = computed(() => {
         <p class="ar-ar ar-word-big arsh-face">{{ data.text }}</p>
         <p v-if="data.translit" class="ar-translit">{{ data.translit }}</p>
         <p class="arsh-meaning">{{ (data.meanings || []).join(", ") }}</p>
+        <p v-if="data.en" class="ar-muted">
+          значения английские: слово из хвоста словаря, русские к нему ещё не принесли
+        </p>
 
         <div class="ar-row">
           <span v-if="data.pos" class="ar-chip">{{ data.pos }}</span>
@@ -110,6 +113,16 @@ const title = computed(() => {
         <p v-if="data.present" class="arsh-line">
           наст. вр. <span class="ar-ar arsh-alt">{{ data.present }}</span>
         </p>
+
+        <!-- Спряжение выводится правилом из третьего лица: в арабском меняется
+             приставка, а не окончание, и таблица показывает это нагляднее
+             любого объяснения. -->
+        <div v-if="data.conjugation?.length" class="arsh-conj">
+          <div v-for="(row, i) in data.conjugation" :key="i" class="arsh-conj-row">
+            <span class="ar-muted">{{ row[0] }}</span>
+            <span class="ar-ar">{{ row[1] }}</span>
+          </div>
+        </div>
 
         <p v-if="data.root" class="arsh-line">
           корень
@@ -271,6 +284,27 @@ const title = computed(() => {
   color: #d9a441;
   font-size: 19px;
   cursor: pointer;
+}
+
+.arsh-conj {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 4px 10px;
+  margin-top: 4px;
+}
+
+.arsh-conj-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 8px;
+  border-radius: 10px;
+  background: #22242d;
+}
+
+.arsh-conj-row .ar-ar {
+  font-size: 20px;
 }
 
 .arsh-letters {

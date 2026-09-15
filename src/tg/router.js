@@ -22,6 +22,19 @@ const routes = [
     name: "today",
     component: () => import("@/views/JapaneseTodayView.vue"),
   },
+  {
+    // Арабский: свой раздел и своя сессия. Бот арабского ведёт сюда — в
+    // клиенте человек остаётся авторизованным, а по обычной ссылке
+    // открывается браузер и просит пароль.
+    path: "/arabic",
+    name: "arabic",
+    component: () => import("@/views/ArabicView.vue"),
+  },
+  {
+    path: "/arabic/today",
+    name: "arabicToday",
+    component: () => import("@/views/ArabicTodayView.vue"),
+  },
 ];
 
 export const router = createRouter({
@@ -44,6 +57,10 @@ export function routeForStartParam(param) {
       return { path: "/today", query: { kind: "exam" } };
     case "review":
       return { path: "/today", query: { kind: "review" } };
+    case "arabic":
+      return { path: "/arabic/today" };
+    case "arabic-review":
+      return { path: "/arabic/today", query: { kind: "review" } };
     default:
       return null;
   }

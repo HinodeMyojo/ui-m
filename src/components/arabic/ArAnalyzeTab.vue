@@ -81,6 +81,7 @@ function clear() {
           <span class="ar-ar ar-found-word">{{ w.text }}</span>
           <span class="ar-found-meaning">
             {{ (w.meanings || []).join(", ") }}
+            <small v-if="w.en" class="ar-found-en">англ.</small>
             <small v-if="w.count > 1">×{{ w.count }}</small>
           </span>
           <span class="ar-found-state" :class="{ learned: w.learned, study: w.inStudy }">
@@ -151,6 +152,12 @@ function clear() {
 
 .ar-found-meaning small {
   color: #7a7f8e;
+}
+
+/* Помета «англ.» — не украшение: без неё английское значение читается как
+   недоделка, а с ней видно, что слово просто из хвоста словаря. */
+.ar-found-en {
+  color: #d9a441;
 }
 
 .ar-found-state {
