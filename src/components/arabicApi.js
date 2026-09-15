@@ -57,6 +57,9 @@ export const fetchArRoot = (root) => request(`/root/${encodeURIComponent(root)}`
 export const analyzeArText = (text) => post("/analyze", { text });
 
 export const fetchArProgress = () => request("/progress");
+export const fetchArReading = () => request("/reading");
+export const fetchArPendingTranslations = () => request("/translations/pending");
+export const importArTranslations = (text) => post("/translations", { text });
 export const fetchArAchievements = () => request("/achievements");
 
 export const fetchArSettings = () => request("/settings");
@@ -77,6 +80,8 @@ export const AR_MECH_CLOZE = "cloze";
 export const AR_MECH_SPEAK = "speak";
 export const AR_MECH_LETTER_SOUND = "letter-sound";
 export const AR_MECH_LETTER_FORM = "letter-form";
+export const AR_MECH_LETTER_TRACE = "letter-trace";
+export const AR_MECH_CONJUGATION = "conjugation";
 
 export const AR_RATING_AGAIN = 1;
 export const AR_RATING_HARD = 2;
@@ -98,6 +103,8 @@ export const AR_MECH_TITLES = {
   [AR_MECH_SPEAK]: "Произнесите вслух",
   [AR_MECH_LETTER_SOUND]: "Как звучит буква?",
   [AR_MECH_LETTER_FORM]: "Какая это буква?",
+  [AR_MECH_LETTER_TRACE]: "Напишите букву",
+  [AR_MECH_CONJUGATION]: "Как будет?",
 };
 
 // --- Работа с арабской строкой ---

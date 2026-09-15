@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount, nextTick } from "vue";
 import ArKeyboard from "./ArKeyboard.vue";
+import ArTraceCanvas from "./ArTraceCanvas.vue";
 import { sessionFocus } from "@/composables/useSessionFocus.js";
 import ArSheet from "./ArSheet.vue";
 import {
@@ -26,8 +27,11 @@ import {
   AR_MECH_SPEAK,
   AR_MECH_LETTER_SOUND,
   AR_MECH_LETTER_FORM,
+  AR_MECH_LETTER_TRACE,
+  AR_MECH_CONJUGATION,
   AR_MECH_TITLES,
   AR_RATING_AGAIN,
+  AR_RATING_HARD,
   AR_RATING_GOOD,
   AR_RATING_EASY,
 } from "@/components/arabicApi.js";
@@ -129,6 +133,23 @@ const choices = computed(() => card.value?.options || []);
 const isChoice = computed(() => choices.value.length > 0 && !isLesson.value);
 const isInput = computed(() => mechanic.value === AR_MECH_INPUT && !isLesson.value);
 const isSpeak = computed(() => mechanic.value === AR_MECH_SPEAK && !isLesson.value);
+const isTrace = computed(() => mechanic.value === AR_MECH_LETTER_TRACE && !isLesson.value);
+// Арена — минута на скорость по уже выученному. Разбор после ответа здесь
+// только мешает: он съедает те самые секунды, ради которых всё и затеяно.
+const isArena = computed(() => (session.value?.kind || kindNow.value) === "arena");
+const score = ref(0);
+
+// Обводка проверяется на устройстве: холст сравнивает проведённое с самой
+// буквой и говорит, сошлось ли. Сервер получает готовый вердикт и ступень —
+// по ней он двигает лестницу помощи.
+function traceResult(result) {
+  if (phase.value !== PHASE.ASK || sending.value) return;
+  verdict.value = result.pass ? "right" : "wrong";
+  // Подсмотревший проходит, но ответ считается трудным: подсказка не должна
+  // засчитываться наравне с письмом по памяти.
+  const rating = result.pass ? (result.hinted ? AR_RATING_HARD : AR_RATING_GOOD) : AR_RATING_AGAIN;
+  send(rating);
+}
 
 // Вопрос механики letter-form показывает букву в срединной форме: ـعـ и ع
 // выглядят как разные знаки, и пока это не связано, текст не читается.
@@ -160,6 +181,7 @@ async function begin(nextRound = 1) {
       return;
     }
     startedAt.value = Date.now();
+    score.value = 0;
     elapsed.value = 0;
     pausedMs = 0;
     pauseStart = 0;
@@ -251,6 +273,7 @@ async function send(rating) {
     rating,
     mechanic: answered.mechanic,
     thinkMs: Math.max(0, Date.now() - shownAt.value),
+    writeStage: answered.writeStage || 0,
   };
   try {
     lastAnswer.value = await answerArCard(body);
@@ -273,6 +296,11 @@ async function send(rating) {
     next();
     return;
   }
+  if (isArena.value) {
+    if (verdict.value === "right") score.value++;
+    next();
+    return;
+  }
   phase.value = PHASE.REVEAL;
   // Верный ответ не требует разбора: показали, что верно, и дальше. Неверный
   // ждёт тапа — на него и надо посмотреть.
@@ -280,7 +308,18 @@ async function send(rating) {
 }
 
 function next() {
-  if (index.value + 1 >= queue.value.length || timeUp.value) {
+  if (timeUp.value) {
+    finish();
+    return;
+  }
+  if (index.value + 1 >= queue.value.length) {
+    // В арене очередь идёт по кругу: время кончается раньше, чем карточки, и
+    // упереться в конец списка на сороковой секунде — это испорченный рекорд.
+    if (isArena.value && queue.value.length) {
+      index.value = 0;
+      ask();
+      return;
+    }
     finish();
     return;
   }
@@ -341,11 +380,12 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="ars" :class="{ 'is-input': isInput && phase === PHASE.ASK }">
+  <div class="ars" :class="{ 'is-input': (isInput || isTrace) && phase === PHASE.ASK }">
     <!-- Шапка: сколько осталось времени и где мы в очереди. -->
     <header class="ars-top">
       <button class="ars-x" @click="emit('exit')">✕</button>
       <div class="ars-bar"><span :style="{ width: progressPct + '%' }"></span></div>
+      <span v-if="isArena" class="ars-score">✓ {{ score }}</span>
       <span class="ars-time" :class="{ 'is-up': timeUp }">{{ timeLabel }}</span>
     </header>
 
@@ -371,6 +411,8 @@ onBeforeUnmount(() => {
           <div><b>{{ result.accuracyPct }}%</b><span>точность</span></div>
           <div><b>+{{ result.xp }}</b><span>очков</span></div>
         </div>
+        <p v-if="result.newRecord" class="ars-streak">🏆 Новый рекорд: {{ result.bestScore }}</p>
+        <p v-else-if="isArena && result.bestScore" class="ar-muted">рекорд {{ result.bestScore }}</p>
         <p v-if="result.streakGained" class="ars-streak">🔥 Стрик {{ result.streak }} — день закрыт</p>
         <p v-else-if="result.streak" class="ar-muted">🔥 Стрик {{ result.streak }}</p>
         <p v-if="result.disciplineMarked" class="ar-muted">Отмечено в трекере дисциплины</p>
@@ -453,6 +495,13 @@ onBeforeUnmount(() => {
             {{ askedForm }}
           </div>
 
+          <!-- Письмо: спрашиваем буквой по имени, саму её показывает (или не
+               показывает) холст — по ступени помощи. -->
+          <div v-else-if="isTrace" class="ars-ask-meaning">
+            <p class="ars-meaning">{{ card.letterName }}</p>
+            <p class="ar-muted">{{ card.letterSound }}</p>
+          </div>
+
           <div v-else-if="hidesFace" class="ars-ask-meaning">
             <p class="ars-meaning">{{ (card.meanings || []).join(", ") }}</p>
             <p v-if="mechanic === AR_MECH_LISTEN" class="ar-muted">слушайте и выбирайте</p>
@@ -463,6 +512,10 @@ onBeforeUnmount(() => {
           </div>
 
           <p v-if="mechanic === AR_MECH_VOWEL" class="ars-meaning">{{ (card.meanings || [])[0] }}</p>
+          <template v-if="mechanic === AR_MECH_CONJUGATION">
+            <p class="ars-meaning">{{ (card.meanings || [])[0] }}</p>
+            <p class="ars-person">как будет «{{ card.person }}»?</p>
+          </template>
           <p v-if="mechanic === AR_MECH_PLURAL" class="ar-muted">дайте множественное число</p>
 
           <button v-if="canHear && speakable" class="ar-btn ar-btn-sm ars-listen" @click="say">
@@ -530,6 +583,16 @@ onBeforeUnmount(() => {
             </div>
           </template>
 
+          <template v-else-if="isTrace">
+            <ArTraceCanvas
+              :key="card.cardId + ':' + (card.writeStage || 1)"
+              :char="card.text"
+              :stage="card.writeStage || 1"
+              @result="traceResult"
+            />
+            <button class="ars-idk" @click="dontKnow">Не помню букву</button>
+          </template>
+
           <template v-else-if="isSpeak">
             <p class="ar-muted ars-speak-hint">
               Скажите слово вслух, потом проверьте себя — звуком или переводом.
@@ -557,6 +620,9 @@ onBeforeUnmount(() => {
               корень
               <button class="ars-link ar-ar" @click="openSheet('root', card.root)">{{ card.root }}</button>
               <span v-if="card.rootMeaning"> — {{ card.rootMeaning }}</span>
+            </p>
+            <p v-if="lastAnswer?.writeStage && card.itemType === 'letter'" class="ar-muted">
+              письмо: {{ ["", "по контуру", "по бледному следу", "по памяти"][lastAnswer.writeStage] }}
             </p>
             <p v-if="lastAnswer?.drillLeft" class="ar-muted">
               ещё {{ lastAnswer.drillLeft }} {{ drillWord(lastAnswer.drillLeft) }} до закрепления
@@ -625,6 +691,20 @@ onBeforeUnmount(() => {
   height: 100%;
   background: var(--ar-accent, #18a999);
   transition: width 0.25s;
+}
+
+.ars-score {
+  font-variant-numeric: tabular-nums;
+  color: var(--ar-accent, #18a999);
+  font-weight: 700;
+  font-size: 15px;
+}
+
+.ars-person {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--ar-gold, #d9a441);
 }
 
 .ars-time {
