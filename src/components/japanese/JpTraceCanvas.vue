@@ -49,6 +49,29 @@ const TOLERANCE = 11;
 const ENDPOINT_TOLERANCE = 26;
 const SAMPLES = 24;
 
+// Строгость зависит от того, что видно на экране, и это не поблажка.
+//
+// По контуру человек ведёт пальцем по линии — требовать попадания в линию
+// честно. По зонам и по памяти он воспроизводит знак, видя в лучшем случае
+// прямоугольник: там проверяется форма, направление и примерное место, а не
+// попадание в невидимую линию с точностью до десятой доли квадрата. На этом и
+// сломалось письмо 白: первая черта короткая (33 единицы), допуск по концам
+// считается от её длины и выходил 11.7 — то есть начать надо было в
+// тридцати пикселях от точки, которой на экране нет.
+const STAGE_TOLERANCE = {
+  [JP_WRITE_BY_KEYS]: 12,
+  [JP_WRITE_OUTLINE]: TOLERANCE,
+  [JP_WRITE_ZONES]: 16,
+  [JP_WRITE_BLIND]: 18,
+};
+
+// После скольких промахов по одной черте показываем её саму, и после
+// скольких засчитываем. Застрять на одной черте — худшее, что может случиться
+// с шестиминутной сессией: человек уходит не доучив, а карточка остаётся
+// недописанной.
+const HELP_AFTER = 2;
+const FORCE_AFTER = 5;
+
 const svg = ref(null);
 const box = ref(null);
 const refPoints = ref([]); // точки эталонных черт
@@ -59,12 +82,24 @@ const current = ref([]); // текущий жест в координатах Ka
 const shake = ref(false); // черта не принята — короткая тряска вместо вибрации
 const attempts = ref(0);
 const misses = ref(0);
+// Промахи по черте, которую пишут прямо сейчас: по ним решается, пора ли
+// показать её и пора ли зачесть.
+const strokeMisses = ref(0);
+// Почему черта не принята — словами. Молчаливая тряска не учит: человек
+// повторяет ровно то же самое и решает, что сломан не он, а программа.
+const rejected = ref("");
 
 // Что видно на этой ступени. Вне сессии (stage = 0) остаётся прежнее
 // поведение: контур показан целиком.
 const showOutline = computed(() => props.stage === 0 || props.stage <= JP_WRITE_OUTLINE);
 const showColors = computed(() => props.stage === JP_WRITE_BY_KEYS && props.groups.length > 0);
 const showZones = computed(() => props.stage === JP_WRITE_ZONES && zones.value.length > 0);
+
+// Черту показываем и на слепых ступенях, если она не даётся: это помощь, а
+// не отмена задания — следующую снова пишут по памяти.
+const helpNow = computed(() => strokeMisses.value >= HELP_AFTER);
+
+const tolerance = computed(() => STAGE_TOLERANCE[props.stage] || TOLERANCE);
 const stageLabel = computed(() => JP_WRITE_STAGE_LABELS[props.stage] || "");
 
 // Цвет черты по ключу, которому она принадлежит. Цвета те же, что в разборе
@@ -153,6 +188,8 @@ function reset() {
   current.value = [];
   attempts.value = 0;
   misses.value = 0;
+  strokeMisses.value = 0;
+  rejected.value = "";
 }
 
 // Следим за приметами знака, а не за самим массивом путей.
@@ -200,16 +237,35 @@ function end() {
   if (stroke.length < 2) return;
 
   attempts.value++;
-  if (matches(stroke, refPoints.value[doneCount.value])) {
-    doneCount.value++;
-    if (finished.value) {
-      emit("done", { attempts: attempts.value, misses: misses.value });
-    }
+  const verdict = check(stroke, refPoints.value[doneCount.value]);
+  if (verdict.ok) {
+    accept();
     return;
   }
+
   misses.value++;
+  strokeMisses.value++;
+  rejected.value = verdict.reason;
   shake.value = true;
   setTimeout(() => (shake.value = false), 260);
+
+  // Пятый промах по одной и той же черте — засчитываем и идём дальше. Промахи
+  // никуда не деваются: они уходят в оценку карточки, и «трудно» человек
+  // получит честно. А вот упереться в черту и не выйти из карточки вовсе —
+  // это не строгость, это тупик.
+  if (strokeMisses.value >= FORCE_AFTER) {
+    accept();
+    rejected.value = "засчитано с натяжкой — посмотри, как она пишется";
+  }
+}
+
+function accept() {
+  doneCount.value++;
+  strokeMisses.value = 0;
+  rejected.value = "";
+  if (finished.value) {
+    emit("done", { attempts: attempts.value, misses: misses.value });
+  }
 }
 
 // --- Сверка ---
@@ -264,36 +320,67 @@ function thin(points, count) {
   return out;
 }
 
-function matches(stroke, reference) {
-  if (!reference?.length) return false;
+// check — принята ли черта, и если нет, то чем она не подошла. Причина не
+// украшение: без неё человек повторяет то же самое движение и приходит к
+// выводу, что сломана программа. Чаще всего он прав лишь наполовину — черта
+// ведётся не в ту сторону или не доводится до конца.
+function check(stroke, reference) {
+  if (!reference?.length) return { ok: false, reason: "начертание не загрузилось" };
   const drawn = thin(stroke, SAMPLES);
+  const last = drawn.length - 1;
+
+  const refLen = polylineLength(reference);
+  const refEnd = reference[reference.length - 1];
 
   // Концы важнее середины: 一 справа налево ложится на эталон идеально, и
   // только направление отличает знак от зеркала. Допуск считается от длины
-  // черты — у короткой перепутанные концы разъезжаются всего на десяток
-  // единиц, и общий порог в 26 пропустил бы её как верную.
-  const refLen = polylineLength(reference);
+  // черты, но с полом: у короткой черты доля от длины выходит меньше, чем
+  // палец вообще способен повторить, — а на слепых ступенях и целиться не во
+  // что.
+  const blind = !showOutline.value;
+  const endTolerance = blind
+    ? Math.max(14, Math.min(30, refLen * 0.4))
+    : Math.max(9, Math.min(ENDPOINT_TOLERANCE, refLen * 0.35));
+
+  const head = Math.hypot(drawn[0][0] - reference[0][0], drawn[0][1] - reference[0][1]);
+  const tail = Math.hypot(drawn[last][0] - refEnd[0], drawn[last][1] - refEnd[1]);
 
   // Черту надо провести целиком. У коротких черт — а первая черта 語 всего
   // одиннадцать единиц — обведённая половина укладывается и в допуск по
   // концам, и в расстояние до линии: единственное, чем она отличается, это
   // длина. Верхней границы нет намеренно: дрожь руки длину только добавляет.
-  if (polylineLength(stroke) < refLen * 0.6) return false;
+  if (polylineLength(stroke) < refLen * 0.6) {
+    return { ok: false, reason: "черта короче — веди её до конца" };
+  }
 
-  const endTolerance = Math.max(9, Math.min(ENDPOINT_TOLERANCE, refLen * 0.35));
-  const last = drawn.length - 1;
-  const head = Math.hypot(drawn[0][0] - reference[0][0], drawn[0][1] - reference[0][1]);
-  const tail = Math.hypot(
-    drawn[last][0] - reference[reference.length - 1][0],
-    drawn[last][1] - reference[reference.length - 1][1],
-  );
-  if (head > endTolerance || tail > endTolerance) return false;
+  if (head > endTolerance || tail > endTolerance) {
+    // Перевёрнутая черта ложится на эталон идеально, и человек искренне не
+    // понимает, чем она плоха. Говорим прямо: порядок и направление черт —
+    // половина того, ради чего письмо вообще спрашивают.
+    const reverseHead = Math.hypot(drawn[0][0] - refEnd[0], drawn[0][1] - refEnd[1]);
+    const reverseTail = Math.hypot(
+      drawn[last][0] - reference[0][0],
+      drawn[last][1] - reference[0][1],
+    );
+    if (reverseHead <= endTolerance && reverseTail <= endTolerance) {
+      return { ok: false, reason: "эта черта ведётся в другую сторону" };
+    }
+    if (head > endTolerance && tail <= endTolerance) {
+      return { ok: false, reason: "начало черты не там" };
+    }
+    if (tail > endTolerance && head <= endTolerance) {
+      return { ok: false, reason: "конец черты не там" };
+    }
+    return { ok: false, reason: "черта не на своём месте" };
+  }
 
   // Обе стороны: первая ловит, когда рисуют мимо, вторая — когда обвели
   // только кусок черты и остановились.
   const off = meanDistanceTo(drawn, reference);
   const uncovered = meanDistanceTo(reference, drawn);
-  return off <= TOLERANCE && uncovered <= TOLERANCE;
+  if (off > tolerance.value) return { ok: false, reason: "форма не та" };
+  if (uncovered > tolerance.value) return { ok: false, reason: "черта пройдена не вся" };
+  return { ok: true, reason: "" };
 }
 
 // --- Отрисовка ---
@@ -303,10 +390,14 @@ const currentPath = computed(() => {
   return current.value.map((p, i) => `${i ? "L" : "M"}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(" ");
 });
 
+// Пропуск черты. Называется тем, что делает: кнопка «Показать черту» на самом
+// деле переходила к следующей, и человек, нажав её в надежде увидеть образец,
+// терял черту вместе с оценкой. Сам образец теперь показывается сам после
+// двух промахов и денег не стоит — стоит промах, который уже случился.
 function hint() {
-  // Подсказка — не бесплатная: она засчитывается промахом, иначе обводка
-  // превращается в обводку по подсказке.
   misses.value++;
+  strokeMisses.value = 0;
+  rejected.value = "";
   doneCount.value++;
   if (finished.value) emit("done", { attempts: attempts.value, misses: misses.value });
 }
@@ -359,8 +450,8 @@ defineExpose({ reset });
           :d="d"
           class="jtc-ref"
           :class="{
-            'is-hidden': !showOutline && i >= doneCount,
-            'is-next': showOutline && i === doneCount,
+            'is-hidden': !showOutline && i >= doneCount && !(helpNow && i === doneCount),
+            'is-next': i === doneCount && (showOutline || helpNow),
           }"
           :style="showColors && i >= doneCount ? { stroke: strokeColor[i] || undefined } : null"
           :opacity="showColors && i > doneCount ? 0.35 : null"
@@ -390,11 +481,13 @@ defineExpose({ reset });
       <span v-if="currentGroup.meaningRu" class="jtc-now-meaning">{{ currentGroup.meaningRu }}</span>
     </div>
 
+    <div v-if="rejected" class="jtc-why">{{ rejected }}</div>
+
     <div class="jtc-bar">
       <span class="jtc-count">{{ doneCount }} / {{ total }}</span>
       <span v-if="misses" class="jtc-miss">промахов {{ misses }}</span>
       <span class="jtc-spacer"></span>
-      <button v-if="!finished" class="jtc-btn" @click="hint">Показать черту</button>
+      <button v-if="!finished" class="jtc-btn" @click="hint">Пропустить черту</button>
       <button v-if="doneCount || misses" class="jtc-btn" @click="reset">Заново</button>
     </div>
   </div>
@@ -546,6 +639,15 @@ defineExpose({ reset });
   stroke-width: 4;
   stroke-linecap: round;
   stroke-linejoin: round;
+}
+
+/* Причина отказа стоит под холстом, а не поверх него: поверх она закрывала бы
+   то самое место, куда надо смотреть. */
+.jtc-why {
+  font-size: 12px;
+  color: #ffd666;
+  text-align: center;
+  min-height: 15px;
 }
 
 .jtc-bar {
