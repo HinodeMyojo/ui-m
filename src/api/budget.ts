@@ -28,6 +28,7 @@ import type {
   CreateBudgetPlanItemRequest,
   UpdateBudgetPlanItemRequest,
   PlanTextImportResult,
+  BudgetPlanText,
 } from "../types/budget";
 import { clearSession } from "../components/session";
 
@@ -383,6 +384,12 @@ export async function addPlanItem(planId: string, data: CreateBudgetPlanItemRequ
     method: "POST",
     body: JSON.stringify(data),
   });
+}
+
+// План и список категорий одним текстом — в том же формате, который принимает
+// importPlanItemsFromText: выгрузил, поправил, вставил обратно.
+export async function getPlanText(month: string): Promise<BudgetPlanText> {
+  return budgetRequest<BudgetPlanText>(`/plans/month/${month}/text`);
 }
 
 // Разбор текстового списка в строки плана. apply: false — только превью,

@@ -376,6 +376,13 @@ export interface PlanTextProblem {
   reason: string;
 }
 
+export interface BudgetPlanText {
+  month: string;
+  planId?: string;
+  hasItems: boolean;
+  text: string;
+}
+
 export interface PlanTextImportResult {
   items: ParsedPlanItem[];
   problems: PlanTextProblem[];

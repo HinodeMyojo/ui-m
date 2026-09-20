@@ -169,6 +169,7 @@ const textParsed = ref<ParsedPlanItem[]>([]);
 const textProblems = ref<PlanTextProblem[]>([]);
 const textError = ref("");
 const textBusy = ref(false);
+const textCopied = ref(false);
 let textTimer: ReturnType<typeof setTimeout> | undefined;
 
 const PLAN_TEXT_HINT = `Доходы:
@@ -204,6 +205,46 @@ async function openTextModal() {
     if (!plan.value) return;
   }
   showTextModal.value = true;
+  await loadPlanText();
+}
+
+// Выгрузка: в поле сразу лежит текущий план и список категорий. Отсюда его
+// копируют в чат с моделью, рассказывают словами, что поменять, и вставляют
+// ответ обратно в это же поле.
+async function loadPlanText() {
+  textBusy.value = true;
+  textError.value = "";
+  try {
+    const data = await api.getPlanText(planMonth.value);
+    planText.value = data.text;
+    // В поле весь план целиком, значит применять его надо заменой: иначе
+    // строки задвоятся.
+    textReplace.value = data.hasItems;
+    await previewPlanText();
+  } catch (e) {
+    textError.value = e instanceof Error ? e.message : "Не получилось выгрузить план";
+  } finally {
+    textBusy.value = false;
+  }
+}
+
+async function copyPlanText() {
+  try {
+    await navigator.clipboard.writeText(planText.value);
+  } catch {
+    // Clipboard API живёт только в защищённом контексте — в мини-аппе и по
+    // http его может не быть.
+    const ta = document.createElement("textarea");
+    ta.value = planText.value;
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand("copy");
+    document.body.removeChild(ta);
+  }
+  textCopied.value = true;
+  setTimeout(() => (textCopied.value = false), 2000);
 }
 
 function onPlanTextInput() {
@@ -346,7 +387,7 @@ function toggleSection(key: string) {
         </select>
       </div>
       <div class="plan-actions" v-if="hasPlan">
-        <button class="btn-text-input" @click="openTextModal">Вписать текстом</button>
+        <button class="btn-text-input" @click="openTextModal">План текстом</button>
         <button class="btn-delete-plan" @click="handleDeletePlan">Удалить план</button>
       </div>
     </div>
@@ -357,7 +398,7 @@ function toggleSection(key: string) {
       <h3>Нет плана на этот период</h3>
       <p>Создайте план для планирования доходов, расходов и накоплений</p>
       <div class="no-plan-actions">
-        <button class="btn-primary" @click="openTextModal">Вписать текстом</button>
+        <button class="btn-primary" @click="openTextModal">План текстом</button>
         <button class="btn-secondary" @click="createPlanForMonth">Пустой план</button>
         <button class="btn-secondary" @click="createTemplate" v-if="planMonth !== 'template'">Создать шаблон</button>
       </div>
@@ -562,7 +603,18 @@ function toggleSection(key: string) {
       <div v-if="showTextModal" class="modal-overlay" @click.self="showTextModal = false">
         <div class="modal-card modal-card-text">
           <button class="modal-close" @click="showTextModal = false">×</button>
-          <h3 class="modal-title">Вписать план текстом</h3>
+          <h3 class="modal-title">План текстом</h3>
+          <p class="text-flow">
+            В поле — ваш план и список категорий. Скопируйте, скажите в чате с моделью,
+            что поменять, и вставьте ответ сюда же.
+          </p>
+
+          <div class="text-toolbar">
+            <button class="lb-like-btn" :disabled="!planText" @click="copyPlanText">
+              {{ textCopied ? "Скопировано" : "Скопировать" }}
+            </button>
+            <button class="lb-like-btn" :disabled="textBusy" @click="loadPlanText">Выгрузить заново</button>
+          </div>
 
           <div class="text-input-body">
             <div class="text-input-left">
@@ -960,6 +1012,15 @@ function toggleSection(key: string) {
 .btn-text-input:hover { background: rgba(23, 103, 253, 0.22); color: #fff; }
 
 .modal-card-text { max-width: 900px; display: flex; flex-direction: column; gap: 14px; }
+.text-flow { margin: -4px 0 0; font-size: 13px; line-height: 1.5; color: #6b7fa3; }
+.text-toolbar { display: flex; gap: 8px; flex-wrap: wrap; }
+.lb-like-btn {
+  background: rgba(23, 103, 253, 0.1); border: 1px solid rgba(23, 103, 253, 0.25);
+  color: #7eb0ff; padding: 8px 14px; border-radius: 10px;
+  font-size: 13px; cursor: pointer; transition: all 0.2s;
+}
+.lb-like-btn:hover:not(:disabled) { background: rgba(23, 103, 253, 0.2); color: #fff; }
+.lb-like-btn:disabled { opacity: 0.45; cursor: default; }
 /* Слева пишут, справа сразу видно, что получится: иначе синтаксис строки
    приходится угадывать вслепую. */
 .text-input-body { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; min-height: 320px; }
@@ -1077,6 +1138,7 @@ function toggleSection(key: string) {
     border-radius: 0; border: none; padding: 16px; gap: 10px;
   }
   .plan-textarea { font-size: 16px; min-height: 160px; }
+  .lb-like-btn { flex: 1; min-height: 44px; font-size: 15px; }
   .text-rules { font-size: 11px; }
   .preview-list { max-height: 26vh; }
   .text-actions { flex-direction: column; align-items: stretch; }
