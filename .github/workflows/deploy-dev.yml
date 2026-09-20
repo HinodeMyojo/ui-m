@@ -36,6 +36,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Проверки идут до сборки: и шрифт иконок, и переключатель под нижним
+      # меню собирались без единой ошибки, а раздел при этом был нерабочим.
+      # Лучше не выкатить, чем выкатить с пустыми кнопками.
+      - name: Check
+        run: npm run check
+
       - name: Build
         run: npm run build
 
@@ -50,7 +56,7 @@ jobs:
           # поэтому забытый файл сборки роняет не этот шаг, а docker build —
           # деплой падает уже после того, как всё скопировано. Добавляешь файл
           # в корень репозитория, от которого зависит сборка, — впиши сюда.
-          source: "dist/*,docker-compose.yaml,Dockerfile,nginx.conf,proxy-server.mjs,package.json,package-lock.json,src/*,public/*,index.html,tg/*,vite.config.mjs,vite-plugin-mdi.mjs,tailwind.config.js,jsconfig.json"
+          source: "dist/*,docker-compose.yaml,Dockerfile,nginx.conf,proxy-server.mjs,package.json,package-lock.json,src/*,public/*,index.html,tg/*,vite.config.mjs,vite-plugin-mdi.mjs,scripts/*,tailwind.config.js,jsconfig.json"
           target: "/home/hinode/planner/ui"
           strip_components: 0
 

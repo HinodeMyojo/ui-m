@@ -33,7 +33,7 @@ const RESOLVED_ID = `\0${VIRTUAL_ID}`;
 // категории трат; их заводит seedTravelCategories в back-m
 // (infra/persistence/postgres.go). Заводите категорию с новой иконкой —
 // допишите её сюда, иначе вместо неё будет запасной кружок.
-const EXTRA = [
+export const EXTRA = [
   // travel_place_categories
   "mdi-camera",
   "mdi-temple-buddhist",
@@ -62,7 +62,7 @@ const EXTRA = [
 // mdi-torii записан в категорию «Храм / святыня» первым посевом; такой иконки
 // в наборе никогда не было, и поменять запись некому — в интерфейсе категории
 // не редактируются. В посеве имя уже исправлено, здесь — для старых баз.
-const ALIAS = {
+export const ALIAS = {
   "mdi-torii": "mdi-temple-buddhist",
 };
 
@@ -72,10 +72,10 @@ const ALIAS = {
 const FALLBACK = "mdi-help-circle-outline";
 
 const SOURCE_DIRS = ["src"];
-const SOURCE_EXT = new Set([".vue", ".js", ".mjs", ".ts"]);
+export const SOURCE_EXT = new Set([".vue", ".js", ".mjs", ".ts"]);
 
 // mdi-arrow-left → mdiArrowLeft: имена экспортов в @mdi/js устроены так.
-function exportName(className) {
+export function exportName(className) {
   return (
     "mdi" +
     className
@@ -86,7 +86,7 @@ function exportName(className) {
   );
 }
 
-function collectNames(dir, found) {
+export function collectNames(dir, found) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, entry.name);
     if (entry.isDirectory()) {

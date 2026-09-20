@@ -3,6 +3,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "check": "node scripts/check-travel.mjs",
     "preview": "vite preview"
   },
   "dependencies": {
