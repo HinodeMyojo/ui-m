@@ -231,21 +231,107 @@ function goToCategory(categoryId: string) {
   store.navigateTo = { tab: "transactions", categoryId };
 }
 
-// Export all data
+// === ВЫГРУЗКА ===
+// Под одной кнопкой две разные вещи: сводка текстом — чтобы вставить в чат с
+// моделью и спросить совета, сырой JSON — чтобы копаться в данных самому.
+const showExportModal = ref(false);
+const exportMode = ref<"digest" | "json">("digest");
+
+// --- сводка для GPT ---
+const digestMonth = ref(store.currentMonth);
+const digestHistory = ref(6);
+const digestText = ref("");
+const digestFilename = ref("");
+const digestLoading = ref(false);
+const digestError = ref("");
+const copied = ref(false);
+
+const digestChars = computed(() => {
+  const n = digestText.value.length;
+  const forms = ["знаков", "знак", "знака", "знака", "знака", "знаков", "знаков", "знаков", "знаков", "знаков"];
+  const tail = n % 100 >= 11 && n % 100 <= 14 ? "знаков" : forms[n % 10];
+  return `${n.toLocaleString("ru")} ${tail}`;
+});
+
+async function buildDigest() {
+  digestLoading.value = true;
+  digestError.value = "";
+  copied.value = false;
+  try {
+    const data = await api.exportGpt(digestMonth.value, digestHistory.value);
+    digestText.value = data.markdown;
+    digestFilename.value = data.filename;
+  } catch (e) {
+    digestError.value = e instanceof Error ? e.message : "Не получилось собрать сводку";
+    digestText.value = "";
+  } finally {
+    digestLoading.value = false;
+  }
+}
+
+// Месяц и глубину меняют ради другого текста — пересобираем сразу, без
+// отдельной кнопки «применить».
+watch([digestMonth, digestHistory], () => {
+  if (showExportModal.value && exportMode.value === "digest") buildDigest();
+});
+
+function openExport() {
+  showExportModal.value = true;
+  // Месяц на дашборде могли переключить, пока модалка была закрыта: сводка
+  // должна открыться про тот месяц, который человек сейчас смотрит.
+  if (digestMonth.value !== store.currentMonth) {
+    digestMonth.value = store.currentMonth; // дальше соберёт watch
+    return;
+  }
+  if (!digestText.value && !digestLoading.value) buildDigest();
+}
+
+async function copyDigest() {
+  // Clipboard API работает только в защищённом контексте: в мини-аппе и по
+  // http его может не быть, поэтому рядом лежит запасной путь через поле.
+  try {
+    await navigator.clipboard.writeText(digestText.value);
+  } catch {
+    const ta = document.createElement("textarea");
+    ta.value = digestText.value;
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand("copy");
+    document.body.removeChild(ta);
+  }
+  copied.value = true;
+  setTimeout(() => (copied.value = false), 2000);
+}
+
+function downloadDigest() {
+  downloadBlob(
+    new Blob([digestText.value], { type: "text/markdown;charset=utf-8" }),
+    digestFilename.value || "budget.md"
+  );
+}
+
+// --- сырой JSON ---
 const exportFrom = ref(store.currentMonth + "-01");
 const exportTo = ref(new Date().toISOString().slice(0, 10));
-const showExportModal = ref(false);
 
 async function downloadExport() {
   const data = await api.exportAll(exportFrom.value, exportTo.value);
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+  downloadBlob(
+    new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }),
+    `budget-export-${exportFrom.value}-${exportTo.value}.json`
+  );
+  showExportModal.value = false;
+}
+
+function downloadBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `budget-export-${exportFrom.value}-${exportTo.value}.json`;
+  a.download = filename;
   a.click();
   URL.revokeObjectURL(url);
-  showExportModal.value = false;
 }
 
 // === EXTENDED SPENDING STATS (computed from transactions in store) ===
@@ -477,7 +563,7 @@ const upcomingPayments = computed(() => {
 
     <!-- Export button -->
     <div class="export-bar">
-      <button class="btn-export" @click="showExportModal = true">
+      <button class="btn-export" @click="openExport">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
         Экспорт для GPT
       </button>
@@ -486,21 +572,63 @@ const upcomingPayments = computed(() => {
     <!-- Export modal -->
     <Teleport to="body">
       <div v-if="showExportModal" class="modal-overlay" @click.self="showExportModal = false">
-        <div class="modal-card-sm">
+        <div class="modal-card-export">
           <button class="modal-close-sm" @click="showExportModal = false">×</button>
-          <h3 style="color: #fff; margin: 0 0 16px; font-size: 16px;">Экспорт данных</h3>
-          <p style="color: #6b7fa3; font-size: 13px; margin: 0 0 14px;">Скачайте JSON со всеми данными для анализа в ChatGPT</p>
-          <div style="display: flex; gap: 10px; margin-bottom: 14px;">
-            <label style="flex: 1; display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: #7eb0ff;">
-              <span>С</span>
-              <input v-model="exportFrom" type="date" style="background: rgba(23,103,253,0.06); border: 1px solid rgba(23,103,253,0.2); border-radius: 8px; padding: 8px; color: #fff; outline: none;" />
-            </label>
-            <label style="flex: 1; display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: #7eb0ff;">
-              <span>По</span>
-              <input v-model="exportTo" type="date" style="background: rgba(23,103,253,0.06); border: 1px solid rgba(23,103,253,0.2); border-radius: 8px; padding: 8px; color: #fff; outline: none;" />
-            </label>
+          <h3 class="export-title">Выгрузка для GPT</h3>
+
+          <div class="export-tabs">
+            <button :class="['export-tab', { active: exportMode === 'digest' }]" @click="exportMode = 'digest'">Сводка текстом</button>
+            <button :class="['export-tab', { active: exportMode === 'json' }]" @click="exportMode = 'json'">Сырой JSON</button>
           </div>
-          <button class="btn-export-download" @click="downloadExport">Скачать JSON</button>
+
+          <template v-if="exportMode === 'digest'">
+            <p class="export-hint">
+              Счета, план, факт, цели и долги одним текстом — вставьте его в чат целиком.
+              Транзакции не попадают, кроме десяти самых крупных за месяц.
+            </p>
+            <div class="export-controls">
+              <label class="export-field">
+                <span>Месяц</span>
+                <input v-model="digestMonth" type="month" />
+              </label>
+              <label class="export-field">
+                <span>История</span>
+                <select v-model.number="digestHistory">
+                  <option :value="3">3 месяца</option>
+                  <option :value="6">6 месяцев</option>
+                  <option :value="12">12 месяцев</option>
+                </select>
+              </label>
+            </div>
+
+            <div v-if="digestError" class="export-error">{{ digestError }}</div>
+            <pre v-else class="export-preview">{{ digestLoading ? "Собираю сводку…" : digestText }}</pre>
+
+            <div class="export-actions">
+              <span class="export-meta">{{ digestText && !digestLoading ? digestChars : "" }}</span>
+              <button class="btn-export-secondary" :disabled="!digestText || digestLoading" @click="downloadDigest">Скачать .md</button>
+              <button class="btn-export-download" :disabled="!digestText || digestLoading" @click="copyDigest">
+                {{ copied ? "Скопировано" : "Скопировать" }}
+              </button>
+            </div>
+          </template>
+
+          <template v-else>
+            <p class="export-hint">Все транзакции, счета и цели за период — файлом, если разбирать данные самому.</p>
+            <div class="export-controls">
+              <label class="export-field">
+                <span>С</span>
+                <input v-model="exportFrom" type="date" />
+              </label>
+              <label class="export-field">
+                <span>По</span>
+                <input v-model="exportTo" type="date" />
+              </label>
+            </div>
+            <div class="export-actions">
+              <button class="btn-export-download" @click="downloadExport">Скачать JSON</button>
+            </div>
+          </template>
         </div>
       </div>
     </Teleport>
@@ -1169,21 +1297,65 @@ const upcomingPayments = computed(() => {
   position: fixed; inset: 0; background: rgba(0,0,0,0.75); backdrop-filter: blur(8px);
   display: flex; align-items: center; justify-content: center; z-index: 2000; padding: 16px;
 }
-.modal-card-sm {
+.modal-card-export {
   background: linear-gradient(135deg, rgba(14,15,26,0.99), rgba(20,22,36,0.99));
   border: 1px solid rgba(23,103,253,0.3); border-radius: 16px;
-  padding: 24px; width: 100%; max-width: 380px; position: relative;
+  padding: 24px; width: 100%; max-width: 760px; position: relative;
+  max-height: 86vh; display: flex; flex-direction: column; gap: 12px;
 }
 .modal-close-sm {
   position: absolute; top: 12px; right: 12px; background: none; border: none;
   color: #6b7fa3; font-size: 20px; cursor: pointer;
 }
+.export-title { color: #fff; margin: 0; font-size: 16px; padding-right: 24px; }
+.export-hint { color: #6b7fa3; font-size: 13px; margin: 0; line-height: 1.45; }
+
+.export-tabs { display: flex; gap: 6px; }
+.export-tab {
+  flex: 1; background: rgba(23,103,253,0.06); border: 1px solid rgba(23,103,253,0.2);
+  color: #7eb0ff; padding: 8px 12px; border-radius: 10px;
+  font-size: 13px; cursor: pointer; transition: all 0.2s;
+}
+.export-tab.active { background: rgba(52,211,153,0.14); border-color: rgba(52,211,153,0.4); color: #6ee7b7; }
+
+.export-controls { display: flex; gap: 10px; flex-wrap: wrap; }
+.export-field { flex: 1; min-width: 140px; display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: #7eb0ff; }
+.export-field input, .export-field select {
+  background: rgba(23,103,253,0.06); border: 1px solid rgba(23,103,253,0.2);
+  border-radius: 8px; padding: 8px; color: #fff; outline: none; width: 100%;
+}
+.export-field select option { background: #141626; color: #fff; }
+
+/* Превью — единственное, что тянется: остальное в модалке фиксированной высоты */
+.export-preview {
+  flex: 1; min-height: 180px; overflow: auto; margin: 0;
+  background: rgba(23,103,253,0.05); border: 1px solid rgba(23,103,253,0.15);
+  border-radius: 10px; padding: 12px;
+  color: #c8daf0; font-size: 12px; line-height: 1.5;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  white-space: pre-wrap; word-break: break-word;
+}
+.export-error {
+  flex: 1; min-height: 180px; display: flex; align-items: center; justify-content: center;
+  text-align: center; border-radius: 10px; padding: 12px;
+  background: rgba(248,113,113,0.08); border: 1px solid rgba(248,113,113,0.3); color: #f87171; font-size: 13px;
+}
+
+.export-actions { display: flex; align-items: center; gap: 10px; }
+.export-meta { flex: 1; color: #4a5c7a; font-size: 12px; }
 .btn-export-download {
-  width: 100%; background: linear-gradient(135deg, #34d399, #059669);
+  flex: 1; background: linear-gradient(135deg, #34d399, #059669);
   border: none; color: #fff; padding: 12px; border-radius: 10px;
   font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s;
 }
-.btn-export-download:hover { transform: translateY(-1px); box-shadow: 0 4px 16px rgba(52,211,153,0.3); }
+.btn-export-download:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 4px 16px rgba(52,211,153,0.3); }
+.btn-export-secondary {
+  background: rgba(23,103,253,0.1); border: 1px solid rgba(23,103,253,0.25);
+  color: #7eb0ff; padding: 12px 16px; border-radius: 10px;
+  font-size: 14px; cursor: pointer; transition: all 0.2s;
+}
+.btn-export-secondary:hover:not(:disabled) { background: rgba(23,103,253,0.2); color: #fff; }
+.btn-export-download:disabled, .btn-export-secondary:disabled { opacity: 0.45; cursor: default; }
 
 /* Chart controls */
 .chart-controls { display: flex; align-items: center; gap: 8px; }
@@ -1370,8 +1542,8 @@ const upcomingPayments = computed(() => {
   .daily-bar-track { height: 110px; }
   .dow-grid { height: 140px; }
   .dow-bar-track { height: 80px; }
-  .modal-card-sm { max-width: 92vw; padding: 20px; }
-  .btn-export-download { min-height: 44px; font-size: 16px; }
+  .modal-card-export { max-width: 92vw; padding: 20px; }
+  .btn-export-download, .btn-export-secondary { min-height: 44px; font-size: 16px; }
 }
 
 @media (max-width: 480px) {
@@ -1418,9 +1590,19 @@ const upcomingPayments = computed(() => {
 
   .export-bar { justify-content: stretch; }
   .btn-export { width: 100%; justify-content: center; min-height: 44px; font-size: 16px; }
-  .modal-card-sm { max-width: 92vw; padding: 18px; }
-  .modal-card-sm input { font-size: 16px; }
-  .btn-export-download { min-height: 44px; font-size: 16px; }
+  /* На телефоне модалка занимает экран целиком: превью тут — главное, а не
+     украшение, и читать его в окошке на 180 px бессмысленно. */
+  .modal-overlay { padding: 0; }
+  .modal-card-export {
+    max-width: 100%; width: 100%; max-height: 100%; height: 100%;
+    border-radius: 0; border: none; padding: 16px; gap: 10px;
+  }
+  .export-field input, .export-field select { font-size: 16px; min-height: 44px; }
+  .export-preview { font-size: 12px; min-height: 0; }
+  .export-actions { flex-wrap: wrap; }
+  .export-meta { flex: 1 0 100%; order: -1; }
+  .btn-export-download, .btn-export-secondary { min-height: 44px; font-size: 16px; }
+  .btn-export-secondary { flex: 1; }
 
   .recommend-block { flex-direction: column; gap: 4px; text-align: center; }
   .planned-row { gap: 6px; padding: 8px 0; }

@@ -27,6 +27,7 @@ import type {
   CreateBudgetPlanRequest,
   CreateBudgetPlanItemRequest,
   UpdateBudgetPlanItemRequest,
+  PlanTextImportResult,
 } from "../types/budget";
 import { clearSession } from "../components/session";
 
@@ -326,6 +327,16 @@ export async function exportAll(from: string, to: string): Promise<unknown> {
   return budgetRequest<unknown>(`/export?from=${from}&to=${to}`);
 }
 
+// Сводка для чата с моделью: готовый текст, собранный на сервере.
+export async function exportGpt(
+  month: string,
+  months: number
+): Promise<{ month: string; filename: string; markdown: string }> {
+  return budgetRequest<{ month: string; filename: string; markdown: string }>(
+    `/export/gpt?month=${month}&months=${months}`
+  );
+}
+
 // === BUDGET PLANS ===
 
 export async function getPlans(): Promise<BudgetPlan[]> {
@@ -369,6 +380,18 @@ export async function clonePlanFromTemplate(planId: string, month: string): Prom
 
 export async function addPlanItem(planId: string, data: CreateBudgetPlanItemRequest): Promise<{ id: string }> {
   return budgetRequest<{ id: string }>(`/plans/${planId}/items`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+// Разбор текстового списка в строки плана. apply: false — только превью,
+// сервер ничего не пишет.
+export async function importPlanItemsFromText(
+  planId: string,
+  data: { text: string; replace: boolean; apply: boolean }
+): Promise<PlanTextImportResult> {
+  return budgetRequest<PlanTextImportResult>(`/plans/${planId}/items/text`, {
     method: "POST",
     body: JSON.stringify(data),
   });

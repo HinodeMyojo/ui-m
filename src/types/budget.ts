@@ -353,3 +353,32 @@ export interface CreateBudgetPlanItemRequest {
 }
 
 export interface UpdateBudgetPlanItemRequest extends Partial<CreateBudgetPlanItemRequest> {}
+
+// --- Ввод плана текстом ---
+
+export interface ParsedPlanItem {
+  line: number;
+  source: string;
+  type: PlanItemType;
+  name: string;
+  categoryId?: string;
+  categoryName?: string;
+  amount: number;
+  plannedDate: number;
+  depositRate?: number;
+  depositMonths?: number;
+  warning?: string;
+}
+
+export interface PlanTextProblem {
+  line: number;
+  source: string;
+  reason: string;
+}
+
+export interface PlanTextImportResult {
+  items: ParsedPlanItem[];
+  problems: PlanTextProblem[];
+  applied: number;
+  replaced: boolean;
+}

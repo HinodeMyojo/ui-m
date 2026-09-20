@@ -2,7 +2,7 @@
 import { ref, computed, onMounted, watch } from "vue";
 import { useBudgetStore } from "@/stores/budget";
 import * as api from "@/api/budget";
-import type { PlanItemType, MonthlyStats } from "@/types/budget";
+import type { PlanItemType, MonthlyStats, ParsedPlanItem, PlanTextProblem } from "@/types/budget";
 
 const store = useBudgetStore();
 
@@ -158,6 +158,106 @@ async function handleDeleteItem(id: string) {
   await store.deletePlanItem(id);
 }
 
+// === ВВОД ПЛАНА ТЕКСТОМ ===
+// Набирать двадцать строк через модалку с шестью полями — полчаса работы.
+// Здесь человек пишет список так, как писал бы его в заметках, а разбор
+// делает сервер: он же знает категории.
+const showTextModal = ref(false);
+const planText = ref("");
+const textReplace = ref(false);
+const textParsed = ref<ParsedPlanItem[]>([]);
+const textProblems = ref<PlanTextProblem[]>([]);
+const textError = ref("");
+const textBusy = ref(false);
+let textTimer: ReturnType<typeof setTimeout> | undefined;
+
+const PLAN_TEXT_HINT = `Доходы:
+Зарплата 180000
++ Подработка 20 000
+
+Расходы:
+Аренда [Жильё] 45 000 @5
+Еда [Еда] 30к
+Такси 3000
+
+Накопление: На поездку 40000
+Вклад: Сбер 200000 16% 12 мес`;
+
+const TYPE_LABELS: Record<PlanItemType, string> = {
+  income: "доход",
+  expense: "расход",
+  saving: "накопление",
+  deposit: "вклад",
+};
+
+const textTotals = computed(() => {
+  const sums: Record<PlanItemType, number> = { income: 0, expense: 0, saving: 0, deposit: 0 };
+  for (const item of textParsed.value) sums[item.type] += item.amount;
+  return sums;
+});
+
+async function openTextModal() {
+  // Вписывать строки некуда, пока нет плана — создаём его молча, это тот же
+  // шаг, который человек сделал бы кнопкой рядом.
+  if (!plan.value) {
+    await createPlanForMonth();
+    if (!plan.value) return;
+  }
+  showTextModal.value = true;
+}
+
+function onPlanTextInput() {
+  clearTimeout(textTimer);
+  textTimer = setTimeout(previewPlanText, 500);
+}
+
+async function previewPlanText() {
+  if (!plan.value || !planText.value.trim()) {
+    textParsed.value = [];
+    textProblems.value = [];
+    return;
+  }
+  textBusy.value = true;
+  textError.value = "";
+  try {
+    const result = await api.importPlanItemsFromText(plan.value.plan.id, {
+      text: planText.value,
+      replace: false,
+      apply: false,
+    });
+    textParsed.value = result.items;
+    textProblems.value = result.problems;
+  } catch (e) {
+    textError.value = e instanceof Error ? e.message : "Не получилось разобрать текст";
+  } finally {
+    textBusy.value = false;
+  }
+}
+
+async function applyPlanText() {
+  if (!plan.value || !textParsed.value.length) return;
+  if (textReplace.value && !confirm(`Заменить все строки плана на ${textParsed.value.length}?`)) return;
+  textBusy.value = true;
+  textError.value = "";
+  try {
+    await api.importPlanItemsFromText(plan.value.plan.id, {
+      text: planText.value,
+      replace: textReplace.value,
+      apply: true,
+    });
+    await store.fetchPlan(plan.value.plan.id);
+    showTextModal.value = false;
+    planText.value = "";
+    textParsed.value = [];
+    textProblems.value = [];
+    textReplace.value = false;
+  } catch (e) {
+    textError.value = e instanceof Error ? e.message : "Не получилось добавить строки";
+  } finally {
+    textBusy.value = false;
+  }
+}
+
 function fmt(n: number | undefined) {
   return (n ?? 0).toLocaleString("ru");
 }
@@ -246,6 +346,7 @@ function toggleSection(key: string) {
         </select>
       </div>
       <div class="plan-actions" v-if="hasPlan">
+        <button class="btn-text-input" @click="openTextModal">Вписать текстом</button>
         <button class="btn-delete-plan" @click="handleDeletePlan">Удалить план</button>
       </div>
     </div>
@@ -256,7 +357,8 @@ function toggleSection(key: string) {
       <h3>Нет плана на этот период</h3>
       <p>Создайте план для планирования доходов, расходов и накоплений</p>
       <div class="no-plan-actions">
-        <button class="btn-primary" @click="createPlanForMonth">Создать план</button>
+        <button class="btn-primary" @click="openTextModal">Вписать текстом</button>
+        <button class="btn-secondary" @click="createPlanForMonth">Пустой план</button>
         <button class="btn-secondary" @click="createTemplate" v-if="planMonth !== 'template'">Создать шаблон</button>
       </div>
     </div>
@@ -454,6 +556,79 @@ function toggleSection(key: string) {
         </div>
       </div>
     </div>
+
+    <!-- Ввод плана текстом -->
+    <Teleport to="body">
+      <div v-if="showTextModal" class="modal-overlay" @click.self="showTextModal = false">
+        <div class="modal-card modal-card-text">
+          <button class="modal-close" @click="showTextModal = false">×</button>
+          <h3 class="modal-title">Вписать план текстом</h3>
+
+          <div class="text-input-body">
+            <div class="text-input-left">
+              <textarea
+                v-model="planText"
+                class="plan-textarea"
+                :placeholder="PLAN_TEXT_HINT"
+                spellcheck="false"
+                @input="onPlanTextInput"
+              ></textarea>
+              <p class="text-rules">
+                Строка — это одна трата. Тип задаётся заголовком раздела («Доходы:») или
+                прямо в строке: <b>+</b> доход, <b>−</b> расход, слова «накопление», «вклад».
+                <b>[Категория]</b> в скобках, <b>@5</b> — число месяца, <b>30к</b> — тысячи.
+                У вкладов ещё <b>16%</b> и <b>12 мес</b>.
+              </p>
+            </div>
+
+            <div class="text-input-right">
+              <div class="preview-head">
+                <span v-if="textBusy">Разбираю…</span>
+                <span v-else-if="textParsed.length">Разобрано строк: {{ textParsed.length }}</span>
+                <span v-else>Превью появится, как только начнёте писать</span>
+              </div>
+
+              <div class="preview-list">
+                <div v-for="item in textParsed" :key="item.line" class="preview-row" :class="item.type">
+                  <span class="preview-type">{{ TYPE_LABELS[item.type] }}</span>
+                  <span class="preview-name">
+                    {{ item.name }}
+                    <span v-if="item.categoryId" class="preview-cat">{{ item.categoryName }}</span>
+                    <span v-if="item.plannedDate" class="preview-day">{{ item.plannedDate }} числа</span>
+                    <span v-if="item.warning" class="preview-warning">{{ item.warning }}</span>
+                  </span>
+                  <span class="preview-amount">{{ fmt(item.amount) }} ₽</span>
+                </div>
+
+                <div v-for="p in textProblems" :key="'p' + p.line" class="preview-problem">
+                  Строка {{ p.line }}: {{ p.reason }} — «{{ p.source }}»
+                </div>
+              </div>
+
+              <div v-if="textParsed.length" class="preview-totals">
+                <span class="green">+{{ fmt(textTotals.income) }} ₽</span>
+                <span class="red">−{{ fmt(textTotals.expense) }} ₽</span>
+                <span v-if="textTotals.saving">🐷 {{ fmt(textTotals.saving) }} ₽</span>
+                <span v-if="textTotals.deposit">🏦 {{ fmt(textTotals.deposit) }} ₽</span>
+              </div>
+            </div>
+          </div>
+
+          <div v-if="textError" class="text-error">{{ textError }}</div>
+
+          <div class="text-actions">
+            <label class="replace-toggle">
+              <input v-model="textReplace" type="checkbox" />
+              <span>Заменить строки плана целиком</span>
+            </label>
+            <button class="btn-submit" :disabled="!textParsed.length || textBusy" @click="applyPlanText">
+              {{ textReplace ? "Заменить план" : "Добавить в план" }}
+              <template v-if="textParsed.length">({{ textParsed.length }})</template>
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
 
     <!-- Add/Edit item modal -->
     <Teleport to="body">
@@ -773,7 +948,74 @@ function toggleSection(key: string) {
   padding: 12px; border-radius: 10px; font-size: 14px; font-weight: 600; cursor: pointer;
   transition: all 0.2s; margin-top: 4px;
 }
-.btn-submit:hover { transform: translateY(-1px); box-shadow: 0 4px 16px rgba(23, 103, 253, 0.3); }
+.btn-submit:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 4px 16px rgba(23, 103, 253, 0.3); }
+.btn-submit:disabled { opacity: 0.45; cursor: default; }
+
+/* Ввод плана текстом */
+.btn-text-input {
+  background: rgba(23, 103, 253, 0.12); border: 1px solid rgba(23, 103, 253, 0.3);
+  color: #7eb0ff; padding: 8px 16px; border-radius: 10px;
+  font-size: 13px; cursor: pointer; transition: all 0.2s;
+}
+.btn-text-input:hover { background: rgba(23, 103, 253, 0.22); color: #fff; }
+
+.modal-card-text { max-width: 900px; display: flex; flex-direction: column; gap: 14px; }
+/* Слева пишут, справа сразу видно, что получится: иначе синтаксис строки
+   приходится угадывать вслепую. */
+.text-input-body { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; min-height: 320px; }
+.text-input-left, .text-input-right { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+
+.plan-textarea {
+  flex: 1; min-height: 260px; resize: vertical;
+  background: rgba(23, 103, 253, 0.06); border: 1px solid rgba(23, 103, 253, 0.2);
+  border-radius: 10px; padding: 12px; color: #fff; font-size: 14px; line-height: 1.6;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; outline: none;
+}
+.plan-textarea:focus { border-color: rgba(23, 103, 253, 0.5); }
+.plan-textarea::placeholder { color: #3a4a6a; }
+.text-rules { margin: 0; font-size: 12px; line-height: 1.5; color: #6b7fa3; }
+.text-rules b { color: #7eb0ff; font-weight: 600; }
+
+.preview-head { font-size: 12px; color: #6b7fa3; }
+.preview-list {
+  flex: 1; overflow-y: auto; min-height: 200px;
+  background: rgba(23, 103, 253, 0.04); border: 1px solid rgba(23, 103, 253, 0.12);
+  border-radius: 10px; padding: 8px;
+}
+.preview-row {
+  display: flex; align-items: baseline; gap: 8px; padding: 6px 8px;
+  border-left: 2px solid transparent; border-radius: 6px; font-size: 13px;
+}
+.preview-row.income { border-left-color: #34d399; }
+.preview-row.expense { border-left-color: #f87171; }
+.preview-row.saving { border-left-color: #fbbf24; }
+.preview-row.deposit { border-left-color: #7eb0ff; }
+.preview-type { font-size: 11px; color: #4a5c7a; min-width: 72px; }
+.preview-name { flex: 1; color: #c8daf0; min-width: 0; }
+.preview-cat, .preview-day {
+  margin-left: 6px; font-size: 11px; color: #7eb0ff;
+  background: rgba(23, 103, 253, 0.12); padding: 1px 6px; border-radius: 6px;
+}
+.preview-warning { display: block; font-size: 11px; color: #fbbf24; margin-top: 2px; }
+.preview-amount { color: #fff; font-weight: 600; white-space: nowrap; }
+.preview-problem {
+  padding: 6px 8px; margin-top: 4px; font-size: 12px; color: #f87171;
+  background: rgba(248, 113, 113, 0.08); border-radius: 6px;
+}
+.preview-totals {
+  display: flex; flex-wrap: wrap; gap: 12px; font-size: 13px; font-weight: 600;
+  padding-top: 4px;
+}
+.preview-totals .green { color: #34d399; }
+.preview-totals .red { color: #f87171; }
+
+.text-error {
+  padding: 10px 12px; border-radius: 10px; font-size: 13px; color: #f87171;
+  background: rgba(248, 113, 113, 0.08); border: 1px solid rgba(248, 113, 113, 0.3);
+}
+.text-actions { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.replace-toggle { flex: 1; display: flex; align-items: center; gap: 8px; font-size: 13px; color: #7eb0ff; cursor: pointer; }
+.replace-toggle input { width: 16px; height: 16px; accent-color: #1767fd; }
 
 /* Mobile */
 @media (max-width: 768px) {
@@ -781,12 +1023,19 @@ function toggleSection(key: string) {
   .plan-summary { position: static; }
   .modal-card { max-width: 92vw; padding: 22px; }
   .item-delete { opacity: 1; }
+  /* Две колонки рядом на планшете уже не помещаются: пишем сверху,
+     превью сразу под текстом. */
+  .text-input-body { grid-template-columns: 1fr; min-height: 0; }
+  .plan-textarea { min-height: 200px; }
+  .preview-list { min-height: 140px; max-height: 32vh; }
 }
 
 @media (max-width: 480px) {
   .plan-header { flex-direction: column; align-items: stretch; }
   .plan-month-select select { width: 100%; font-size: 16px; padding: 12px 16px; }
+  .plan-actions { display: flex; flex-direction: column; gap: 8px; }
   .btn-delete-plan { width: 100%; text-align: center; min-height: 44px; font-size: 14px; }
+  .btn-text-input { width: 100%; min-height: 44px; font-size: 16px; }
 
   .no-plan { padding: 40px 16px; }
   .no-plan-icon { font-size: 48px; }
@@ -820,6 +1069,18 @@ function toggleSection(key: string) {
 
   .modal-card { max-width: 92vw; padding: 18px; }
   .modal-title { font-size: 16px; margin-bottom: 16px; }
+  /* На телефоне модалка ввода занимает экран целиком: текст плана набирают
+     долго, и скакать по 60 % высоты неудобно. */
+  .modal-overlay { padding: 0; }
+  .modal-card-text {
+    max-width: 100%; width: 100%; max-height: 100%; height: 100%;
+    border-radius: 0; border: none; padding: 16px; gap: 10px;
+  }
+  .plan-textarea { font-size: 16px; min-height: 160px; }
+  .text-rules { font-size: 11px; }
+  .preview-list { max-height: 26vh; }
+  .text-actions { flex-direction: column; align-items: stretch; }
+  .replace-toggle { min-height: 44px; }
   .modal-form input,
   .modal-form select { font-size: 16px; padding: 12px 14px; }
   .type-switch { flex-wrap: wrap; }
