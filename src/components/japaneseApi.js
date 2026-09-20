@@ -415,11 +415,78 @@ function say(synth, text) {
   synth.speak(u);
 }
 
-// Что произносить у карточки: у слова — его чтение, у кандзи — то чтение,
-// которое учим. Для ключа звучания нет вовсе.
+// Что произносить у карточки: у слова — его чтение, у кандзи — он и кун
+// подряд («ぼ、はは»): знак звучит и так и так, и слышать надо оба. В «какой
+// знак так читается» — только спрошенное чтение, иначе звук подсказал бы
+// второе. Для ключа звучания нет вовсе.
 export function speakableOf(card) {
   if (!card) return "";
   if (card.itemType === "word") return card.reading || "";
-  if (card.itemType === "kanji") return card.mainReading || "";
-  return "";
+  if (card.itemType !== "kanji") return "";
+  if (card.askReading) return jpReadingSpoken(card.askReading);
+  const mains = jpMainReadings(card).map((r) => r.spoken);
+  return mains.length ? mains.join("、") : card.mainReading || "";
+}
+
+// Чтения кандзи записаны как в KANJIDIC: оны катаканой (ボ), куны хираганой с
+// точкой перед окуриганой (た.べる), у приставок и суффиксов дефис (-び).
+//
+// jpReadingParts — чтение хираганой, разложенное на то, что читается знаком, и
+// окуригану: た.べる → { stem: "た", okuri: "べる" }. Хираганой, а не как в
+// словаре: чтение над знаком пользователь просил хираганой.
+export function jpReadingParts(raw) {
+  const v = jpKatakanaToHiragana(String(raw || "").replace(/^-+|-+$/g, ""));
+  const dot = v.indexOf(".");
+  if (dot < 0) return { stem: v.replace(/[()]/g, ""), okuri: "" };
+  return { stem: v.slice(0, dot), okuri: v.slice(dot + 1).replace(/-+$/, "") };
+}
+
+// jpReadingSpoken — чтение так, как оно звучит словом: た.べる → たべる.
+// Сервер присылает спрошенное чтение подписью «た(べる)» — скобки тоже снимаются.
+export function jpReadingSpoken(raw) {
+  const v = String(raw || "");
+  if (v.includes("(")) return jpKatakanaToHiragana(v.replace(/[()\-.]/g, ""));
+  const { stem, okuri } = jpReadingParts(v);
+  return stem + okuri;
+}
+
+// jpMainReadings — главные он и кун карточки или листа знака: те, что звучат
+// в популярных словах. Старая карточка без них отдаёт единственное главное
+// чтение, и вид его угадывается по записи: оны в словаре катаканой.
+export function jpMainReadings(item) {
+  if (!item) return [];
+  const out = [];
+  const add = (kind, raw) => {
+    if (!raw) return;
+    const { stem, okuri } = jpReadingParts(raw);
+    out.push({ kind, raw, stem, okuri, spoken: stem + okuri });
+  };
+  add("on", item.mainOn);
+  add("kun", item.mainKun);
+  if (!out.length && item.mainReading) {
+    add(/[ァ-ヶ]/.test(item.mainReading) ? "on" : "kun", item.mainReading);
+  }
+  return out;
+}
+
+// jpAcceptedReadings — чем можно ответить на «как читается знак»: любым оном и
+// любым куном, кун — и целиком (たべる), и одной частью знака (た). Просьба
+// была прямая: «чтобы можно было определить по онному либо кунному чтению».
+export function jpAcceptedReadings(card) {
+  const out = new Set();
+  const add = (v) => {
+    const n = jpNormalizeReading(v);
+    if (n) out.add(n);
+  };
+  for (const r of card?.onReadings || []) add(jpReadingSpoken(r));
+  for (const r of card?.kunReadings || []) {
+    const { stem, okuri } = jpReadingParts(r);
+    add(stem);
+    add(stem + okuri);
+  }
+  for (const r of jpMainReadings(card)) {
+    add(r.stem);
+    add(r.spoken);
+  }
+  return out;
 }

@@ -16,7 +16,8 @@ import { jpSpeechMatches, markSpeechRecognitionBroken } from "@/components/japan
 const props = defineProps({
   // Чего ждём: главное чтение каной.
   expect: { type: String, required: true },
-  // Прочие допустимые чтения: он и кун у знака не один.
+  // Прочие допустимые чтения — засчитываются так же, как главное: знак читают
+  // и оном, и куном, и назвать можно любой.
   alsoAccept: { type: Array, default: () => [] },
   // Сам знак или запись слова. Распознавание японского возвращает не кану, а
   // текст: на «はく» приедет 白. Без этого сверка не проходила никогда.
@@ -98,12 +99,13 @@ function finish(alternatives) {
     // Верным считается и чтение, и сама запись: распознаватель чаще отдаёт
     // иероглиф, чем кану, и «сказал не то» от «записал иначе» отличается
     // только этим.
-    if (jpSpeechMatches(raw, props.expect) || (props.char && jpSpeechMatches(raw, props.char))) {
+    if (
+      jpSpeechMatches(raw, props.expect) ||
+      (props.char && jpSpeechMatches(raw, props.char)) ||
+      props.alsoAccept.some((r) => jpSpeechMatches(raw, r))
+    ) {
       verdict = "right";
       break;
-    }
-    if (props.alsoAccept.some((r) => jpSpeechMatches(raw, r))) {
-      verdict = "close";
     }
   }
   emit("done", { verdict, heard: heard.value });

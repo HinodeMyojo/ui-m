@@ -6,6 +6,7 @@ import {
   JP_WRITE_BY_KEYS,
   JP_WRITE_OUTLINE,
   JP_WRITE_ZONES,
+  JP_WRITE_BLIND,
   JP_WRITE_STAGE_LABELS,
 } from "@/components/japaneseApi.js";
 

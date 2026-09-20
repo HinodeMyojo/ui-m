@@ -4,6 +4,8 @@ import { fetchJpKanji } from "@/components/japaneseApi.js";
 import JpStrokeOrder from "./JpStrokeOrder.vue";
 import JpSentenceList from "./JpSentenceList.vue";
 import JpTraceCanvas from "./JpTraceCanvas.vue";
+import JpReadings from "./JpReadings.vue";
+import JpWordRows from "./JpWordRows.vue";
 
 // Знак крупным планом: как он пишется, из чего состоит и как живёт во фразе.
 //
@@ -67,20 +69,17 @@ watch(
         <template v-else-if="data">
           <div class="jks-meaning">{{ (data.meaningsRu || []).slice(0, 3).join(", ") }}</div>
 
-          <div class="jks-readings">
-            <span v-for="r in data.onReadings || []" :key="`on-${r}`" class="jks-reading is-on">
-              {{ r }}
-            </span>
-            <span v-for="r in data.kunReadings || []" :key="`kun-${r}`" class="jks-reading is-kun">
-              {{ r }}
-            </span>
-            <!-- У ключа чтений нет, зато есть японское имя: にんべん. -->
-            <span
-              v-if="!data.onReadings?.length && !data.kunReadings?.length && data.mainReading"
-              class="jks-reading is-kun"
-            >
-              {{ data.mainReading }}
-            </span>
+          <!-- Он и кун: главные крупно, остальные строкой, всё произносится по
+               тапу. У ключа чтений нет, зато есть японское имя: にんべん. -->
+          <JpReadings v-if="data.onReadings?.length || data.kunReadings?.length" :item="data" all />
+          <div v-else-if="data.mainReading" class="jks-readings">
+            <span class="jks-reading is-kun">{{ data.mainReading }}</span>
+          </div>
+
+          <!-- Популярные слова со знаком — справка: тап произносит слово. -->
+          <div v-if="data.words?.length" class="jks-block">
+            <div class="jks-label">Популярные слова</div>
+            <JpWordRows :words="data.words" />
           </div>
 
           <!-- Ключ показывают ради знаков, в которые он входит. -->
@@ -210,12 +209,6 @@ watch(
   padding: 3px 8px;
   background: var(--m-card-2, #22242d);
   border: 1px solid var(--m-line, #262933);
-}
-
-/* Он и кун различаются цветом подписи, а не только записью: катакану от
-   хираганы новичок на бегу не отличает. */
-.jks-reading.is-on {
-  color: #a58bff;
 }
 
 .jks-reading.is-kun {
