@@ -11,6 +11,7 @@ import TripPointCard from "@/components/travel/TripPointCard.vue";
 import TripPrepTab from "@/components/travel/TripPrepTab.vue";
 import TripBudgetTab from "@/components/travel/TripBudgetTab.vue";
 import TripShareTab from "@/components/travel/TripShareTab.vue";
+import TripCitiesTab from "@/components/travel/TripCitiesTab.vue";
 import {
   fetchTrip,
   updateTrip,
@@ -712,6 +713,9 @@ onBeforeUnmount(() => clearInterval(pulseTimer));
         <button :class="{ active: view === 'prep' }" @click="view = 'prep'">
           <i class="mdi mdi-clipboard-list"></i><span>Подготовка</span>
         </button>
+        <button :class="{ active: view === 'cities' }" @click="view = 'cities'">
+          <i class="mdi mdi-city-variant-outline"></i><span>Города</span>
+        </button>
         <button :class="{ active: view === 'budget' }" @click="view = 'budget'">
           <i class="mdi mdi-wallet"></i><span>Бюджет</span>
         </button>
@@ -751,6 +755,7 @@ onBeforeUnmount(() => clearInterval(pulseTimer));
     <div v-if="loading" class="tv-empty">Загружаю…</div>
 
     <TripPrepTab v-else-if="trip && view === 'prep'" :trip="trip" @changed="reload" />
+    <TripCitiesTab v-else-if="trip && view === 'cities'" :trip="trip" @changed="reload" />
     <TripBudgetTab v-else-if="trip && view === 'budget'" :trip="trip" @changed="reload" />
     <TripShareTab v-else-if="trip && view === 'share'" :trip="trip" @changed="reload" />
 
@@ -766,6 +771,9 @@ onBeforeUnmount(() => clearInterval(pulseTimer));
         >
           <span class="tv-day__num">{{ day.emoji || day.index }}</span>
           <span class="tv-day__date">{{ formatDayLabel(day) }}</span>
+          <!-- Город считает бэкенд по отрезкам поездки: день переезда
+               подписан «Токио → Киото». Вкладка «Города» их и заводит. -->
+          <span v-if="day.city" class="tv-day__city">{{ day.city }}</span>
           <span v-if="day.title" class="tv-day__title">{{ day.title }}</span>
         </button>
         <button class="tv-day tv-day--add" @click="addDay"><i class="mdi mdi-plus"></i></button>
@@ -1332,6 +1340,20 @@ onBeforeUnmount(() => clearInterval(pulseTimer));
 .tv-day__date {
   font-size: 11px;
   opacity: 0.75;
+}
+
+.tv-day__city {
+  max-width: 120px;
+  overflow: hidden;
+  font-size: 11px;
+  font-weight: 600;
+  color: #7fb0ff;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tv-day.active .tv-day__city {
+  color: #cfe0ff;
 }
 
 .tv-day__title {

@@ -1365,6 +1365,28 @@ export async function deleteParticipant(id) {
   await authorizedFetch(`${TP}/participants/${id}`, { method: "DELETE" });
 }
 
+// --- Города поездки ---
+
+export async function createTripCity(tripId, data) {
+  const response = await authorizedFetch(`${TP}/${tripId}/cities`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+  return workJson(response, "не удалось добавить город");
+}
+
+export async function updateTripCity(id, data) {
+  const response = await authorizedFetch(`${TP}/cities/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+  if (!response.ok) throw new Error("не удалось сохранить город");
+}
+
+export async function deleteTripCity(id) {
+  await authorizedFetch(`${TP}/cities/${id}`, { method: "DELETE" });
+}
+
 // --- Дни ---
 
 export async function addTripDay(tripId) {
