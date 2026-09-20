@@ -1,4 +1,7 @@
 import "./assets/main.css";
+// Иконки mdi-* собираются в CSS из @mdi/js: шрифт MDI уехал вместе с Vuetify,
+// а разметка раздела «Путешествия» на нём построена. См. vite-plugin-mdi.mjs.
+import "virtual:mdi.css";
 
 import { createApp } from "vue";
 import { createPinia } from "pinia";

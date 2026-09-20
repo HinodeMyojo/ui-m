@@ -1158,7 +1158,11 @@ onBeforeUnmount(() => clearInterval(pulseTimer));
   align-self: stretch;
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  /* Ровно окно, за вычетом нижнего меню телефона: внизу экрана лежит
+     переключатель «Карта / Маршрут», и без вычитания он прячется под меню —
+     на телефоне с поездки было не попасть на карту. Переменную объявляет
+     App.vue; на десктопе меню нет, вычитается ноль. */
+  height: calc(100dvh - var(--tabbar-h, 0px));
   color: #eaeef7;
   background: #12141a;
 }
@@ -1813,10 +1817,6 @@ onBeforeUnmount(() => clearInterval(pulseTimer));
 
 /* Телефон: карта и маршрут по очереди, кнопки крупнее пальца. */
 @media (max-width: 900px) {
-  .trip-view {
-    height: 100dvh;
-  }
-
   .tv-header {
     padding: 10px 12px;
   }

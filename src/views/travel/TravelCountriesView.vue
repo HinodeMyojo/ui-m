@@ -416,7 +416,9 @@ onMounted(load);
      иначе он схлопывается по ширине содержимого. */
   width: 100%;
   align-self: stretch;
-  min-height: 100vh;
+  /* Вычитаем нижнее меню телефона (переменную объявляет App.vue), иначе
+     страница на пустом месте прокручивается на его высоту. */
+  min-height: calc(100dvh - var(--tabbar-h, 0px));
   padding: 24px 32px 64px;
   color: #eaeef7;
   background: #12141a;

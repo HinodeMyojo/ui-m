@@ -5,6 +5,7 @@ import { defineConfig } from "vite";
 import vue from "@vitejs/plugin-vue";
 import vueDevTools from "vite-plugin-vue-devtools";
 import tailwindcss from "@tailwindcss/vite";
+import mdiCss from "./vite-plugin-mdi.mjs";
 
 const require = createRequire(import.meta.url);
 const { version } = require("./package.json");
@@ -15,7 +16,7 @@ export default defineConfig({
     __APP_VERSION__: JSON.stringify(version),
     __BUILD_TIME__: JSON.stringify(new Date().toISOString()),
   },
-  plugins: [vue(), vueDevTools(), tailwindcss()],
+  plugins: [vue(), vueDevTools(), tailwindcss(), mdiCss()],
   build: {
     rollupOptions: {
       // Две точки входа: обычное приложение и мини-апп Telegram. Репозиторий

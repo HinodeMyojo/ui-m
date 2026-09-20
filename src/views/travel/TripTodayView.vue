@@ -296,7 +296,9 @@ onMounted(load);
 .tt {
   width: 100%;
   align-self: stretch;
-  min-height: 100dvh;
+  /* Вычитаем нижнее меню телефона (переменную объявляет App.vue), иначе
+     страница на пустом месте прокручивается на его высоту. */
+  min-height: calc(100dvh - var(--tabbar-h, 0px));
   padding-bottom: 40px;
   color: #eaeef7;
   background: #12141a;

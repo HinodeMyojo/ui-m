@@ -956,7 +956,10 @@ onMounted(load);
   align-self: stretch;
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  /* Ровно окно, за вычетом нижнего меню телефона: внизу экрана лежит
+     переключатель «Карта / Список», и без вычитания он прячется под меню.
+     Переменную объявляет App.vue; на десктопе меню нет, вычитается ноль. */
+  height: calc(100dvh - var(--tabbar-h, 0px));
   color: #eaeef7;
   background: #12141a;
 }
@@ -1593,10 +1596,6 @@ onMounted(load);
 
 /* Телефон: карта и список не рядом, а по очереди — иначе оба нечитаемы. */
 @media (max-width: 900px) {
-  .country-view {
-    height: 100dvh;
-  }
-
   .cv-header {
     flex-wrap: wrap;
     gap: 10px;

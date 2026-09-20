@@ -45,7 +45,12 @@ jobs:
           host: ${{ secrets.DEV_SERVER_HOST }}
           username: ${{ secrets.DEV_SERVER_USER }}
           key: ${{ secrets.DEV_SSH_PRIVATE_KEY }}
-          source: "dist/*,docker-compose.yaml,Dockerfile,nginx.conf,proxy-server.mjs,package.json,package-lock.json,src/*,public/*,index.html,tg/*,vite.config.mjs,tailwind.config.js,jsconfig.json"
+          # Список закрытый: чего здесь нет, того на сервере не будет. А образ
+          # собирается там заново (`COPY . .` + `npm run build` в Dockerfile),
+          # поэтому забытый файл сборки роняет не этот шаг, а docker build —
+          # деплой падает уже после того, как всё скопировано. Добавляешь файл
+          # в корень репозитория, от которого зависит сборка, — впиши сюда.
+          source: "dist/*,docker-compose.yaml,Dockerfile,nginx.conf,proxy-server.mjs,package.json,package-lock.json,src/*,public/*,index.html,tg/*,vite.config.mjs,vite-plugin-mdi.mjs,tailwind.config.js,jsconfig.json"
           target: "/home/hinode/planner/ui"
           strip_components: 0
 
