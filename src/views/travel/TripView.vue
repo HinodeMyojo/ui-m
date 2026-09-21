@@ -12,6 +12,7 @@ import TripPrepTab from "@/components/travel/TripPrepTab.vue";
 import TripBudgetTab from "@/components/travel/TripBudgetTab.vue";
 import TripShareTab from "@/components/travel/TripShareTab.vue";
 import TripCitiesTab from "@/components/travel/TripCitiesTab.vue";
+import TripEditModal from "@/components/travel/TripEditModal.vue";
 import {
   fetchTrip,
   updateTrip,
@@ -69,6 +70,8 @@ const mobilePane = ref("list");
 const picking = ref(false);
 const pickTarget = ref(null); // { mode: 'step'|'variant', id }
 const showAllDays = ref(false);
+// Форма поездки: название, даты, курс. До неё поездку можно было только создать.
+const editOpen = ref(false);
 const visibleDays = ref([]);
 
 const wishPickerOpen = ref(false);
@@ -698,13 +701,17 @@ onBeforeUnmount(() => clearInterval(pulseTimer));
 
       <div class="tv-title">
         <h1>{{ trip?.title || "…" }}</h1>
-        <span class="tv-subtitle">
+        <!-- Даты — первое, что хочется поменять, и ищут их именно здесь. -->
+        <button class="tv-subtitle tv-subtitle--edit" title="Изменить даты" @click="editOpen = true">
           <template v-if="trip?.startDate">{{ trip.startDate }} — {{ trip.endDate }}</template>
           <template v-else>даты не выбраны</template>
           · {{ trip?.daysCount || 0 }} дн.
           · план {{ Math.round(trip?.plannedRub || 0).toLocaleString("ru") }} ₽
-        </span>
+        </button>
       </div>
+      <button class="tv-icon-btn" title="Изменить поездку" :disabled="!trip" @click="editOpen = true">
+        <i class="mdi mdi-pencil"></i>
+      </button>
 
       <nav class="tv-view-tabs">
         <button :class="{ active: view === 'map' }" @click="view = 'map'">
@@ -980,6 +987,13 @@ onBeforeUnmount(() => clearInterval(pulseTimer));
       </section>
     </template>
 
+    <TripEditModal
+      v-if="editOpen && trip"
+      :trip="trip"
+      @close="editOpen = false"
+      @saved="editOpen = false; load(false)"
+    />
+
     <!-- Вишлист -->
     <div v-if="wishPickerOpen" class="tv-modal-backdrop" @click.self="wishPickerOpen = false">
       <div class="tv-modal">
@@ -1197,6 +1211,24 @@ onBeforeUnmount(() => clearInterval(pulseTimer));
 .tv-subtitle {
   font-size: 12px;
   color: #6e7688;
+}
+
+/* Даты в шапке — кнопка без кнопочного вида: выглядит как подпись, а по
+   наведению подсказывает, что её можно нажать. */
+.tv-subtitle--edit {
+  padding: 0;
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  background: none;
+  border: none;
+  border-bottom: 1px dashed transparent;
+  cursor: pointer;
+}
+
+.tv-subtitle--edit:hover {
+  color: #9aa4b8;
+  border-bottom-color: #4a5163;
 }
 
 .tv-header__actions {
