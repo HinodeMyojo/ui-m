@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed } from "vue";
+import { ref, computed, watch } from "vue";
 import MarkdownView from "./MarkdownView.vue";
 import TaskLogPanel from "@/components/tasklog/TaskLogPanel.vue";
 import {
@@ -7,6 +7,8 @@ import {
   updateWorkItem,
   setWorkItemStatus,
   workFileUrl,
+  fetchTaskChecks,
+  saveTaskChecks,
 } from "@/components/api.js";
 
 // Рабочий вид карточки: показываем только то, что реально заполнено.
@@ -58,6 +60,80 @@ const checkProgress = computed(() => {
   const done = checks.value.filter((c) => c.done).length;
   return { total, done, percent: total ? Math.round((done / total) * 100) : 0 };
 });
+
+// Чек-листы привязанных задач живут у самих задач, а не у карточки: в день
+// они не приезжают, поэтому тянем их отдельно. Перезапрашиваем, только когда
+// меняется набор задач, — перезагрузка дня после галочки их не сбрасывает.
+const taskChecks = ref({});
+const newTaskCheck = ref({});
+
+watch(
+  () => (props.item.tasks || []).map((t) => t.id).join(","),
+  async () => {
+    const ids = (props.item.tasks || []).map((t) => t.id);
+    const loaded = await Promise.all(
+      ids.map((id) =>
+        fetchTaskChecks(id)
+          .then((list) => [id, Array.isArray(list) ? list : []])
+          .catch(() => [id, []]),
+      ),
+    );
+    taskChecks.value = Object.fromEntries(loaded);
+  },
+  { immediate: true },
+);
+
+const taskCheckLists = computed(() =>
+  (props.item.tasks || [])
+    .map((t) => {
+      const list = taskChecks.value[t.id] || [];
+      const done = list.filter((c) => c.done).length;
+      return {
+        task: t,
+        checks: list,
+        done,
+        percent: list.length ? Math.round((done / list.length) * 100) : 0,
+      };
+    })
+    .filter((x) => x.checks.length),
+);
+
+// Список уходит целиком. adopt — забрать ответ себе: нужно, когда новым
+// пунктам выданы id; на галочке не берём, чтобы не затереть следующую.
+async function pushTaskChecks(taskId, list, { adopt = false } = {}) {
+  const prev = taskChecks.value[taskId] || [];
+  taskChecks.value = { ...taskChecks.value, [taskId]: list };
+  error.value = "";
+  try {
+    const saved = await saveTaskChecks(
+      taskId,
+      list.map((c) => ({ id: c.id, text: c.text, done: c.done })),
+    );
+    if (adopt && Array.isArray(saved)) {
+      taskChecks.value = { ...taskChecks.value, [taskId]: saved };
+    }
+    emit("changed", { keepSelection: true });
+  } catch (e) {
+    taskChecks.value = { ...taskChecks.value, [taskId]: prev };
+    error.value = e.message || "не удалось сохранить чеклист";
+  }
+}
+
+function toggleTaskCheck(taskId, check) {
+  const list = (taskChecks.value[taskId] || []).map((c) =>
+    c.id === check.id ? { ...c, done: !c.done } : c,
+  );
+  pushTaskChecks(taskId, list);
+}
+
+function addTaskCheck(taskId) {
+  const text = (newTaskCheck.value[taskId] || "").trim();
+  if (!text) return;
+  newTaskCheck.value = { ...newTaskCheck.value, [taskId]: "" };
+  pushTaskChecks(taskId, [...(taskChecks.value[taskId] || []), { id: null, text, done: false }], {
+    adopt: true,
+  });
+}
 
 // Блокеры карточки дня: открытые сверху, снятые остаются историей.
 const blockers = computed(() => props.item.blockers || []);
@@ -393,6 +469,38 @@ function toggleLog(taskId) {
           <input type="checkbox" :checked="c.done" @change="toggleCheck(c)" />
           <span>{{ c.text }}</span>
         </label>
+      </section>
+
+      <!-- Чек-лист привязанной задачи: тот же, что в панели подзадачи -->
+      <section v-for="tc in taskCheckLists" :key="'tc-' + tc.task.id" class="wiv-block">
+        <div class="wiv-block-head">
+          <span>Чек-лист задачи</span>
+          <span class="wiv-block-count">{{ tc.done }} / {{ tc.checks.length }}</span>
+        </div>
+        <div
+          v-if="tc.task.title !== item.title || taskCheckLists.length > 1"
+          class="wiv-check-task"
+        >
+          {{ tc.task.title }}
+        </div>
+        <div class="wiv-progress">
+          <div class="wiv-progress-fill" :style="{ width: tc.percent + '%' }"></div>
+        </div>
+        <label
+          v-for="c in tc.checks"
+          :key="c.id"
+          class="wiv-check"
+          :class="{ done: c.done }"
+        >
+          <input type="checkbox" :checked="c.done" @change="toggleTaskCheck(tc.task.id, c)" />
+          <span>{{ c.text }}</span>
+        </label>
+        <input
+          v-model="newTaskCheck[tc.task.id]"
+          class="wiv-blocker-input wiv-check-input"
+          placeholder="+ пункт (Enter)"
+          @keydown.enter.prevent="addTaskCheck(tc.task.id)"
+        />
       </section>
 
       <section v-if="item.links?.length" class="wiv-block">
@@ -825,6 +933,16 @@ function toggleLog(taskId) {
   height: 16px;
   flex-shrink: 0;
   cursor: pointer;
+}
+
+.wiv-check-task {
+  color: #9aa0b1;
+  font-size: 12px;
+  margin-top: -4px;
+}
+
+.wiv-check-input:focus {
+  border-color: #6e4aff;
 }
 
 .wiv-check.done span {
