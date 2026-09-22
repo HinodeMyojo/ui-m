@@ -12,6 +12,25 @@ import {
   deleteDisciplinePlanSkill,
   fetchLearningSkills,
 } from "../api.js";
+import { fetchJpStudies } from "../japaneseApi.js";
+
+// Источники активностей: пункт можно не отмечать руками, а считать по данным
+// модуля. Метрика у каждого своя — от неё зависят подписи порогов.
+const SOURCES = [
+  { key: "", label: "Вручную", unit: "", hint: "галочки в чек-листе ставлю я сам" },
+  {
+    key: "sport",
+    label: "Спорт — план дня",
+    unit: "% плана",
+    hint: "считается доля выполненных тренировок дня. 100 — день закрывает только весь план целиком. Если тренировок на день не запланировано, день ничего не требует.",
+  },
+  {
+    key: "japanese",
+    label: "Японский — сессии",
+    unit: "сессий",
+    hint: "считаются засчитанные сессии за день (короткие и арена не в счёт). День меняется в 03:00, как и стрик модуля.",
+  },
+];
 
 // Контролируемый режим: передан month → редактируем его, наружу emit('changed').
 // Автономный режим (без пропса): сам грузит текущий месяц.
@@ -47,7 +66,17 @@ async function changed() {
 onMounted(() => {
   ownLoad();
   loadAllSkills();
+  loadJpStudies();
 });
+
+// Прохождения японского — чтобы источник можно было сузить до одного из них
+// («изучение иероглифов»), а не считать все сессии подряд.
+const jpStudies = ref([]);
+async function loadJpStudies() {
+  try {
+    jpStudies.value = (await fetchJpStudies()) || [];
+  } catch { /* модуль может быть выключен — источник просто будет по всем сессиям */ }
+}
 
 const allSkills = ref([]);
 async function loadAllSkills() {
@@ -143,7 +172,25 @@ function emptyActivityForm(skillId) {
     isCounter: false, counterGoal: 8, minDesc: "", midDesc: "", maxDesc: "",
     weekdaySet: [1, 2, 3, 4, 5, 6, 7], variantsText: "",
     replacementText: "", replacementFrom: "", replacementTo: "",
+    source: "", sourceRef: "", sourceMin: "", sourceMid: "", sourceMax: "",
   };
+}
+
+const activitySource = computed(
+  () => SOURCES.find((s) => s.key === (activityModal.value?.source || "")) || SOURCES[0],
+);
+
+// Пороги по умолчанию — те же, что на сервере: подсказываем их в плейсхолдере,
+// чтобы пустое поле не выглядело выключенным уровнем.
+const SOURCE_DEFAULTS = {
+  sport: { min: 100, mid: "", max: "" },
+  japanese: { min: 2, mid: 3, max: 5 },
+};
+
+function sourcePlaceholder(level) {
+  const defaults = SOURCE_DEFAULTS[activityModal.value?.source];
+  if (!defaults) return "";
+  return defaults[level] === "" ? "уровня нет" : `по умолчанию ${defaults[level]}`;
 }
 
 function openActivityModal(skillId, activity) {
@@ -174,6 +221,11 @@ function openActivityModal(skillId, activity) {
     replacementText: activity.replacementText || "",
     replacementFrom: activity.replacementFrom || "",
     replacementTo: activity.replacementTo || "",
+    source: activity.source || "",
+    sourceRef: activity.sourceRef || "",
+    sourceMin: activity.sourceMin ?? "",
+    sourceMid: activity.sourceMid ?? "",
+    sourceMax: activity.sourceMax ?? "",
   };
 }
 
@@ -205,6 +257,12 @@ async function saveActivity() {
     replacementText: f.replacementText.trim() || null,
     replacementFrom: f.replacementFrom || null,
     replacementTo: f.replacementTo || null,
+    source: f.source || "",
+    // Пустой порог — не «ноль», а «взять умолчание источника».
+    sourceRef: f.source ? f.sourceRef || null : null,
+    sourceMin: f.source && f.sourceMin !== "" ? Number(f.sourceMin) : null,
+    sourceMid: f.source && f.sourceMid !== "" ? Number(f.sourceMid) : null,
+    sourceMax: f.source && f.sourceMax !== "" ? Number(f.sourceMax) : null,
   };
   if (f.id) {
     await updateDisciplineActivity(f.id, payload);
@@ -281,6 +339,13 @@ async function setLevel(activity, key, value) {
     replacementText: activity.replacementText || null,
     replacementFrom: activity.replacementFrom || null,
     replacementTo: activity.replacementTo || null,
+    // Ручка активности перезаписывает поля целиком: не пошлём источник —
+    // правка уровня молча его отключит.
+    source: activity.source || "",
+    sourceRef: activity.sourceRef || null,
+    sourceMin: activity.sourceMin ?? null,
+    sourceMid: activity.sourceMid ?? null,
+    sourceMax: activity.sourceMax ?? null,
   });
   await changed();
 }
@@ -368,6 +433,9 @@ async function removeActivity() {
              отличается минимум от среднего, приходилось вспоминать. -->
         <button v-for="a in s.activities" :key="a.id" class="dpe-chip" @click="openActivityModal(s.learningSkillId, a)">
           {{ a.emoji }} {{ a.title }}
+          <i v-if="a.source" class="dpe-chip-auto">
+            ⚙ {{ a.source === "sport" ? "из плана тренировок" : "по сессиям японского" }}
+          </i>
           <i v-if="a.isCounter">· счётчик {{ a.counterGoal }}</i>
           <i v-else class="dpe-chip-levels">
             <span v-if="a.minDesc">мин: {{ a.minDesc }}</span>
@@ -405,6 +473,49 @@ async function removeActivity() {
             <input type="checkbox" v-model="activityModal.isCounter" />
             Счётчик (не влияет на статусы дня)
           </label>
+
+          <!-- Источник: пункт можно считать по данным модуля, а не отмечать
+               руками. Уровни при этом те же — меняется только то, откуда
+               берётся отметка. -->
+          <label>Откуда берётся отметка
+            <select v-model="activityModal.source" class="dpe-input">
+              <option v-for="s in SOURCES" :key="s.key" :value="s.key">{{ s.label }}</option>
+            </select>
+          </label>
+          <div class="dpe-muted dpe-source-hint">{{ activitySource.hint }}</div>
+
+          <template v-if="activityModal.source === 'japanese'">
+            <label>Какое прохождение
+              <select v-model="activityModal.sourceRef" class="dpe-input">
+                <option value="">Все сессии японского</option>
+                <option v-for="st in jpStudies" :key="st.id" :value="st.id">
+                  {{ st.emoji }} {{ st.name }}
+                </option>
+              </select>
+            </label>
+          </template>
+
+          <template v-if="activityModal.source && !activityModal.isCounter">
+            <div class="dpe-section-title">Пороги уровней, {{ activitySource.unit }}</div>
+            <div class="dpe-form-row">
+              <label>Мин
+                <input type="number" min="0" v-model="activityModal.sourceMin" class="dpe-input"
+                  :placeholder="sourcePlaceholder('min')" />
+              </label>
+              <label>Сред
+                <input type="number" min="0" v-model="activityModal.sourceMid" class="dpe-input"
+                  :placeholder="sourcePlaceholder('mid')" />
+              </label>
+              <label>Макс
+                <input type="number" min="0" v-model="activityModal.sourceMax" class="dpe-input"
+                  :placeholder="sourcePlaceholder('max')" />
+              </label>
+            </div>
+            <div class="dpe-muted dpe-source-hint">
+              Уровень выдаётся только из тех, что описаны ниже: порог максимума без
+              описания «Максимум» опустится до среднего.
+            </div>
+          </template>
           <template v-if="activityModal.isCounter">
             <label class="dpe-inline">Цель в месяц
               <input type="number" v-model="activityModal.counterGoal" min="1" max="31" />
@@ -455,6 +566,17 @@ async function removeActivity() {
   color: #7a7f8e;
   font-size: 13px;
   padding: 10px 0;
+}
+
+.dpe-source-hint {
+  line-height: 1.45;
+  margin-top: -4px;
+}
+
+.dpe-chip-auto {
+  color: #8ab4ff;
+  font-style: normal;
+  font-size: 11px;
 }
 
 .dpe-section-title {

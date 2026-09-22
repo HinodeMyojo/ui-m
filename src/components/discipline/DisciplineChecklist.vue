@@ -47,6 +47,32 @@ function entryFor(activityId) {
   return dayData.value?.entries?.find((e) => e.activityId === activityId) || null;
 }
 
+// Активность с источником считает модуль. Отметка «skip» значит, что в этот
+// день он ничего не требовал: тренировок на день не запланировано — и строка
+// уходит из списка требований, а не висит невыполненной.
+function isAuto(a) {
+  return !!a.source;
+}
+
+function autoSkipped(a) {
+  return entryFor(a.id)?.level === "skip";
+}
+
+// Чего не хватает до следующего уровня — чтобы было видно, зачем идти
+// заниматься ещё.
+function autoNote(a) {
+  const entry = entryFor(a.id);
+  const value = entry?.sourceValue || 0;
+  const unit = a.source === "sport" ? "% плана" : "сес.";
+  const next = [
+    { key: "min", at: a.sourceMinEff },
+    { key: "mid", at: a.sourceMidEff },
+    { key: "max", at: a.sourceMaxEff },
+  ].find((l) => l.at > 0 && value < l.at && activityLevels(a).some((x) => x.key === l.key));
+  if (!next) return `${value} ${unit}`;
+  return `${value} ${unit} · до «${LEVEL_LABELS[next.key]}» ещё ${next.at - value}`;
+}
+
 function replacementActive(a) {
   if (!a.replacementText) return false;
   if (a.replacementFrom && props.date < a.replacementFrom) return false;
@@ -74,7 +100,11 @@ const skillRows = computed(() => {
       (r) => r.learningSkillId === skill.learningSkillId,
     );
     const leveled = skill.activities.filter(
-      (a) => !a.isCounter && activityLevels(a).length > 0 && activityScheduled(a),
+      (a) =>
+        !a.isCounter &&
+        activityLevels(a).length > 0 &&
+        activityScheduled(a) &&
+        !autoSkipped(a),
     );
     const counters = skill.activities.filter((a) => a.isCounter);
     const adhocs =
@@ -226,7 +256,8 @@ const unmarkedMin = computed(() => {
   for (const row of skillRows.value) {
     if (!row.active || row.rested) continue;
     for (const a of row.leveled) {
-      if (a.minDesc && !entryFor(a.id)) list.push(a);
+      // Активность с источником закрывается занятием, а не кнопкой.
+      if (a.minDesc && !isAuto(a) && !entryFor(a.id)) list.push(a);
     }
   }
   return list;
@@ -374,18 +405,21 @@ function saveNote() {
       <div v-else-if="row.rested" class="dsc-hint">🌴 Сегодня отдых от навыка</div>
       <template v-else>
         <template v-for="a in row.leveled" :key="a.id">
-          <div class="dsc-activity" @click="cycleLevel(a)">
+          <div class="dsc-activity" :class="{ 'dsc-a-auto': isAuto(a) }"
+            @click="isAuto(a) ? null : cycleLevel(a)">
             <span class="dsc-a-emoji">{{ a.emoji }}</span>
             <span class="dsc-a-title" :class="{ 'dsc-a-done': entryFor(a.id) }">
               <template v-if="replacementActive(a)">🩹 {{ a.replacementText }}</template>
               <template v-else>{{ a.title }}</template>
+              <i v-if="isAuto(a)" class="dsc-a-auto-note">{{ autoNote(a) }}</i>
             </span>
             <span class="dsc-a-levels">
               <span v-for="l in activityLevels(a)" :key="l.key" class="dsc-lvl" :class="[
                 'dsc-lvl-' + l.key,
                 { 'dsc-lvl-active': (entryFor(a.id)?.level || '') === l.key ||
                    LEVEL_ORDER.indexOf(entryFor(a.id)?.level || '') > LEVEL_ORDER.indexOf(l.key) },
-              ]" :title="l.desc" @click.stop="setLevel(a, l.key)">
+              ]" :title="isAuto(a) ? l.desc + ' — считается сама' : l.desc"
+                @click.stop="isAuto(a) ? null : setLevel(a, l.key)">
                 {{ LEVEL_LABELS[l.key] }}
               </span>
             </span>
@@ -570,6 +604,20 @@ function saveNote() {
   cursor: pointer;
   min-height: 34px;
   user-select: none;
+}
+
+/* Строка, которую считает модуль: отмечать её нечем, поэтому она и не ведёт
+   себя как кнопка. */
+.dsc-a-auto {
+  cursor: default;
+}
+
+.dsc-a-auto-note {
+  display: block;
+  color: #7a7f8e;
+  font-size: 10.5px;
+  font-style: normal;
+  margin-top: 1px;
 }
 
 .dsc-activity:hover {
