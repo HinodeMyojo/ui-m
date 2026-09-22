@@ -19,6 +19,7 @@ import RoadmapFeedsTab from "@/components/roadmap/RoadmapFeedsTab.vue";
 import RoadmapCertsTab from "@/components/roadmap/RoadmapCertsTab.vue";
 import RoadmapStatsTab from "@/components/roadmap/RoadmapStatsTab.vue";
 import RoadmapSettingsModal from "@/components/roadmap/RoadmapSettingsModal.vue";
+import RoadmapCatchUp from "@/components/roadmap/RoadmapCatchUp.vue";
 
 // Раздел «Roadmap» — docs/roadmap-module.md (back-m).
 
@@ -38,6 +39,7 @@ const full = ref(null);
 const loadError = ref("");
 const busy = ref(false);
 const settingsOpen = ref(false);
+const catchUpOpen = ref(false);
 
 const current = computed(() => roadmaps.value.find((r) => r.id === currentId.value) || null);
 
@@ -219,6 +221,9 @@ onMounted(load);
       <div v-if="behindLabel" class="rm-kpi">
         <span>Текущий квартал</span>
         <strong class="rm-behind" :class="behindClass">{{ behindLabel }}</strong>
+        <!-- Отставание без ответа «и сколько же читать» — просто укор.
+             Песочница считает это на месте и ничего не сохраняет. -->
+        <button class="rm-btn rm-btn-sm" @click="catchUpOpen = true">🧮 Прикинуть</button>
       </div>
     </div>
 
@@ -243,6 +248,8 @@ onMounted(load);
       <RoadmapCertsTab v-else-if="tab === 'certs'" :roadmap-id="full.id" />
       <RoadmapStatsTab v-else-if="tab === 'stats'" :roadmap="full" />
     </template>
+
+    <RoadmapCatchUp v-if="catchUpOpen && full" :full="full" @close="catchUpOpen = false" />
 
     <RoadmapSettingsModal
       v-if="settingsOpen"

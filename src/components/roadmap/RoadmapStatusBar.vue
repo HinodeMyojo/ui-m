@@ -84,14 +84,21 @@ const weekGap = computed(() => {
   return Math.max(0, target - (data.value.hoursWeek || 0));
 });
 
-// Подсказка у заголовка: какие именно дни попали в неделю.
+// Подсказка у заголовка: какие именно дни попали в неделю и сколько в каждом
+// набежало. Когда недельная цифра кажется сбившейся, только это и помогает —
+// видно, какой день опустел и куда уехали часы.
 const weekRange = computed(() => {
   if (!data.value?.weekStart) return "";
   const from = new Date(data.value.weekStart + "T12:00:00");
   const to = new Date(from);
   to.setDate(to.getDate() + 6);
   const fmt = (d) => d.toLocaleDateString("ru-RU", { day: "numeric", month: "short" });
-  return `Неделя ${fmt(from)} — ${fmt(to)} (Пн–Вс)`;
+  const head = `Неделя ${fmt(from)} — ${fmt(to)} (Пн–Вс)`;
+  const days = data.value.weekDays || [];
+  if (!days.length) return head;
+  const names = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
+  const rows = days.map((d, i) => `${names[i]} ${formatHours(d.hours) || "—"}`);
+  return `${head}\n${rows.join("\n")}`;
 });
 
 onMounted(load);
