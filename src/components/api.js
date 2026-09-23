@@ -1066,7 +1066,8 @@ export async function fetchTaskLogNode(taskId) {
   return workJson(response, "не удалось загрузить сводку");
 }
 
-// data: { taskId, kind, text, url?, statusId?, entryDate?, workItemId? }
+// data: { taskId, kind, text, url?, statusId?, entryDate?, workItemId?,
+//         blockedByTaskId?, blockedByItemId? } — две последние только у блокера
 export async function createTaskLogEntry(data) {
   const response = await authorizedFetch(`${TL}/entries`, {
     method: "POST",
@@ -1075,8 +1076,32 @@ export async function createTaskLogEntry(data) {
   return workJson(response, "не удалось добавить запись");
 }
 
+// data: { text, url, setBlockedBy?, blockedByTaskId?, blockedByItemId? }.
+// Без setBlockedBy ссылка блокера остаётся прежней.
 export async function updateTaskLogEntry(id, data) {
-  await authorizedFetch(`${TL}/entries/${id}`, { method: "PUT", body: JSON.stringify(data) });
+  const response = await authorizedFetch(`${TL}/entries/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+  if (!response.ok) {
+    let message = "не удалось сохранить запись";
+    try {
+      message = (await response.json()).error || message;
+    } catch {
+      /* тело не JSON — оставляем общую формулировку */
+    }
+    throw new Error(message);
+  }
+}
+
+// Что можно назначить блокером: задачи с главной и карточки «Сегодня».
+// taskId — задача, для которой выбирают; её саму не предлагаем.
+export async function fetchBlockerCandidates(q = "", taskId = "") {
+  const params = new URLSearchParams();
+  if (q) params.set("q", q);
+  if (taskId) params.set("taskId", taskId);
+  const response = await authorizedFetch(`${TL}/blocker-candidates?${params}`);
+  return workJson(response, "не удалось найти задачи");
 }
 
 export async function deleteTaskLogEntry(id) {

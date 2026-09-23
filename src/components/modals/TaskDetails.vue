@@ -433,6 +433,12 @@
                       {{ message.resolved ? "вернуть" : "снять" }}
                     </button>
                   </div>
+                  <BlockedByChip
+                    v-if="message.kind === 'blocker' && message.blockedBy"
+                    :blocked-by="message.blockedBy"
+                    :resolved="message.resolved"
+                    @resolve="startResolveBlocker(message)"
+                  />
 
                   <!-- Причина снятия — по желанию, можно снять и без неё -->
                   <div v-if="resolvingMessageId === message.id" class="message-resolve">
@@ -618,6 +624,7 @@
 import SvgIcon from "@jamescoyle/vue-icon";
 import UniversalSubtaskModal from "./UniversalSubtaskModal.vue";
 import TaskLogPanel from "../tasklog/TaskLogPanel.vue";
+import BlockedByChip from "../tasklog/BlockedByChip.vue";
 
 import {
   fetchTasks,

@@ -1,6 +1,8 @@
 <script setup>
 import { ref, computed, watch } from "vue";
 import StatusSetEditor from "./StatusSetEditor.vue";
+import BlockerPicker from "./BlockerPicker.vue";
+import BlockedByChip from "./BlockedByChip.vue";
 import {
   fetchTaskStatuses,
   fetchTaskLogEntries,
@@ -37,9 +39,11 @@ const node = ref(null);
 const loading = ref(false);
 const error = ref("");
 const activeKind = ref(null);
-const draft = ref({ text: "", url: "", statusId: null });
+const draft = ref({ text: "", url: "", statusId: null, blockedBy: null });
 const editingId = ref(null);
 const editText = ref("");
+// Ссылка блокера в режиме правки: { kind, id, title, context } или null.
+const editBlockedBy = ref(null);
 const statusEditorOpen = ref(false);
 const filter = ref("all");
 const resolvingId = ref(null);
@@ -108,7 +112,15 @@ function timeLabel(entry) {
 
 function pickKind(kind) {
   activeKind.value = activeKind.value === kind ? null : kind;
-  draft.value = { text: "", url: "", statusId: node.value?.statusId || null };
+  draft.value = { text: "", url: "", statusId: node.value?.statusId || null, blockedBy: null };
+}
+
+// Ссылка блокера → поля запроса. Отправляется ровно одна из двух.
+function blockedByFields(ref) {
+  return {
+    blockedByTaskId: ref?.kind === "task" ? ref.id : null,
+    blockedByItemId: ref?.kind === "item" ? ref.id : null,
+  };
 }
 
 async function submit() {
@@ -116,7 +128,9 @@ async function submit() {
   const kind = activeKind.value;
   const text = draft.value.text.trim();
   const url = draft.value.url.trim();
-  if (!text && !url) return;
+  // Блокеру со ссылкой на дело текст не обязателен.
+  const linked = kind === "blocker" && draft.value.blockedBy;
+  if (!text && !url && !linked) return;
 
   try {
     if (kind === "status") {
@@ -135,10 +149,11 @@ async function submit() {
         url: kind === "doc" ? url : "",
         entryDate: props.entryDate || undefined,
         workItemId: props.workItemId || undefined,
+        ...(kind === "blocker" ? blockedByFields(draft.value.blockedBy) : {}),
       });
     }
     activeKind.value = null;
-    draft.value = { text: "", url: "", statusId: null };
+    draft.value = { text: "", url: "", statusId: null, blockedBy: null };
     await load();
     emit("changed");
   } catch (e) {
@@ -193,11 +208,18 @@ async function applyResolve(entry, resolved, note) {
 function startEdit(entry) {
   editingId.value = entry.id;
   editText.value = entry.text;
+  const ref = entry.blockedBy;
+  editBlockedBy.value = ref && !ref.missing
+    ? { kind: ref.kind, id: ref.id, title: ref.title, context: ref.context }
+    : null;
 }
 
 async function saveEdit(entry) {
   try {
-    await updateTaskLogEntry(entry.id, { text: editText.value, url: entry.url });
+    const link = entry.kind === "blocker"
+      ? { setBlockedBy: true, ...blockedByFields(editBlockedBy.value) }
+      : {};
+    await updateTaskLogEntry(entry.id, { text: editText.value, url: entry.url, ...link });
     editingId.value = null;
     await load();
   } catch (e) {
@@ -265,11 +287,14 @@ defineExpose({ reload: load });
         class="tlp-input"
         placeholder="https://ссылка на документ"
       />
+      <BlockerPicker v-if="activeKind === 'blocker'" v-model="draft.blockedBy" :task-id="taskId" />
       <textarea
         v-model="draft.text"
         class="tlp-input tlp-area"
         rows="2"
-        :placeholder="kindMeta(activeKind).placeholder"
+        :placeholder="activeKind === 'blocker' && draft.blockedBy
+          ? 'Подробности (необязательно)'
+          : kindMeta(activeKind).placeholder"
         @keydown.ctrl.enter.prevent="submit"
       ></textarea>
       <div class="tlp-form-actions">
@@ -336,6 +361,7 @@ defineExpose({ reload: load });
         </div>
 
         <template v-if="editingId === entry.id">
+          <BlockerPicker v-if="entry.kind === 'blocker'" v-model="editBlockedBy" :task-id="taskId" />
           <textarea v-model="editText" class="tlp-input tlp-area" rows="2"></textarea>
           <div class="tlp-form-actions">
             <button class="tlp-btn" @click="editingId = null">Отмена</button>
@@ -343,6 +369,12 @@ defineExpose({ reload: load });
           </div>
         </template>
         <template v-else>
+          <BlockedByChip
+            v-if="entry.kind === 'blocker' && entry.blockedBy"
+            :blocked-by="entry.blockedBy"
+            :resolved="entry.resolved"
+            @resolve="startResolve(entry)"
+          />
           <div v-if="entry.text" class="tlp-entry-text">{{ entry.text }}</div>
           <a v-if="entry.url" :href="entry.url" target="_blank" rel="noopener" class="tlp-entry-url">
             {{ entry.url }}
