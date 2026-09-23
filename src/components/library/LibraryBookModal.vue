@@ -3,6 +3,7 @@ import { ref, computed, watch, onMounted } from "vue";
 import LibraryCover from "@/components/library/LibraryCover.vue";
 import {
   updatePdfFile,
+  resetPdfProgress,
   linkPdfRoadmapItem,
   deletePdfFile,
   replacePdfFile,
@@ -181,6 +182,27 @@ const planLine = computed(() => {
     : null;
 });
 
+// Читать заново: сбрасываем только результат чтения — позицию, «докуда
+// дочитал», время в читалке и отметку о завершении. Закладки, выделения,
+// карточка и привязка к плану остаются: их заводили руками. Прогресс пункта
+// roadmap'а тоже не трогаем — перечитывание не отменяет пройденного.
+async function resetResult() {
+  const name = props.file.title || props.file.filename;
+  if (!confirm(`Начать «${name}» заново? Прогресс и время чтения обнулятся, закладки и выделения останутся.`)) {
+    return;
+  }
+  busy.value = true;
+  error.value = "";
+  try {
+    await resetPdfProgress(props.file.id);
+    emit("saved");
+  } catch (e) {
+    error.value = e.message || "не удалось сбросить результат";
+  } finally {
+    busy.value = false;
+  }
+}
+
 async function save() {
   busy.value = true;
   error.value = "";
@@ -295,11 +317,8 @@ onMounted(loadRoadmapItems);
           {{ Math.round((file.hoursRead || 0) * 10) / 10 }} ч в читалке
         </div>
         <div class="lb-bar" style="margin-top: 6px">
-          <div
-            class="lb-bar-fill"
-            :class="{ 'is-done': file.finishedAt }"
-            :style="{ width: `${Math.round((file.progress || 0) * 100)}%` }"
-          />
+          <div class="lb-bar-fill" :class="{ 'is-done': file.finishedAt }"
+            :style="{ width: `${Math.round((file.progress || 0) * 100)}%` }" />
         </div>
       </div>
 
@@ -322,21 +341,10 @@ onMounted(loadRoadmapItems);
         </div>
 
         <div class="lb-row">
-          <input
-            v-model="goalPages"
-            class="lb-input lb-goal-input"
-            type="number"
-            min="1"
-            inputmode="numeric"
-            placeholder="стр."
-          />
-          <button
-            v-for="p in presets"
-            :key="p"
-            class="lb-btn is-small"
-            :class="{ 'is-active': goalNum === p }"
-            @click="goalPages = String(p)"
-          >
+          <input v-model="goalPages" class="lb-input lb-goal-input" type="number" min="1" inputmode="numeric"
+            placeholder="стр." />
+          <button v-for="p in presets" :key="p" class="lb-btn is-small" :class="{ 'is-active': goalNum === p }"
+            @click="goalPages = String(p)">
             {{ p === pagesLeft ? `до конца · ${p}` : p }}
           </button>
         </div>
@@ -364,13 +372,9 @@ onMounted(loadRoadmapItems);
 
       <div class="lb-row">
         <button class="lb-btn is-primary" :disabled="busy" @click="save">Сохранить</button>
+        <button class="lb-btn" :disabled="busy" @click="resetResult">Читать заново</button>
         <button v-if="!file.fileMissing" class="lb-btn" @click="emit('read')">📖 Читать</button>
-        <button
-          v-if="!file.fileMissing"
-          class="lb-btn"
-          :disabled="downloading"
-          @click="download"
-        >
+        <button v-if="!file.fileMissing" class="lb-btn" :disabled="downloading" @click="download">
           {{ downloadLabel }}
         </button>
         <button v-else class="lb-btn" :disabled="busy" @click="replaceInput.click()">

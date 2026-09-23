@@ -192,6 +192,9 @@ export async function savePdfFile(file, onProgress) {
 // --- Чтение ---
 
 export const setPdfProgress = (id, body) => jsonRequest(`${PDF}/${id}/progress`, "POST", body);
+// Начать книгу заново: позиция, прогресс и время чтения. Закладки, выделения и
+// привязка к плану остаются.
+export const resetPdfProgress = (id) => jsonRequest(`${PDF}/${id}/progress/reset`, "POST", {});
 export const setPdfCover = (id, dataUrl) => jsonRequest(`${PDF}/${id}/cover`, "PUT", { dataUrl });
 export const setPdfBookmarks = (id, bookmarks) => jsonRequest(`${PDF}/${id}/bookmarks`, "PUT", { bookmarks });
 export const setPdfAnnotations = (id, annotations) =>
