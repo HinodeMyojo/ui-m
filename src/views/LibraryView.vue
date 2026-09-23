@@ -16,6 +16,7 @@ import {
 } from "@/api/pdfFiles.js";
 import LibraryCover from "@/components/library/LibraryCover.vue";
 import LibraryBookModal from "@/components/library/LibraryBookModal.vue";
+import LibraryReadingPlan from "@/components/library/LibraryReadingPlan.vue";
 
 // Библиотека PDF — docs/pdf-library.md (back-m).
 
@@ -256,6 +257,8 @@ onMounted(load);
 
     <div v-if="error" class="lb-error">{{ error }}</div>
     <div v-if="dragging" class="lb-dropzone is-dragging">Отпустите файлы — заберу в библиотеку</div>
+
+    <LibraryReadingPlan v-if="!filter.query" />
 
     <div v-if="continueReading.length && !filter.query" >
       <div class="lb-sub" style="margin-bottom: 6px">Продолжить чтение</div>

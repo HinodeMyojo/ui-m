@@ -18,6 +18,7 @@ import {
   goalPlanLine,
   goalPlanStatus,
 } from "@/utils/readingGoal.js";
+import { planRowForItem, planGoalLine, planTodayLine, planStatusWords } from "@/utils/readingPlan.js";
 
 // Карточка книги: метаданные, полка, теги, привязка к пункту roadmap'а,
 // цель на текущую сессию чтения.
@@ -182,6 +183,22 @@ const planLine = computed(() => {
     : null;
 });
 
+// --- План чтения ---
+//
+// Сохранённая прикидка из песочницы roadmap'а: к какой дате и до какой
+// страницы дочитать. Книга в плане — показываем, что с ней делать сегодня.
+
+const readingPlan = computed(() => roadmapFull.value?.readingPlan || null);
+const planRow = computed(() => planRowForItem(readingPlan.value, roadmapItemId.value));
+const planGoal = computed(() => planGoalLine(readingPlan.value, planRow.value));
+const planToday = computed(() => planTodayLine(readingPlan.value, planRow.value));
+const planState = computed(() => planStatusWords(readingPlan.value));
+
+// Сегодняшняя норма плана как цель на сессию — одной кнопкой.
+function takePlanToday() {
+  if (planRow.value?.todayLeft > 0) goalPages.value = String(planRow.value.todayLeft);
+}
+
 // Читать заново: сбрасываем только результат чтения — позицию, «докуда
 // дочитал», время в читалке и отметку о завершении. Закладки, выделения,
 // карточка и привязка к плану остаются: их заводили руками. Прогресс пункта
@@ -332,6 +349,22 @@ onMounted(loadRoadmapItems);
           Привязанная книга сама двигает прогресс пункта: страницы уходят в план, а время
           в читалке — в сессии чтения.
         </p>
+      </div>
+
+      <div v-if="planRow" class="lb-goal lb-plan">
+        <label class="lb-label" style="margin: 0">📌 План чтения</label>
+        <div class="lb-plan-goal">{{ planGoal }}</div>
+        <div class="lb-plan-today">{{ planToday }}</div>
+        <div class="lb-sub">
+          Весь план: <span :class="`lb-plan-${planState.tone}`">{{ planState.text }}</span>.
+          Поменять или удалить — на странице Roadmap.
+        </div>
+        <div v-if="planRow.todayLeft > 0 && !planRow.finished" class="lb-row">
+          <button class="lb-btn is-small" :class="{ 'is-active': goalNum === planRow.todayLeft }"
+            @click="takePlanToday">
+            🎯 Цель на сессию — {{ planRow.todayLeft }} стр.
+          </button>
+        </div>
       </div>
 
       <div class="lb-goal">

@@ -8,6 +8,19 @@
                 </div>
 
                 <div class="pdf-goal-body">
+                    <div v-if="planRow" class="pdf-goal-plan-box">
+                        <div class="pdf-goal-line">{{ planGoal }}</div>
+                        <div class="pdf-goal-line is-today">{{ planToday }}</div>
+                        <button
+                            v-if="planRow.todayLeft > 0 && !planRow.finished"
+                            class="pdf-goal-preset"
+                            :class="{ active: goalPages === planRow.todayLeft }"
+                            @click="pagesInput = String(planRow.todayLeft)"
+                        >
+                            🎯 норма плана · {{ planRow.todayLeft }}
+                        </button>
+                    </div>
+
                     <div class="pdf-goal-row">
                         <input
                             v-model="pagesInput"
@@ -65,6 +78,7 @@ import { ref, computed, watch } from 'vue';
 import { useSessionGoal } from '@/composables/useReadingGoal.js';
 import { goalTimeLine, goalBookLine, goalPlanLine, goalPlanStatus } from '@/utils/readingGoal.js';
 import { fetchRoadmaps, fetchRoadmapFull } from '@/components/roadmapApi.js';
+import { planRowForItem, planGoalLine, planTodayLine } from '@/utils/readingPlan.js';
 
 // Цель на сессию прямо в читалке — docs/pdf-library.md.
 //
@@ -104,20 +118,19 @@ watch(goalPages, (pages) => {
     else clear();
 });
 
-// План тянем один раз и только когда панель открыли: ради строчки про
-// отставание дёргать roadmap при каждом открытии книги незачем.
+// План тянем только когда панель открыли: ради строчки про отставание дёргать
+// roadmap при каждом открытии книги незачем. Зато при каждом открытии панели —
+// заново: пока читали, норма плана на сегодня успела уменьшиться.
 const roadmapFull = ref(null);
 const planning = ref(false);
-let planLoaded = false;
 
 async function loadPlan() {
-    if (planLoaded || planning.value) return;
+    if (planning.value) return;
     planning.value = true;
     try {
         const list = await fetchRoadmaps();
         const active = list.find((r) => r.isActive) || list[0];
         if (active) roadmapFull.value = await fetchRoadmapFull(active.id);
-        planLoaded = true;
     } catch {
         roadmapFull.value = null;
     } finally {
@@ -138,6 +151,12 @@ watch(
 const timeLine = computed(() => goalTimeLine(props.file, [], goalPages.value));
 const bookLine = computed(() => goalBookLine(props.file, goalPages.value, startPage.value));
 const planStatus = computed(() => goalPlanStatus(roadmapFull.value, props.file?.roadmapItemId));
+
+// Сохранённый план чтения (песочница roadmap'а): докуда дойти сегодня.
+const readingPlan = computed(() => roadmapFull.value?.readingPlan || null);
+const planRow = computed(() => planRowForItem(readingPlan.value, props.file?.roadmapItemId));
+const planGoal = computed(() => planGoalLine(readingPlan.value, planRow.value));
+const planToday = computed(() => planTodayLine(readingPlan.value, planRow.value));
 const planLine = computed(() =>
     goalPlanLine({
         full: roadmapFull.value,

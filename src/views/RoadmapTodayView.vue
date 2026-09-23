@@ -10,6 +10,13 @@ import {
   formatHours,
   roadmapToday,
 } from "@/components/roadmapApi.js";
+import {
+  planDate,
+  daysWord,
+  planRowForItem,
+  planTodayLine,
+  planStatusWords,
+} from "@/utils/readingPlan.js";
 
 // Экран чтения для телефона: только ввод прогресса и часов. Отдельная раскладка,
 // а не адаптив десктопной страницы — на диване нужны крупные кнопки, а не таймлайн.
@@ -81,6 +88,15 @@ function start(item) {
   return run(() => setItemProgress(item.id, { delta: 0, hours: 0.25, date: roadmapToday() }));
 }
 
+// План чтения из песочницы: что по нему читать сегодня.
+function planRow(item) {
+  return planRowForItem(data.value?.readingPlan, item.id);
+}
+
+function readPdf(row) {
+  router.push({ path: "/pdfReader", query: { file: row.pdfFileId } });
+}
+
 onMounted(load);
 </script>
 
@@ -111,6 +127,27 @@ onMounted(load);
       </div>
     </div>
 
+    <div v-if="data?.readingPlan?.items?.length" class="rm-card rmm-block">
+      <div class="rm-widget-head">
+        <strong>📌 План до {{ planDate(data.readingPlan.targetDate) }}</strong>
+        <span>{{ data.readingPlan.pagesDone }}/{{ data.readingPlan.pagesTotal }} стр.</span>
+      </div>
+      <div class="rmm-hero-meta">
+        {{ planStatusWords(data.readingPlan).text }}
+        <template v-if="data.readingPlan.daysLeft && data.readingPlan.status !== 'done'">
+          · осталось {{ daysWord(data.readingPlan.daysLeft) }}, ≈ {{ data.readingPlan.perDay }} стр/день
+        </template>
+      </div>
+      <div v-for="row in data.readingPlan.items" :key="row.itemId" class="rmm-list-item">
+        <span>{{ row.emoji }}</span>
+        <span style="flex: 1">
+          {{ row.title }}
+          <span class="rm-sub" style="display: block">{{ planTodayLine(data.readingPlan, row) }}</span>
+        </span>
+        <button v-if="row.pdfFileId && !row.finished" class="rm-btn is-small" @click="readPdf(row)">📖</button>
+      </div>
+    </div>
+
     <div v-for="item in data?.active || []" :key="item.id" class="rm-card rmm-block rmm-hero">
       <div>
         <div class="rmm-hero-title">{{ item.emoji }} {{ item.title }}</div>
@@ -124,6 +161,10 @@ onMounted(load);
 
       <div class="rm-bar">
         <div class="rm-bar-fill" :style="{ width: percent(item.progress) }" />
+      </div>
+
+      <div v-if="planRow(item)" class="rmm-hero-meta" style="color: #8ab4ff">
+        📌 {{ planTodayLine(data.readingPlan, planRow(item)) }}
       </div>
 
       <div v-if="item.progressTotal" class="rmm-pages">

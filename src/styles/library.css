@@ -542,3 +542,22 @@
     max-width: 112px;
   }
 }
+
+/* План чтения в карточке книги */
+.lb-plan-goal {
+  font-size: 13.5px;
+}
+
+.lb-plan-today {
+  font-size: 13px;
+  color: #8ab4ff;
+}
+
+.lb-plan-late {
+  color: #ff9ba0;
+}
+
+.lb-plan-ok,
+.lb-plan-ahead {
+  color: #a8e59a;
+}

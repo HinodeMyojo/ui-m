@@ -61,6 +61,12 @@ export const fetchRoadmapToday = (today = roadmapToday()) =>
   request(`${RM}/today?today=${today}`);
 export const seedRoadmap = () => post(`${RM}/seed`);
 
+// План чтения — сохранённая прикидка песочницы, один на roadmap. Сам план
+// приезжает в fetchRoadmapFull полем readingPlan.
+export const saveReadingPlan = (roadmapId, body) =>
+  put(`${RM}/${roadmapId}/reading-plan`, { today: roadmapToday(), ...body });
+export const deleteReadingPlan = (roadmapId) => del(`${RM}/${roadmapId}/reading-plan`);
+
 // --- Кварталы и бенчмарки ---
 
 export const createQuarter = (roadmapId, body) => post(`${RM}/${roadmapId}/quarters`, body);

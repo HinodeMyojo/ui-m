@@ -20,6 +20,7 @@ import RoadmapCertsTab from "@/components/roadmap/RoadmapCertsTab.vue";
 import RoadmapStatsTab from "@/components/roadmap/RoadmapStatsTab.vue";
 import RoadmapSettingsModal from "@/components/roadmap/RoadmapSettingsModal.vue";
 import RoadmapCatchUp from "@/components/roadmap/RoadmapCatchUp.vue";
+import RoadmapReadingPlanCard from "@/components/roadmap/RoadmapReadingPlanCard.vue";
 
 // Раздел «Roadmap» — docs/roadmap-module.md (back-m).
 
@@ -40,6 +41,18 @@ const loadError = ref("");
 const busy = ref(false);
 const settingsOpen = ref(false);
 const catchUpOpen = ref(false);
+// new — чистая прикидка, edit — правка сохранённого плана чтения, redo — заново.
+const catchUpMode = ref("new");
+
+function openCatchUp(mode) {
+  catchUpMode.value = mode;
+  catchUpOpen.value = true;
+}
+
+async function onPlanSaved() {
+  catchUpOpen.value = false;
+  await loadFull();
+}
 
 const current = computed(() => roadmaps.value.find((r) => r.id === currentId.value) || null);
 
@@ -222,8 +235,9 @@ onMounted(load);
         <span>Текущий квартал</span>
         <strong class="rm-behind" :class="behindClass">{{ behindLabel }}</strong>
         <!-- Отставание без ответа «и сколько же читать» — просто укор.
-             Песочница считает это на месте и ничего не сохраняет. -->
-        <button class="rm-btn rm-btn-sm" @click="catchUpOpen = true">🧮 Прикинуть</button>
+             Песочница считает это на месте; понравившуюся прикидку можно
+             сохранить планом чтения. -->
+        <button class="rm-btn rm-btn-sm" @click="openCatchUp('new')">🧮 Прикинуть</button>
       </div>
     </div>
 
@@ -242,6 +256,14 @@ onMounted(load);
       </div>
     </div>
 
+    <RoadmapReadingPlanCard
+      v-if="full && full.readingPlan"
+      :roadmap="full"
+      @edit="openCatchUp('edit')"
+      @redo="openCatchUp('redo')"
+      @changed="loadFull"
+    />
+
     <template v-if="full">
       <RoadmapPlanTab v-if="tab === 'plan'" :roadmap="full" @changed="loadFull" />
       <RoadmapFeedsTab v-else-if="tab === 'feeds'" :roadmap-id="full.id" />
@@ -249,7 +271,13 @@ onMounted(load);
       <RoadmapStatsTab v-else-if="tab === 'stats'" :roadmap="full" />
     </template>
 
-    <RoadmapCatchUp v-if="catchUpOpen && full" :full="full" @close="catchUpOpen = false" />
+    <RoadmapCatchUp
+      v-if="catchUpOpen && full"
+      :full="full"
+      :mode="catchUpMode"
+      @close="catchUpOpen = false"
+      @saved="onPlanSaved"
+    />
 
     <RoadmapSettingsModal
       v-if="settingsOpen"

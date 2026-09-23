@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed, watch, onMounted } from "vue";
 import { getPdfFiles } from "@/api/pdfFiles.js";
+import { saveReadingPlan } from "@/components/roadmapApi.js";
 import { pagesPerHour, formatDuration, behindWords } from "@/utils/readingGoal.js";
 import {
   catchUpCandidates,
@@ -12,12 +13,20 @@ import {
 } from "@/utils/catchUpPlan.js";
 
 // Песочница: прикинуть, сколько читать в день, чтобы к выбранной дате
-// сравняться с графиком. Ничего не сохраняет и ничего не меняет в плане —
-// это справка, а не обязательство.
+// сравняться с графиком. Сама по себе ничего не меняет — справка. Прикидку,
+// которая понравилась, можно сохранить планом чтения: тогда её видно на
+// странице roadmap'а, в библиотеке и в читалке.
+//
+// mode: new — чистая прикидка; edit — правка сохранённого плана (подставляем
+// его и сохраняем с прежней точкой отсчёта); redo — переделать с нуля.
 const props = defineProps({
   full: { type: Object, required: true },
+  mode: { type: String, default: "new" },
 });
-const emit = defineEmits(["close"]);
+const emit = defineEmits(["close", "saved"]);
+
+const existingPlan = computed(() => props.full?.readingPlan || null);
+const editing = computed(() => props.mode === "edit" && !!existingPlan.value);
 
 const quarters = computed(() =>
   (props.full?.quarters || []).filter((q) => (q.items || []).length > 0),
@@ -31,7 +40,8 @@ watch(
   quarters,
   (list) => {
     if (quarterId.value) return;
-    quarterId.value = (list.find((q) => q.isCurrent) || list[0])?.id || null;
+    const planQuarter = editing.value && list.find((q) => q.id === existingPlan.value.quarterId);
+    quarterId.value = (planQuarter || list.find((q) => q.isCurrent) || list[0])?.id || null;
   },
   { immediate: true },
 );
@@ -47,6 +57,19 @@ watch(quarter, (q) => {
 
 const selected = ref([]);
 const pages = ref({});
+
+// Правка плана: подставляем его книги. Страницы в песочнице считаются от
+// текущей позиции, поэтому берём остаток до цели, а не весь объём плана.
+if (editing.value) {
+  const plan = existingPlan.value;
+  if (plan.targetDate >= todayIso()) targetDate.value = plan.targetDate;
+  const known = new Set(candidates.value.map((c) => c.id));
+  for (const row of plan.items || []) {
+    if (!known.has(row.itemId) || row.pagesLeft <= 0) continue;
+    selected.value.push(row.itemId);
+    pages.value[row.itemId] = row.pagesLeft;
+  }
+}
 
 function toggle(id) {
   const idx = selected.value.indexOf(id);
@@ -97,13 +120,42 @@ const targetPct = computed(() => Math.round(timeProgressAt(quarter.value, target
 function pct(value) {
   return `${Math.round((value || 0) * 100)}%`;
 }
+
+const saving = ref(false);
+const saveError = ref("");
+
+async function saveAsPlan() {
+  if (!result.value.pagesTotal) return;
+  // «Переделать» уже и есть согласие заменить; спрашиваем только из чистой песочницы.
+  if (existingPlan.value && props.mode === "new" &&
+    !confirm("План чтения уже есть. Заменить его этой прикидкой?")) {
+    return;
+  }
+  saving.value = true;
+  saveError.value = "";
+  try {
+    await saveReadingPlan(props.full.id, {
+      quarterId: quarter.value?.id || null,
+      targetDate: targetDate.value,
+      restart: !editing.value,
+      items: result.value.rows.map((row) => ({ itemId: row.id, pages: row.pages })),
+    });
+    emit("saved");
+  } catch (e) {
+    saveError.value = e.message || "не удалось сохранить план";
+  } finally {
+    saving.value = false;
+  }
+}
 </script>
 
 <template>
   <div class="rcu-overlay" @click.self="emit('close')">
     <div class="rcu">
       <div class="rcu-head">
-        <b>🧮 Песочница: как догнать график</b>
+        <b v-if="editing">✏️ Правка плана чтения</b>
+        <b v-else-if="mode === 'redo'">🔁 План чтения заново</b>
+        <b v-else>🧮 Песочница: как догнать график</b>
         <button class="rm-btn" @click="emit('close')">✕</button>
       </div>
 
@@ -185,9 +237,28 @@ function pct(value) {
             </template>
           </div>
           <div class="rcu-dim">
-            Темп {{ Math.round(rate.value) }} стр/ч. Это прикидка: ничего не сохраняется
-            и на план не влияет.
+            Темп {{ Math.round(rate.value) }} стр/ч.
+            <template v-if="editing">
+              Отсчёт плана остаётся с {{ existingPlan.startDate }} — прочитанное с тех пор
+              не обнулится.
+            </template>
+            <template v-else>
+              Пока не сохранишь, это просто прикидка.
+            </template>
           </div>
+        </div>
+
+        <div class="rcu-save">
+          <button class="rm-btn is-primary" :disabled="!result.pagesTotal || saving" @click="saveAsPlan">
+            {{ saving ? "Сохраняю…" : editing ? "💾 Сохранить изменения" : "📌 Сохранить как план чтения" }}
+          </button>
+          <span v-if="existingPlan && !editing" class="rcu-dim">
+            заменит текущий план до {{ existingPlan.targetDate }}
+          </span>
+          <span v-else-if="!editing" class="rcu-dim">
+            план появится здесь, в библиотеке и в читалке
+          </span>
+          <span v-if="saveError" class="rcu-error">{{ saveError }}</span>
         </div>
       </template>
     </div>
@@ -359,6 +430,22 @@ function pct(value) {
 .rcu-total-line.is-ok,
 .rcu-total-line.is-ahead {
   color: #a8e59a;
+}
+
+.rcu-save {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.rcu-save .rcu-dim {
+  display: inline;
+}
+
+.rcu-error {
+  color: #ff9ba0;
+  font-size: 12px;
 }
 
 .rcu-empty {
