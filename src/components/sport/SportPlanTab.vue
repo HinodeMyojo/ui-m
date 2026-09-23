@@ -93,6 +93,23 @@ async function saveWeekPlan() {
   }
 }
 
+// Расписание программы по шаблонам: «Пресс — каждый день · Пробежка — Пн Ср Пт».
+// По дням недели читать неудобно, когда шаблонов на день несколько.
+const WD = ["", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
+
+function programSchedule(program) {
+  const byTemplate = new Map();
+  for (const d of program.days || []) {
+    const key = d.templateTitle || "без шаблона";
+    if (!byTemplate.has(key)) byTemplate.set(key, new Set());
+    byTemplate.get(key).add(d.weekday);
+  }
+  return [...byTemplate].map(([title, set]) => {
+    const days = [...set].sort();
+    return { title, days: days.length === 7 ? "каждый день" : days.map((n) => WD[n]).join(" ") };
+  });
+}
+
 function addWeekItem() {
   weekPlan.value.items = weekPlan.value.items || [];
   weekPlan.value.items.push({ muscleGroup: "chest", targetSets: 10 });
@@ -359,8 +376,8 @@ onMounted(load);
             </div>
           </div>
           <div class="sp-muted">
-            <template v-for="d in p.days" :key="d.id">
-              {{ ["", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"][d.weekday] }} — {{ d.templateTitle }}·
+            <template v-for="row in programSchedule(p)" :key="row.title">
+              {{ row.title }} — {{ row.days }} ·
             </template>
             <template v-if="p.progressionType !== 'none'">
               прогрессия {{ p.progressionStep > 0 ? "+" : "" }}{{ p.progressionStep }}

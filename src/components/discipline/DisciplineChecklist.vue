@@ -6,12 +6,16 @@ import {
   setDisciplineDayNote,
 } from "../api.js";
 import { fetchRoadmaps, fetchRoadmapFull } from "@/components/roadmapApi.js";
+import { fetchSportWorkouts } from "@/components/sportApi.js";
+import { useRouter } from "vue-router";
 
 const props = defineProps({
   month: { type: Object, required: true },
   date: { type: String, required: true },
 });
 const emit = defineEmits(["changed"]);
+
+const router = useRouter();
 
 const LEVEL_LABELS = { min: "Мин", mid: "Сред", max: "Макс" };
 const LEVEL_ORDER = ["min", "mid", "max"];
@@ -63,7 +67,7 @@ function autoSkipped(a) {
 function autoNote(a) {
   const entry = entryFor(a.id);
   const value = entry?.sourceValue || 0;
-  const unit = a.source === "sport" ? "% плана" : "сес.";
+  const unit = a.source === "sport" ? "% шаблонов" : "сес.";
   const next = [
     { key: "min", at: a.sourceMinEff },
     { key: "mid", at: a.sourceMidEff },
@@ -71,6 +75,46 @@ function autoNote(a) {
   ].find((l) => l.at > 0 && value < l.at && activityLevels(a).some((x) => x.key === l.key));
   if (!next) return `${value} ${unit}`;
   return `${value} ${unit} · до «${LEVEL_LABELS[next.key]}» ещё ${next.at - value}`;
+}
+
+// Шаблоны тренировок на день — из модуля спорта. Показываем их под спортивной
+// строкой: уровень считается по доле закрытых, и видно, какие ещё остались.
+const dayWorkouts = ref([]);
+const hasSportSource = computed(() =>
+  (props.month?.skills || []).some((s) => s.activities.some((a) => a.source === "sport")),
+);
+
+async function loadDayWorkouts() {
+  if (!hasSportSource.value) {
+    dayWorkouts.value = [];
+    return;
+  }
+  const date = props.date;
+  try {
+    const list = await fetchSportWorkouts({ from: date, to: date });
+    if (date === props.date) dayWorkouts.value = list || [];
+  } catch {
+    dayWorkouts.value = [];
+  }
+}
+
+watch(() => [props.date, hasSportSource.value, props.month], loadDayWorkouts, { immediate: true });
+
+const WORKOUT_MARKS = { done: "✅", partial: "◐", skipped: "✖", planned: "○" };
+
+function workoutMark(w) {
+  return WORKOUT_MARKS[w.status] || "○";
+}
+
+function openSport() {
+  router.push(props.date === todayStr() ? "/sport/today" : "/sport");
+}
+
+function todayStr() {
+  const now = new Date();
+  const m = String(now.getMonth() + 1).padStart(2, "0");
+  const d = String(now.getDate()).padStart(2, "0");
+  return `${now.getFullYear()}-${m}-${d}`;
 }
 
 function replacementActive(a) {
@@ -430,6 +474,16 @@ function saveNote() {
             </select>
           </div>
 
+          <!-- Шаблоны тренировок дня: из них и складывается уровень спорта -->
+          <div v-if="a.source === 'sport' && dayWorkouts.length" class="dsc-workouts" @click.stop="openSport">
+            <span v-for="w in dayWorkouts" :key="w.id" class="dsc-workout" :class="'is-' + w.status">
+              {{ workoutMark(w) }} {{ w.title }}
+            </span>
+            <span class="dsc-workout-count">
+              {{ dayWorkouts.filter((w) => w.status === "done").length }} из {{ dayWorkouts.length }} →
+            </span>
+          </div>
+
           <!-- Какой материал читал: отметка становится сессией чтения в roadmap'е -->
           <div v-if="entryFor(a.id) && isReading(a) && roadmapItems.length" class="dsc-roadmap"
             @click.stop>
@@ -618,6 +672,37 @@ function saveNote() {
   font-size: 10.5px;
   font-style: normal;
   margin-top: 1px;
+}
+
+.dsc-workouts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+  padding: 2px 8px 6px 38px;
+  cursor: pointer;
+}
+
+.dsc-workout {
+  font-size: 11.5px;
+  padding: 2px 7px;
+  border-radius: 10px;
+  background: #22242d;
+  color: #cfd3e0;
+}
+
+.dsc-workout.is-done {
+  color: #a8e59a;
+}
+
+.dsc-workout.is-skipped {
+  color: #ff9ba0;
+  text-decoration: line-through;
+}
+
+.dsc-workout-count {
+  font-size: 11px;
+  color: #7a7f8e;
+  align-self: center;
 }
 
 .dsc-activity:hover {
