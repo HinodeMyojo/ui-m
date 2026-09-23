@@ -77,6 +77,9 @@ const svg = ref(null);
 const box = ref(null);
 const refPoints = ref([]); // точки эталонных черт
 const zones = ref([]); // прямоугольники ключей для третьей ступени
+// Цвет зоны у черт вне разметки ключей: нейтральный, чтобы не выдавать себя
+// за ключ.
+const ZONE_PLAIN = "#8f95a6";
 const doneCount = ref(0); // сколько черт уже принято
 const drawing = ref(false);
 const current = ref([]); // текущий жест в координатах KanjiVG
@@ -95,6 +98,13 @@ const rejected = ref("");
 const showOutline = computed(() => props.stage === 0 || props.stage <= JP_WRITE_OUTLINE);
 const showColors = computed(() => props.stage === JP_WRITE_BY_KEYS && props.groups.length > 0);
 const showZones = computed(() => props.stage === JP_WRITE_ZONES && zones.value.length > 0);
+// Без разметки ключей видна только зона текущей черты: все сразу нарисовали бы
+// сам знак прямоугольниками.
+const visibleZones = computed(() =>
+  zoneGroups.value.perStroke
+    ? zones.value.filter((z) => z.strokes.includes(doneCount.value))
+    : zones.value,
+);
 
 // Черту показываем и на слепых ступенях, если она не даётся: это помощь, а
 // не отмена задания — следующую снова пишут по памяти.
@@ -149,6 +159,44 @@ async function measure() {
   zones.value = measureZones(boxes);
 }
 
+// Группы для зон. Разметка ключей из KanjiVG неполная, и зоны по ней врали
+// (23.09.2026, 半 = 丶:0;二:2;十:3-4): вторая точка не попадала ни в одну
+// группу и оставалась без зоны, а у половины знаков групп нет вовсе — там
+// ступень «по зонам» не подсказывала ничего и была той же «по памяти».
+//
+// Поэтому: черта принадлежит первой группе, где встретилась (ключи KanjiVG
+// перекрываются — нижняя черта 二 у 半 заодно и в 十); черты вне групп
+// собираются в свои зоны подряд идущими кусками; у знака без разметки зона —
+// у каждой черты своя, и видна только текущая: «где», но не «что».
+const zoneGroups = computed(() => {
+  const n = props.paths.length;
+  const owner = new Array(n).fill(-1);
+  const groups = [];
+  props.groups.forEach((group, gi) => {
+    const strokes = (group.strokes || []).filter((i) => i >= 0 && i < n && owner[i] === -1);
+    if (!strokes.length) return;
+    strokes.forEach((i) => (owner[i] = groups.length));
+    groups.push({ char: group.char, strokes, color: JP_GROUP_COLORS[gi % JP_GROUP_COLORS.length] });
+  });
+  if (!groups.length) {
+    return {
+      perStroke: true,
+      groups: Array.from({ length: n }, (_, i) => ({ char: "", strokes: [i], color: ZONE_PLAIN })),
+    };
+  }
+  let run = [];
+  const flush = () => {
+    if (run.length) groups.push({ char: "", strokes: run, color: ZONE_PLAIN });
+    run = [];
+  };
+  for (let i = 0; i < n; i++) {
+    if (owner[i] === -1) run.push(i);
+    else flush();
+  }
+  flush();
+  return { perStroke: false, groups };
+});
+
 // Зоны третьей ступени — охватывающие прямоугольники ключей. Считаются по
 // настоящим границам черт (getBBox), а не по разметке: где именно на квадрате
 // стоит ключ, знает только начертание.
@@ -158,7 +206,7 @@ async function measure() {
 function measureZones(boxes) {
   const PAD = 3;
   const out = [];
-  props.groups.forEach((group, gi) => {
+  zoneGroups.value.groups.forEach((group) => {
     let x1 = Infinity;
     let y1 = Infinity;
     let x2 = -Infinity;
@@ -174,7 +222,8 @@ function measureZones(boxes) {
     if (!Number.isFinite(x1) || !Number.isFinite(x2)) return;
     out.push({
       char: group.char,
-      color: JP_GROUP_COLORS[gi % JP_GROUP_COLORS.length],
+      strokes: group.strokes,
+      color: group.color,
       x: Math.max(0, x1 - PAD),
       y: Math.max(0, y1 - PAD),
       w: Math.min(JP_STROKE_BOX, x2 - x1 + PAD * 2),
@@ -430,8 +479,9 @@ defineExpose({ reset });
              стоит, — это подсказка про расположение, а не про начертание. -->
         <g v-if="showZones" class="jtc-zones">
           <rect
-            v-for="z in zones"
-            :key="`zone-${z.char}`"
+            v-for="(z, zi) in visibleZones"
+            :key="`zone-${zi}-${z.strokes[0]}`"
+            :class="{ 'is-now': z.strokes.includes(doneCount) }"
             :x="z.x"
             :y="z.y"
             :width="z.w"
@@ -572,6 +622,13 @@ defineExpose({ reset });
   stroke-width: 1;
   stroke-dasharray: 3 3;
   stroke-opacity: 0.55;
+}
+
+/* Зона, в которой пишется следующая черта, — ярче: видно, куда вести палец. */
+.jtc-zones rect.is-now {
+  fill-opacity: 0.16;
+  stroke-width: 1.6;
+  stroke-opacity: 0.95;
 }
 
 .jtc-stairs {

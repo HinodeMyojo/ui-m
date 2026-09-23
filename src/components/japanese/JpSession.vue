@@ -216,9 +216,36 @@ function studyAhead() {
 // формально есть, а разрешения у приложения нет.
 const noSpeech = ref(false);
 
+// «Сейчас не могу говорить» — на всю сессию, а не на одну карточку: если
+// нельзя вслух сейчас, то и через минуту нельзя. Живёт во вкладке
+// (sessionStorage): закрыл мини-апп — в следующий раз микрофон предложат снова.
+const QUIET_KEY = "jp.quietSession";
+function readQuiet() {
+  try {
+    return sessionStorage.getItem(QUIET_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+const quiet = ref(readQuiet());
+function setQuiet(value) {
+  quiet.value = value;
+  try {
+    if (value) sessionStorage.setItem(QUIET_KEY, "1");
+    else sessionStorage.removeItem(QUIET_KEY);
+  } catch {
+    /* без хранилища тишина доживёт до конца этой страницы */
+  }
+}
+// Вопрос «вслух», заменённый вводом из-за тишины: на нём показываем, как
+// вернуть голос.
+const quietSwapped = computed(
+  () => card.value?.mechanic === JP_MECH_SPEAK && quiet.value && !noSpeech.value && canHearJapanese(),
+);
+
 const mechanic = computed(() => {
   const m = card.value?.mechanic;
-  if (m === JP_MECH_SPEAK && (noSpeech.value || !canHearJapanese())) return JP_MECH_READING;
+  if (m === JP_MECH_SPEAK && (noSpeech.value || quiet.value || !canHearJapanese())) return JP_MECH_READING;
   return m;
 });
 
@@ -1139,10 +1166,14 @@ onBeforeUnmount(() => {
               :also-accept="speakAccept"
               @done="reveal($event.verdict)"
               @unavailable="speechUnavailable"
+              @quiet="setQuiet(true)"
             />
           </template>
 
           <template v-else-if="mechanic === JP_MECH_READING">
+            <button v-if="quietSwapped" class="jps-unquiet" @click="setQuiet(false)">
+              🤫 отвечаю молча · 🎙 снова могу говорить
+            </button>
             <div class="jps-typed" :class="{ 'is-empty': !typed }">{{ typed || "…" }}</div>
             <JpKanaKeyboard v-model="typed" />
             <button class="m-btn m-btn-accent jps-wide" :disabled="!canSubmit" @click="submit">
@@ -1706,6 +1737,16 @@ onBeforeUnmount(() => {
 
 .jps-glyph:active {
   background: #2b2e39;
+}
+
+.jps-unquiet {
+  align-self: center;
+  background: transparent;
+  border: 0;
+  color: var(--m-muted, #8f95a6);
+  font-size: 12.5px;
+  padding: 2px 6px;
+  cursor: pointer;
 }
 
 .jps-typed {

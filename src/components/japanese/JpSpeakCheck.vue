@@ -25,7 +25,9 @@ const props = defineProps({
 });
 // unavailable — распознавания в этом браузере нет: карточку надо отдать другой
 // механике, а не засчитывать провал.
-const emit = defineEmits(["done", "unavailable"]);
+// quiet — «сейчас не могу говорить» (метро, люди рядом): это не незнание, и
+// провалом считаться не должно, иначе карточка крутится по кругу.
+const emit = defineEmits(["done", "unavailable", "quiet"]);
 
 const listening = ref(false);
 const heard = ref("");
@@ -131,8 +133,11 @@ onBeforeUnmount(stop);
     </button>
     <div v-if="heard" class="jsp-heard">услышал: {{ heard }}</div>
     <div v-if="error" class="jsp-error">{{ error }}</div>
+    <button class="jsp-quiet" @click="stop(); emit('quiet')">
+      🤫 Сейчас не могу говорить
+    </button>
     <button class="jsp-skip" @click="emit('done', { verdict: 'wrong', heard: '' })">
-      Не получается — показать ответ
+      Не знаю — показать ответ
     </button>
   </div>
 </template>
@@ -143,6 +148,20 @@ onBeforeUnmount(stop);
   flex-direction: column;
   gap: 8px;
   align-items: center;
+}
+
+/* «Не могу говорить» — полноценная кнопка, а не мелкая ссылка: её ищут
+   быстро, в вагоне метро, одной рукой. */
+.jsp-quiet {
+  width: 100%;
+  min-height: 46px;
+  border-radius: 12px;
+  border: 1px solid var(--m-line, #262933);
+  background: transparent;
+  color: var(--m-text, #e6e8ef);
+  font-size: 15px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
 }
 
 /* Кнопка микрофона крупная: её жмут в движении, часто одной рукой. */
