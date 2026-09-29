@@ -842,6 +842,10 @@ function closeTimeStats() {
         </div>
       </div>
     </div>
+    <!-- Дисциплина — правая колонка сразу под шапкой: полосы плана дня и
+         roadmap'а живут слева вместе с календарём, справа не пустеет. -->
+    <div class="body-wrap">
+    <div class="body-main">
     <!-- План дня по часам: работать, код руками, читать -->
     <DayHoursBar />
     <!-- Отставание по roadmap'у — сразу под шапкой, docs/roadmap-module.md -->
@@ -850,7 +854,6 @@ function closeTimeStats() {
          обещал сделать. docs/venture-module.md -->
     <VentureDraftsBar @taken="reloadTasksForCurrentDate" />
 
-    <div class="body-wrap">
     <div class="body">
       <div class="columns-container" ref="calendarRef" @dragover="handleDragOver" @drop="handleDrop">
         <div v-for="col in daysInMonth" :key="col" ref="columnRef" class="column active" :class="{
@@ -969,6 +972,7 @@ function closeTimeStats() {
           }"></div>
         </div>
       </div>
+    </div>
     </div>
     <DisciplineTracker />
     </div>
@@ -1248,9 +1252,15 @@ function closeTimeStats() {
   min-height: 0;
 }
 
-.body-wrap > .body {
+.body-main {
   flex: 1;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.body-main > .body {
+  flex: 1;
 }
 
 .body {

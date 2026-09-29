@@ -106,13 +106,21 @@ onMounted(load);
 
 <template>
   <section v-if="data" class="rmb" :class="'is-' + tone">
-    <router-link class="rmb-title" to="/roadmap">
-      <span class="rmb-emoji">{{ data.emoji }}</span>
-      <span class="rmb-title-text">
-        <b>{{ data.title }}</b>
-        <small>Q{{ data.quarterNumber }} · {{ data.quarterTitle }}</small>
-      </span>
-    </router-link>
+    <!-- Ссылки — под названием, а не отдельным хвостом в правом краю полосы:
+         так они читаются как часть roadmap'а. -->
+    <div class="rmb-head">
+      <router-link class="rmb-title" to="/roadmap">
+        <span class="rmb-emoji">{{ data.emoji }}</span>
+        <span class="rmb-title-text">
+          <b>{{ data.title }}</b>
+          <small>Q{{ data.quarterNumber }} · {{ data.quarterTitle }}</small>
+        </span>
+      </router-link>
+      <div class="rmb-links">
+        <router-link class="rmb-link" to="/roadmap">Раздел</router-link>
+        <router-link class="rmb-link" to="/roadmap/today">📱 Чтение</router-link>
+      </div>
+    </div>
 
     <div class="rmb-status">
       <span class="rmb-status-value">{{ statusValue }}</span>
@@ -165,11 +173,6 @@ onMounted(load);
         <button class="rmb-ok" :disabled="busy" @click="savePages(item)">✓</button>
       </div>
     </div>
-
-    <div class="rmb-links">
-      <router-link class="rmb-link" to="/roadmap">Раздел</router-link>
-      <router-link class="rmb-link" to="/roadmap/today">📱 Чтение</router-link>
-    </div>
   </section>
 </template>
 
@@ -206,6 +209,14 @@ onMounted(load);
   --rmb-tone: #63c94f;
 }
 
+.rmb-head {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+  flex: 0 1 260px;
+}
+
 .rmb-title {
   display: flex;
   align-items: center;
@@ -213,10 +224,12 @@ onMounted(load);
   color: inherit;
   text-decoration: none;
   min-width: 0;
-  flex: 0 1 260px;
 }
 
 .rmb-emoji {
+  width: 24px;
+  flex: 0 0 24px;
+  text-align: center;
   font-size: 20px;
 }
 
@@ -406,13 +419,24 @@ onMounted(load);
   font-size: 12px;
 }
 
+/* Отступ = ширина эмодзи + зазор: ссылки встают ровно под текстом названия. */
 .rmb-links {
   display: flex;
   gap: 6px;
-  flex: 0 0 auto;
+  padding-left: 32px;
 }
 
-/* Планшет: ссылки и карточки чтения уезжают на вторую строку, цифра остаётся. */
+.rmb-links .rmb-link {
+  padding: 1px 8px;
+  font-size: 11px;
+  color: #a8adbd;
+}
+
+.rmb-links .rmb-link:hover {
+  color: #e8eaf2;
+}
+
+/* Планшет: карточки чтения уезжают на вторую строку, цифра остаётся. */
 @media (max-width: 1200px) {
   .rmb {
     flex-wrap: wrap;
@@ -431,7 +455,7 @@ onMounted(load);
     gap: 10px;
   }
 
-  .rmb-title {
+  .rmb-head {
     flex: 1 1 100%;
   }
 
@@ -447,10 +471,6 @@ onMounted(load);
   }
 
   .rmb-gauges {
-    flex: 1 1 100%;
-  }
-
-  .rmb-links {
     flex: 1 1 100%;
   }
 }
