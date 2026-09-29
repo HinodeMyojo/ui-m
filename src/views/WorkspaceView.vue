@@ -204,27 +204,43 @@ async function addItem() {
   }
 }
 
-// Перенос карточки в общем виде: статус берётся из колонки, место в дне — из
-// точки, куда её бросили. Меняем список сразу, не дожидаясь сервера: карточка,
-// которая на полсекунды прыгает обратно, ощущается сломанной.
-async function moveItem({ id, status, beforeId }) {
-  const list = day.value?.items;
-  if (!list) return;
-  const index = list.findIndex((i) => i.id === id);
-  if (index < 0) return;
-  const item = list[index];
-  const previous = item.status;
+// Порядок доски: карточки дня вперемешку с подзадачами с главной. Доска
+// считает его сама и отдаёт целиком; здесь он применяется сразу, не дожидаясь
+// сервера: карточка, которая на полсекунды прыгает обратно, ощущается сломанной.
+function applyBoardOrder(order) {
+  if (!day.value) return;
+  day.value.boardOrder = order;
+  const rank = new Map(order.map((id, i) => [id, i]));
+  day.value.items = [...(day.value.items || [])].sort(
+    (a, b) => (rank.get(a.id) ?? Infinity) - (rank.get(b.id) ?? Infinity),
+  );
+}
 
+// Перенос карточки в общем виде: статус берётся из колонки, место в дне — из
+// точки, куда её бросили.
+async function moveItem({ id, status, order }) {
+  const item = day.value?.items?.find((i) => i.id === id);
+  if (!item) return;
+  const previous = item.status;
   item.status = status;
-  list.splice(index, 1);
-  const at = beforeId ? list.findIndex((i) => i.id === beforeId) : -1;
-  if (at < 0) list.push(item);
-  else list.splice(at, 0, item);
+  applyBoardOrder(order);
 
   try {
     if (previous !== status) await setWorkItemStatus(id, { status, closeTasks: false });
-    await reorderWorkItems(date.value, list.map((i) => i.id));
+    await reorderWorkItems(date.value, order);
     await load();
+  } catch (e) {
+    error.value = e.message;
+    await load();
+  }
+}
+
+// Подзадачу с главной передвинули внутри доски. Статус она меняет сама (это
+// статус задачи на главной), сюда приходит только новый порядок.
+async function reorderBoard({ order }) {
+  applyBoardOrder(order);
+  try {
+    await reorderWorkItems(date.value, order);
   } catch (e) {
     error.value = e.message;
     await load();
@@ -293,10 +309,22 @@ function timeKey(item) {
   return 100000;
 }
 
+// Подзадача с главной встаёт по своему сроку: сегодняшняя — по времени
+// дедлайна, будущие — после всего сегодняшнего, ближние раньше дальних.
+function subTimeKey(sub) {
+  const d = new Date(sub.deadline);
+  if (!sub.deadline || Number.isNaN(d.getTime())) return 100000;
+  const days = Math.round((new Date(d).setHours(12, 0, 0, 0) - new Date(date.value + "T12:00:00")) / 86400000);
+  if (days > 0) return 200000 + days;
+  return d.getHours() * 60 + d.getMinutes();
+}
+
 async function sortByTime() {
-  const order = [...items.value]
-    .sort((a, b) => timeKey(a) - timeKey(b) || (b.priority || 0) - (a.priority || 0))
-    .map((i) => i.id);
+  const cards = [
+    ...items.value.map((i) => ({ id: i.id, key: timeKey(i), prio: i.priority || 0 })),
+    ...(day.value?.mainSubtasks || []).map((sub) => ({ id: sub.id, key: subTimeKey(sub), prio: 0 })),
+  ];
+  const order = cards.sort((a, b) => a.key - b.key || b.prio - a.prio).map((c) => c.id);
   try {
     await reorderWorkItems(date.value, order);
     await load();
@@ -516,10 +544,12 @@ function humanMinutes(minutes) {
       :main-subtasks="day?.mainSubtasks || []"
       :task-statuses="day?.taskStatuses || []"
       :tomorrow="day?.tomorrow || []"
+      :board-order="day?.boardOrder || []"
       @open="openItem"
       @open-sub="openSub"
       @add="addItem"
       @move="moveItem"
+      @reorder="reorderBoard"
       @defer="deferItem"
       @undefer="undeferItem"
       @sort="sortByTime"

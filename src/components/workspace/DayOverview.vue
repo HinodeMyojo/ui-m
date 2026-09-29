@@ -27,12 +27,15 @@ const props = defineProps({
   taskStatuses: { type: Array, default: () => [] },
   // Незакрытые карточки следующего дня — содержимое колонки «Завтра».
   tomorrow: { type: Array, default: () => [] },
+  // Порядок доски дня: id карточек и подзадач вперемешку.
+  boardOrder: { type: Array, default: () => [] },
 });
 const emit = defineEmits([
   "open",
   "open-sub",
   "add",
   "move",
+  "reorder",
   "sort",
   "refresh",
   "defer",
@@ -65,13 +68,45 @@ const GROUPS = [
 // Колонки статусов держим на месте, даже когда пустые, и «Отменено» тоже:
 // стоило показывать её только на время перетаскивания — колонок становилось
 // пять вместо четырёх, и вся доска меняла ширину прямо под рукой.
+// Колонка — один список: подзадачи с главной и карточки дня вперемешку, в
+// том порядке, в каком их выстроили руками. Кого в сохранённом порядке ещё
+// нет, стоит там же, где стоял раньше: новая подзадача — вверху колонки,
+// новая карточка — внизу.
+const boardRank = computed(() => new Map(props.boardOrder.map((id, i) => [id, i])));
+
+function rankOf(id, fallback) {
+  const rank = boardRank.value.get(id);
+  return rank === undefined ? fallback : rank;
+}
+
 const groups = computed(() =>
-  GROUPS.map((g) => ({
-    ...g,
-    items: props.items.filter((i) => i.status === g.key),
-    subs: subsByColumn.value[g.key] || [],
-  })),
+  GROUPS.map((g) => {
+    const items = props.items.filter((i) => i.status === g.key);
+    const subs = subsByColumn.value[g.key] || [];
+    const cards = [
+      ...subs.map((sub) => ({ id: sub.id, sub, rank: rankOf(sub.id, -1) })),
+      ...items.map((item) => ({ id: item.id, item, rank: rankOf(item.id, Infinity) })),
+    ].sort((a, b) => a.rank - b.rank); // sort стабилен: равные остаются как были
+    return { ...g, items, subs, cards };
+  }),
 );
+
+// Новый порядок всей доски после того, как карточку бросили в колонку column
+// перед beforeId (null — в конец колонки). Отдаём порядок целиком, по всем
+// колонкам: сервер хранит его одной строкой на день.
+function orderAfterDrop(id, column, beforeId) {
+  const byColumn = {};
+  for (const g of groups.value) {
+    byColumn[g.key] = g.cards.map((c) => c.id).filter((cardId) => cardId !== id);
+  }
+  const target = byColumn[column];
+  if (target) {
+    const at = beforeId ? target.indexOf(beforeId) : -1;
+    if (at < 0) target.push(id);
+    else target.splice(at, 0, id);
+  }
+  return GROUPS.flatMap((g) => byColumn[g.key]);
+}
 
 // --- Подзадачи с главной страницы ---
 
@@ -673,7 +708,7 @@ function toggleDone(item, event) {
   event.stopPropagation();
   const next = item.status === "done" ? "todo" : "done";
   if (next === "done") celebrate(item.id, event.currentTarget.closest(".ovw-card"));
-  emit("move", { id: item.id, status: next, beforeId: null });
+  emit("move", { id: item.id, status: next, order: orderAfterDrop(item.id, next, null) });
 }
 
 // --- Перетаскивание ---
@@ -811,14 +846,14 @@ function updateTarget(x, y) {
     return;
   }
   drag.value.over = column.dataset.status;
-  const cards = Array.from(column.querySelectorAll(".ovw-card[data-id]")).filter(
-    (c) => c.dataset.id !== drag.value.id,
+  const cards = Array.from(column.querySelectorAll("[data-card-id]")).filter(
+    (c) => c.dataset.cardId !== drag.value.id,
   );
   let before = null;
   for (const card of cards) {
     const rect = card.getBoundingClientRect();
     if (y < rect.top + rect.height / 2) {
-      before = card.dataset.id;
+      before = card.dataset.cardId;
       break;
     }
   }
@@ -860,12 +895,21 @@ function pointerUp(event) {
     return;
   }
   if (state.kind === "sub") {
-    // Внутри своей же колонки подзадаче двигаться некуда: порядка у неё нет.
-    if (state.over !== state.from) moveSub(started.item, state.over, started?.card);
+    if (state.over !== state.from) {
+      moveSub(started.item, state.over, started?.card);
+      // В колонку без статуса на главной («Отменено») moveSub подзадачу не
+      // пустит — тогда и порядок не трогаем, она остаётся на своём месте.
+      if (state.over === "dropped" || !statusForColumn(state.over)) return;
+    }
+    emit("reorder", { order: orderAfterDrop(state.id, state.over, state.beforeId) });
     return;
   }
   if (state.over === "done") celebrate(state.id, started?.card);
-  emit("move", { id: state.id, status: state.over, beforeId: state.beforeId });
+  emit("move", {
+    id: state.id,
+    status: state.over,
+    order: orderAfterDrop(state.id, state.over, state.beforeId),
+  });
 }
 
 onMounted(() => {
@@ -964,175 +1008,174 @@ onBeforeUnmount(() => {
         <div class="ovw-col-head" :style="{ '--status': STATUS_META[g.key].color }">
           <span class="ovw-col-dot"></span>
           {{ g.title }}
-          <span class="ovw-col-count">{{ g.items.length + g.subs.length }}</span>
+          <span class="ovw-col-count">{{ g.cards.length }}</span>
         </div>
 
         <div
-          v-if="!g.items.length && !g.subs.length && drag?.over !== g.key"
+          v-if="!g.cards.length && drag?.over !== g.key"
           class="ovw-col-empty"
         >
           {{ EMPTY_HINT[g.key] || "пусто" }}
         </div>
 
-        <!-- Подзадачи с главной страницы: не карточки дня, но их срок упирается
-             в этот день, поэтому стоят вверху колонки своего статуса и
-             выделены. Сегодняшние идут первыми, дела на ближайшие дни —
-             приглушённо в хвосте. Ниже них карточки дня свободно двигаются
-             между собой. -->
-        <article
-          v-for="sub in g.subs"
-          :key="'sub-' + sub.id"
-          class="ovw-sub"
-          :class="{
-            muted: sub.done,
-            pop: popped.has(sub.id),
-            ghosted: drag?.id === sub.id,
-            future: subDue(sub).offset > 0,
-            'due-soon': subDue(sub).tone === 'soon',
-            'due-over': subDue(sub).tone === 'bad',
-          }"
-          :style="{ '--accent': sub.parentColor || sub.color || '#e07b39' }"
-          :data-sub-id="sub.id"
-          @pointerdown="pointerDown($event, sub, 'sub')"
-        >
-          <div class="ovw-sub-flags">
-            <span class="ovw-sub-flag">с главной</span>
-            <span v-if="sub.parentIsGlobal" class="ovw-sub-flag global">глобальная</span>
-            <span v-if="sub.linkedItemId" class="ovw-sub-flag dupe" title="В этом дне уже есть карточка, привязанная к этой подзадаче">
-              дубль карточки
-            </span>
-            <span
-              class="ovw-sub-flag due"
-              :class="{
-                soon: subDue(sub).tone === 'soon',
-                bad: subDue(sub).tone === 'bad',
-                later: subDue(sub).tone === 'later',
-              }"
-            >
-              ⏳ {{ subDue(sub).label }}
-            </span>
-          </div>
-
-          <div class="ovw-sub-parent">
-            <span v-if="sub.parentSticker" class="ovw-sub-sticker">{{ sub.parentSticker }}</span>
-            {{ sub.parentTitle }}
-            <span class="ovw-sub-arrow">→</span>
-          </div>
-
-          <div class="ovw-sub-top">
-            <button
-              class="ovw-check ovw-nodrag"
-              :class="{ on: sub.done }"
-              :title="sub.done ? 'Открыть заново' : 'Закрыть подзадачу'"
-              @click="toggleSub(sub, $event)"
-            >
-              <span v-if="sub.done">✓</span>
-            </button>
-            <span class="ovw-sub-title">{{ sub.title }}</span>
-            <button
-              v-if="sub.linkedItemId"
-              class="ovw-sub-move ovw-nodrag"
-              title="Схлопнуть с карточкой дня: останется одна задача"
-              @click="collapseSub(sub, $event)"
-            >
-              ⇲
-            </button>
-            <button
-              v-else
-              class="ovw-sub-move ovw-nodrag"
-              title="Сделать карточкой этого дня"
-              @click="subToDay(sub, $event)"
-            >
-              ＋
-            </button>
-          </div>
-
-          <div v-if="sub.statusName || sub.openBlockers || sub.checksTotal" class="ovw-sub-meta">
-            <span
-              v-if="sub.statusName"
-              class="ovw-sub-status"
-              :style="{ borderColor: sub.statusColor, color: sub.statusColor }"
-            >
-              {{ sub.statusName }}
-            </span>
-            <span v-if="sub.checksTotal" class="ovw-sub-status">
-              ☑ {{ sub.checksDone }}/{{ sub.checksTotal }}
-            </span>
-            <span v-if="sub.openBlockers" class="ovw-sub-blockers">🚧 {{ sub.openBlockers }}</span>
-          </div>
-        </article>
-        <template v-for="item in g.items" :key="item.id">
+        <!-- Колонка — один список: подзадачи с главной вперемешку с карточками
+             дня. Подзадача — не карточка дня (её срок просто упирается в этот
+             день), поэтому она выделена, но двигается так же: куда поставил,
+             там и стоит. -->
+        <template v-for="card in g.cards" :key="(card.sub ? 'sub-' : '') + card.id">
           <div
-            v-if="drag?.kind === 'item' && drag.over === g.key && drag.beforeId === item.id"
+            v-if="drag && drag.over === g.key && drag.beforeId === card.id"
             class="ovw-slot"
           ></div>
 
           <article
+            v-if="card.sub"
+            class="ovw-sub"
+            :class="{
+              muted: card.sub.done,
+              pop: popped.has(card.sub.id),
+              ghosted: drag?.id === card.sub.id,
+              future: subDue(card.sub).offset > 0,
+              'due-soon': subDue(card.sub).tone === 'soon',
+              'due-over': subDue(card.sub).tone === 'bad',
+            }"
+            :style="{ '--accent': card.sub.parentColor || card.sub.color || '#e07b39' }"
+            :data-card-id="card.sub.id"
+            @pointerdown="pointerDown($event, card.sub, 'sub')"
+          >
+            <div class="ovw-sub-flags">
+              <span class="ovw-sub-flag">с главной</span>
+              <span v-if="card.sub.parentIsGlobal" class="ovw-sub-flag global">глобальная</span>
+              <span v-if="card.sub.linkedItemId" class="ovw-sub-flag dupe" title="В этом дне уже есть карточка, привязанная к этой подзадаче">
+                дубль карточки
+              </span>
+              <span
+                class="ovw-sub-flag due"
+                :class="{
+                  soon: subDue(card.sub).tone === 'soon',
+                  bad: subDue(card.sub).tone === 'bad',
+                  later: subDue(card.sub).tone === 'later',
+                }"
+              >
+                ⏳ {{ subDue(card.sub).label }}
+              </span>
+            </div>
+
+            <div class="ovw-sub-parent">
+              <span v-if="card.sub.parentSticker" class="ovw-sub-sticker">{{ card.sub.parentSticker }}</span>
+              {{ card.sub.parentTitle }}
+              <span class="ovw-sub-arrow">→</span>
+            </div>
+
+            <div class="ovw-sub-top">
+              <button
+                class="ovw-check ovw-nodrag"
+                :class="{ on: card.sub.done }"
+                :title="card.sub.done ? 'Открыть заново' : 'Закрыть подзадачу'"
+                @click="toggleSub(card.sub, $event)"
+              >
+                <span v-if="card.sub.done">✓</span>
+              </button>
+              <span class="ovw-sub-title">{{ card.sub.title }}</span>
+              <button
+                v-if="card.sub.linkedItemId"
+                class="ovw-sub-move ovw-nodrag"
+                title="Схлопнуть с карточкой дня: останется одна задача"
+                @click="collapseSub(card.sub, $event)"
+              >
+                ⇲
+              </button>
+              <button
+                v-else
+                class="ovw-sub-move ovw-nodrag"
+                title="Сделать карточкой этого дня"
+                @click="subToDay(card.sub, $event)"
+              >
+                ＋
+              </button>
+            </div>
+
+            <div v-if="card.sub.statusName || card.sub.openBlockers || card.sub.checksTotal" class="ovw-sub-meta">
+              <span
+                v-if="card.sub.statusName"
+                class="ovw-sub-status"
+                :style="{ borderColor: card.sub.statusColor, color: card.sub.statusColor }"
+              >
+                {{ card.sub.statusName }}
+              </span>
+              <span v-if="card.sub.checksTotal" class="ovw-sub-status">
+                ☑ {{ card.sub.checksDone }}/{{ card.sub.checksTotal }}
+              </span>
+              <span v-if="card.sub.openBlockers" class="ovw-sub-blockers">🚧 {{ card.sub.openBlockers }}</span>
+            </div>
+          </article>
+          <article
+            v-else
             class="ovw-card"
             :class="{
-              muted: item.status === 'done' || item.status === 'dropped',
-              ghosted: drag?.id === item.id,
-              pop: popped.has(item.id),
-              live: timeOf(item)?.tone === 'live',
-              late: timeOf(item)?.tone === 'late',
-              'due-soon': itemUrgency(item)?.tone === 'soon',
-              'due-over': itemUrgency(item)?.tone === 'over',
+              muted: card.item.status === 'done' || card.item.status === 'dropped',
+              ghosted: drag?.id === card.item.id,
+              pop: popped.has(card.item.id),
+              live: timeOf(card.item)?.tone === 'live',
+              late: timeOf(card.item)?.tone === 'late',
+              'due-soon': itemUrgency(card.item)?.tone === 'soon',
+              'due-over': itemUrgency(card.item)?.tone === 'over',
             }"
-            :style="{ '--accent': item.color || '#1767fd' }"
-            :data-id="item.id"
-            @pointerdown="pointerDown($event, item)"
+            :style="{ '--accent': card.item.color || '#1767fd' }"
+            :data-card-id="card.item.id"
+            @pointerdown="pointerDown($event, card.item)"
           >
             <div class="ovw-card-top">
               <button
                 class="ovw-check ovw-nodrag"
-                :class="{ on: item.status === 'done' }"
-                :title="item.status === 'done' ? 'Вернуть в план' : 'Закрыть карточку'"
-                @click="toggleDone(item, $event)"
+                :class="{ on: card.item.status === 'done' }"
+                :title="card.item.status === 'done' ? 'Вернуть в план' : 'Закрыть карточку'"
+                @click="toggleDone(card.item, $event)"
               >
-                <span v-if="item.status === 'done'">✓</span>
+                <span v-if="card.item.status === 'done'">✓</span>
               </button>
               <span class="ovw-card-title">
-                <span v-if="item.emoji" class="ovw-card-emoji">{{ item.emoji }}</span
-                >{{ item.title }}
+                <span v-if="card.item.emoji" class="ovw-card-emoji">{{ card.item.emoji }}</span
+                >{{ card.item.title }}
               </span>
-              <span v-if="item.priority" class="ovw-card-prio">{{ "!".repeat(item.priority) }}</span>
+              <span v-if="card.item.priority" class="ovw-card-prio">{{ "!".repeat(card.item.priority) }}</span>
               <button
                 class="ovw-card-carry ovw-nodrag"
-                :class="{ on: item.autoCarry }"
-                :disabled="carryBusy.has(item.id)"
+                :class="{ on: card.item.autoCarry }"
+                :disabled="carryBusy.has(card.item.id)"
                 :title="
-                  item.autoCarry
+                  card.item.autoCarry
                     ? 'Переносится на следующий день, пока не закрою — выключить'
                     : 'Переносить на следующий день, пока не закрою'
                 "
-                @click="toggleCarry(item, $event)"
+                @click="toggleCarry(card.item, $event)"
               >
                 ↻
               </button>
             </div>
 
-            <div v-if="timeOf(item)" class="ovw-when" :class="timeOf(item).tone">
+            <div v-if="timeOf(card.item)" class="ovw-when" :class="timeOf(card.item).tone">
               <div class="ovw-when-row">
-                <span class="ovw-when-time">{{ timeOf(item).start }}</span>
-                <template v-if="timeOf(item).end">
+                <span class="ovw-when-time">{{ timeOf(card.item).start }}</span>
+                <template v-if="timeOf(card.item).end">
                   <span class="ovw-when-dash">→</span>
-                  <span class="ovw-when-time end">{{ timeOf(item).end }}</span>
+                  <span class="ovw-when-time end">{{ timeOf(card.item).end }}</span>
                 </template>
-                <span v-if="timeOf(item).dur" class="ovw-when-dur">{{ timeOf(item).dur }}</span>
-                <span v-if="timeOf(item).rel" class="ovw-when-rel">{{ timeOf(item).rel }}</span>
+                <span v-if="timeOf(card.item).dur" class="ovw-when-dur">{{ timeOf(card.item).dur }}</span>
+                <span v-if="timeOf(card.item).rel" class="ovw-when-rel">{{ timeOf(card.item).rel }}</span>
               </div>
               <div class="ovw-track">
                 <div
                   class="ovw-track-seg"
-                  :style="{ left: timeOf(item).left + '%', width: timeOf(item).width + '%' }"
+                  :style="{ left: timeOf(card.item).left + '%', width: timeOf(card.item).width + '%' }"
                 ></div>
                 <div v-if="isToday" class="ovw-track-now" :style="{ left: nowPos + '%' }"></div>
               </div>
             </div>
 
-            <div v-if="item.tags?.length" class="ovw-card-tags">
+            <div v-if="card.item.tags?.length" class="ovw-card-tags">
               <span
-                v-for="t in item.tags"
+                v-for="t in card.item.tags"
                 :key="t.id"
                 class="ovw-tag"
                 :style="{ borderColor: t.color, color: t.color }"
@@ -1141,39 +1184,39 @@ onBeforeUnmount(() => {
               </span>
             </div>
 
-            <p v-if="excerpt(item)" class="ovw-card-excerpt">{{ excerpt(item) }}</p>
+            <p v-if="excerpt(card.item)" class="ovw-card-excerpt">{{ excerpt(card.item) }}</p>
 
-            <div v-if="checkProgress(item)" class="ovw-card-checks">
+            <div v-if="checkProgress(card.item)" class="ovw-card-checks">
               <div class="ovw-card-bar">
                 <div
                   class="ovw-card-bar-fill"
-                  :style="{ width: checkProgress(item).percent + '%' }"
+                  :style="{ width: checkProgress(card.item).percent + '%' }"
                 ></div>
               </div>
               <span class="ovw-card-bar-label">
-                {{ checkProgress(item).done }}/{{ checkProgress(item).total }}
+                {{ checkProgress(card.item).done }}/{{ checkProgress(card.item).total }}
               </span>
             </div>
 
-            <div v-if="item.openBlockers" class="ovw-card-blocked">
-              🚧 заблокировано — {{ item.openBlockers }}
+            <div v-if="card.item.openBlockers" class="ovw-card-blocked">
+              🚧 заблокировано — {{ card.item.openBlockers }}
             </div>
 
             <!-- Карточка кочует из дня в день незакрытой: напоминаем об этом
                  прямо в ней, счётчик дней ведёт сервер от первого дня. -->
             <div
-              v-if="staleOf(item)"
+              v-if="staleOf(card.item)"
               class="ovw-card-stale"
-              :class="staleOf(item).tone"
-              :title="`Впервые запланирована ${staleOf(item).since}`"
+              :class="staleOf(card.item).tone"
+              :title="`Впервые запланирована ${staleOf(card.item).since}`"
             >
-              🔁 {{ staleOf(item).label }}
+              🔁 {{ staleOf(card.item).label }}
             </div>
 
             <!-- Схлопнутая подзадача: отдельной строкой на доске её нет, но
                  видно, что карточка — это она, и можно развернуть обратно. -->
             <div
-              v-for="t in collapsedTasks(item)"
+              v-for="t in collapsedTasks(card.item)"
               :key="'col-' + t.id"
               class="ovw-card-collapsed"
             >
@@ -1183,14 +1226,14 @@ onBeforeUnmount(() => {
               <button
                 class="ovw-card-collapsed-btn ovw-nodrag"
                 title="Развернуть обратно: подзадача снова встанет на доску отдельно"
-                @click="expandTask(item, t, $event)"
+                @click="expandTask(card.item, t, $event)"
               >
                 развернуть
               </button>
             </div>
 
             <div
-              v-for="t in (item.tasks || []).filter((x) => x.openBlockers > 0)"
+              v-for="t in (card.item.tasks || []).filter((x) => x.openBlockers > 0)"
               :key="t.id"
               class="ovw-card-blocked"
             >
@@ -1199,43 +1242,43 @@ onBeforeUnmount(() => {
 
             <div class="ovw-card-meta">
               <span
-                v-if="deadlineLabel(item)"
+                v-if="deadlineLabel(card.item)"
                 class="ovw-chip due"
-                :class="{ bad: isOverdue(item), soon: itemUrgency(item)?.tone === 'soon' }"
+                :class="{ bad: isOverdue(card.item), soon: itemUrgency(card.item)?.tone === 'soon' }"
               >
-                ⏳ {{ itemUrgency(item)?.label || deadlineLabel(item) }}
+                ⏳ {{ itemUrgency(card.item)?.label || deadlineLabel(card.item) }}
               </span>
-              <span v-if="item.estimateMinutes" class="ovw-chip">
-                {{ humanMinutes(item.estimateMinutes) }}
+              <span v-if="card.item.estimateMinutes" class="ovw-chip">
+                {{ humanMinutes(card.item.estimateMinutes) }}
               </span>
-              <span v-if="item.links?.length" class="ovw-chip">🌐 {{ item.links.length }}</span>
-              <span v-if="item.notes?.length" class="ovw-chip">🗒 {{ item.notes.length }}</span>
-              <span v-if="item.files?.length" class="ovw-chip">📎 {{ item.files.length }}</span>
-              <span v-if="item.tasks?.length" class="ovw-chip">🔗 {{ item.tasks.length }}</span>
+              <span v-if="card.item.links?.length" class="ovw-chip">🌐 {{ card.item.links.length }}</span>
+              <span v-if="card.item.notes?.length" class="ovw-chip">🗒 {{ card.item.notes.length }}</span>
+              <span v-if="card.item.files?.length" class="ovw-chip">📎 {{ card.item.files.length }}</span>
+              <span v-if="card.item.tasks?.length" class="ovw-chip">🔗 {{ card.item.tasks.length }}</span>
               <span
-                v-if="spanLabel(item)"
+                v-if="spanLabel(card.item)"
                 class="ovw-chip span"
-                :title="`Многодневная: ${item.spanStart} — ${item.spanEnd}`"
+                :title="`Многодневная: ${card.item.spanStart} — ${card.item.spanEnd}`"
               >
-                ⧉ {{ spanLabel(item) }}
+                ⧉ {{ spanLabel(card.item) }}
               </span>
               <span
-                v-if="item.autoCarry"
+                v-if="card.item.autoCarry"
                 class="ovw-chip carry"
                 :title="
-                  item.carryCount
-                    ? `Переносится, пока не закрою. Уже ${item.carryCount}×`
+                  card.item.carryCount
+                    ? `Переносится, пока не закрою. Уже ${card.item.carryCount}×`
                     : 'Переносится, пока не закрою'
                 "
               >
-                ↻<template v-if="item.carryCount"> {{ item.carryCount }}</template>
+                ↻<template v-if="card.item.carryCount"> {{ card.item.carryCount }}</template>
               </span>
             </div>
           </article>
         </template>
 
         <div
-          v-if="drag?.kind === 'item' && drag.over === g.key && drag.beforeId === null"
+          v-if="drag && drag.over === g.key && drag.beforeId === null"
           class="ovw-slot"
         ></div>
 
