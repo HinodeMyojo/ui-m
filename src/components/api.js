@@ -849,6 +849,21 @@ export async function saveWorkDay(data) {
   await authorizedFetch(`${W}/day`, { method: "PUT", body: JSON.stringify(data) });
 }
 
+// План дня по часам (главная): работать, писать код руками, читать. Отдельная
+// ручка, а не saveWorkDay: та перезаписывает заметку и фокус дня целиком.
+export async function fetchDayHours(date) {
+  const response = await authorizedFetch(`${W}/day/hours?date=${date}`);
+  return workJson(response, "не удалось загрузить план часов");
+}
+
+export async function saveDayHours(data) {
+  const response = await authorizedFetch(`${W}/day/hours`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+  return workJson(response, "не удалось сохранить план часов");
+}
+
 export async function fetchWorkDays(from, to) {
   const response = await authorizedFetch(`${W}/days?from=${from}&to=${to}`);
   return workJson(response, "не удалось загрузить период");

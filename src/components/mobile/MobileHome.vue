@@ -15,6 +15,7 @@ import "@/styles/mobile.css";
 // Карточки — асинхронные компоненты: каждая тянет свой кусок API сама, и
 // медленный раздел не задерживает остальные. Заодно они не попадают в общий
 // бандл десктопа.
+const MobileDayHoursCard = defineAsyncComponent(() => import("./MobileDayHoursCard.vue"));
 const MobileRoadmapCard = defineAsyncComponent(() => import("./MobileRoadmapCard.vue"));
 const MobileTodayCard = defineAsyncComponent(() => import("./MobileTodayCard.vue"));
 const MobileDisciplineCard = defineAsyncComponent(() => import("./MobileDisciplineCard.vue"));
@@ -70,6 +71,8 @@ const weekdayLabel = computed(() => WEEKDAYS[now.getDay()]);
       <!-- Карточка выключенного раздела не просто прячется, а не грузится:
            каждая тянет свой кусок API сама, и запрос в закрытый раздел был бы
            лишним даже при спрятанной карточке. -->
+      <!-- План часов на день — первым: его задают утром, до всего остального. -->
+      <MobileDayHoursCard />
       <MobileRoadmapCard v-if="isOn('module.roadmap')" />
       <MobileTodayCard v-if="isOn('module.today')" />
       <MobileDisciplineCard v-if="isOn('module.discipline')" />

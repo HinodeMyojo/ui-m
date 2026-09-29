@@ -26,6 +26,7 @@ import TimeStatsModal from "@/components/elements/TimeStatsModal.vue";
 import SkillsMiniWidget from "./elements/SkillsMiniWidget.vue";
 import DisciplineTracker from "./discipline/DisciplineTracker.vue";
 import RoadmapStatusBar from "./roadmap/RoadmapStatusBar.vue";
+import DayHoursBar from "./elements/DayHoursBar.vue";
 import VentureDraftsBar from "./venture/VentureDraftsBar.vue";
 import AgeCounter from "./elements/AgeCounter.vue";
 
@@ -841,6 +842,8 @@ function closeTimeStats() {
         </div>
       </div>
     </div>
+    <!-- План дня по часам: работать, код руками, читать -->
+    <DayHoursBar />
     <!-- Отставание по roadmap'у — сразу под шапкой, docs/roadmap-module.md -->
     <RoadmapStatusBar />
     <!-- Черновики этапов дорожной карты: планируя месяц, видно, что этап уже
