@@ -1,0 +1,296 @@
+/* Общие стили раздела «Опросы». Глобальный файл по образцу sport.css: варианты
+   ответа одинаково выглядят в прохождении, в предпросмотре и в результатах,
+   и держать их копиями в трёх scoped-блоках — значит развести вид за две
+   правки. Все классы с префиксом sv-.
+
+   Акцент розово-коралловый: опрос открывает человек, у которого нет учётки
+   и который приложение видит впервые, — ему нужна тёплая страница, а не
+   серая админка. */
+
+.sv-scope {
+  --sv-bg: #14151b;
+  --sv-card: #1c1e27;
+  --sv-card-2: #242733;
+  --sv-line: #2c303c;
+  --sv-text: #eef0f6;
+  --sv-dim: #b7bbca;
+  --sv-muted: #7f8496;
+  --sv-accent: #f2708c;
+  --sv-accent-soft: rgba(242, 112, 140, 0.14);
+  --sv-accent-2: #9a86ff;
+  --sv-ok: #5fd08a;
+  --sv-warn: #ffcf66;
+  --sv-bad: #ef5b5b;
+
+  color: var(--sv-text);
+  background: var(--sv-bg);
+  font-family: inherit;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.sv-scope *,
+.sv-scope *::before,
+.sv-scope *::after {
+  box-sizing: border-box;
+}
+
+.sv-muted {
+  color: var(--sv-muted);
+}
+
+.sv-error {
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(239, 91, 91, 0.45);
+  background: rgba(239, 91, 91, 0.1);
+  color: #ffb4b4;
+  font-size: 14px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  text-align: left;
+}
+
+.sv-card {
+  border-radius: 16px;
+  border: 1px solid var(--sv-line);
+  background: var(--sv-card);
+  padding: 14px;
+}
+
+/* --- Кнопки --- */
+
+.sv-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 0 14px;
+  border-radius: 12px;
+  border: 1px solid var(--sv-line);
+  background: var(--sv-card-2);
+  color: var(--sv-text);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background 0.15s, border-color 0.15s, opacity 0.15s;
+}
+.sv-btn:hover:not(:disabled) {
+  border-color: #3b4050;
+}
+.sv-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.sv-btn.is-primary {
+  background: var(--sv-accent);
+  border-color: var(--sv-accent);
+  color: #fff;
+  font-weight: 600;
+}
+.sv-btn.is-primary:hover:not(:disabled) {
+  background: #f5839b;
+  border-color: #f5839b;
+}
+.sv-btn.is-ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--sv-dim);
+}
+.sv-btn.is-danger {
+  color: #ff9c9c;
+}
+.sv-btn.is-small {
+  min-height: 32px;
+  padding: 0 10px;
+  font-size: 13px;
+  border-radius: 10px;
+}
+.sv-btn.is-big {
+  min-height: 54px;
+  font-size: 17px;
+  border-radius: 14px;
+}
+.sv-btn.is-icon {
+  width: 36px;
+  min-height: 36px;
+  padding: 0;
+}
+
+/* --- Поля --- */
+
+.sv-input {
+  width: 100%;
+  min-height: 42px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--sv-line);
+  background: var(--sv-card);
+  color: var(--sv-text);
+  /* 16px — меньше айфон увеличивает страницу при фокусе. */
+  font: inherit;
+  font-size: 16px;
+  line-height: 1.4;
+  outline: none;
+  resize: vertical;
+}
+.sv-input:focus {
+  border-color: var(--sv-accent);
+}
+.sv-input::placeholder {
+  color: var(--sv-muted);
+}
+textarea.sv-input {
+  field-sizing: content;
+}
+
+.sv-label {
+  font-size: 12px;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--sv-muted);
+}
+
+.sv-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  font-size: 14px;
+  color: var(--sv-dim);
+  cursor: pointer;
+  user-select: none;
+}
+.sv-switch input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--sv-accent);
+}
+
+/* --- Варианты ответа --- */
+
+.sv-opts {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sv-opt {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 54px;
+  padding: 0;
+  border-radius: 14px;
+  border: 1.5px solid var(--sv-line);
+  background: var(--sv-card);
+  color: var(--sv-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+  transition: border-color 0.15s, background 0.15s, transform 0.1s;
+}
+.sv-opt:active {
+  transform: scale(0.985);
+}
+.sv-opt.is-on {
+  border-color: var(--sv-accent);
+  background: var(--sv-accent-soft);
+}
+.sv-opt-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  flex: 1;
+}
+.sv-opt-text {
+  flex: 1;
+  font-size: 16px;
+  line-height: 1.35;
+}
+
+/* Индикатор: кружок у одного ответа, квадрат у нескольких. */
+.sv-mark {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid var(--sv-muted);
+  display: grid;
+  place-items: center;
+  transition: border-color 0.15s, background 0.15s;
+}
+.sv-opts.is-multi .sv-mark {
+  border-radius: 6px;
+}
+.sv-opt.is-on .sv-mark {
+  border-color: var(--sv-accent);
+  background: var(--sv-accent);
+}
+.sv-opt.is-on .sv-mark::after {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #fff;
+}
+.sv-opts.is-multi .sv-opt.is-on .sv-mark::after {
+  width: 10px;
+  height: 6px;
+  border-radius: 0;
+  background: none;
+  border-left: 2.5px solid #fff;
+  border-bottom: 2.5px solid #fff;
+  transform: translateY(-1px) rotate(-45deg);
+}
+
+/* Варианты с картинками — плитки по два в ряд, на широком по три. */
+.sv-opts.has-images {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+@media (min-width: 600px) {
+  .sv-opts.has-images {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+.sv-opts.has-images .sv-opt-row {
+  padding: 10px 12px;
+  gap: 8px;
+}
+.sv-opts.has-images .sv-opt-text {
+  font-size: 14px;
+}
+.sv-opts.has-images .sv-opt.is-other {
+  grid-column: 1 / -1;
+}
+.sv-opt-img {
+  position: relative;
+  display: block;
+  aspect-ratio: 1;
+  background: var(--sv-card-2);
+}
+.sv-opt-img img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.sv-opt-zoom {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: rgba(10, 11, 16, 0.65);
+  color: #fff;
+  font-size: 15px;
+  cursor: zoom-in;
+}

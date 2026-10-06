@@ -212,6 +212,25 @@ const router = createRouter({
       component: () => import("../views/ResumePrintView.vue"),
     },
     {
+      path: "/surveys",
+      name: "Surveys",
+      component: () => import("../views/SurveysView.vue"),
+    },
+    {
+      path: "/surveys/:id",
+      name: "SurveyEditor",
+      component: () => import("../views/SurveyEditorView.vue"),
+    },
+    {
+      // Опрос по ссылке: отвечают без входа. calm — без листопада и погоды:
+      // человек видит приложение впервые, и листья поверх вариантов ответа
+      // ему только мешают.
+      path: "/poll/:token",
+      name: "PublicSurvey",
+      component: () => import("../views/PublicSurveyView.vue"),
+      meta: { public: true, calm: true },
+    },
+    {
       // Гостевой доступ по ссылке — вход в приложение не нужен.
       path: "/travel/shared/:token",
       name: "SharedTrip",

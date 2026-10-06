@@ -3,6 +3,7 @@ import { computed, defineAsyncComponent, watch } from "vue";
 import { RouterView, useRoute } from "vue-router";
 import { isMobile } from "@/composables/useIsMobile.js";
 import { sessionFocus } from "@/composables/useSessionFocus.js";
+import { getToken } from "@/components/session.js";
 import {
   clearFeatures,
   features,
@@ -42,7 +43,11 @@ watch(
       clearFeatures();
       return;
     }
-    if (route.meta?.public) return;
+    // До первой навигации маршрут — заглушка «/» без meta, и по ней
+    // гостевая ссылка выглядела бы обычной страницей: запрос настроек без
+    // токена получал 401 и уводил человека без учётки на форму входа.
+    if (!route.matched.length || route.meta?.public) return;
+    if (!getToken()) return;
     if (!features.value) loadFeatures();
   },
   { immediate: true },
@@ -75,7 +80,7 @@ const showTabBar = computed(() => {
   <!-- Печать резюме — экран без вайба: листья попадут в PDF. Учебная сессия —
        тоже: листья летали по кнопкам ответа. -->
   <template v-if="!route.path.endsWith('/print')">
-    <AutumnLayer v-if="!sessionFocus && !hasOwnScenery && isOn('layer.autumn')" />
+    <AutumnLayer v-if="!sessionFocus && !hasOwnScenery && !route.meta?.calm && isOn('layer.autumn')" />
     <WeatherPanel v-if="!route.meta?.public && isOn('layer.weather')" />
   </template>
 </template>
