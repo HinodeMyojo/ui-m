@@ -9,6 +9,7 @@ import {
   createWorkItem,
   setTaskLogStatus,
   setWorkItemCarry,
+  setWorkMode,
   updateTaskAPI,
 } from "@/components/api.js";
 
@@ -270,6 +271,7 @@ async function subToDay(sub, event) {
       date: props.date,
       title: sub.title,
       color: sub.color || sub.parentColor || "",
+      workMode: sub.workMode || "",
       taskIds: [sub.id],
     });
     if (created?.id) await collapseWorkItemTask(created.id, sub.id, true);
@@ -539,6 +541,29 @@ async function toggleCarry(item, event) {
     const busy = new Set(carryBusy.value);
     busy.delete(item.id);
     carryBusy.value = busy;
+  }
+}
+
+// «Делаю с ИИ / руками» прямо на доске — у карточки дня и у подзадачи с
+// главной. Нажатие на уже выбранное снимает пометку.
+const modeBusy = ref(new Set());
+
+async function pickMode(kind, target, mode, event) {
+  event.stopPropagation();
+  if (modeBusy.value.has(target.id)) return;
+  modeBusy.value = new Set(modeBusy.value).add(target.id);
+  const prev = target.workMode || "";
+  const next = prev === mode ? "" : mode;
+  target.workMode = next; // отзывчиво, без перезагрузки дня
+  try {
+    await setWorkMode(kind, target.id, next);
+  } catch (e) {
+    target.workMode = prev;
+    subError.value = e.message || "не удалось сохранить пометку";
+  } finally {
+    const busy = new Set(modeBusy.value);
+    busy.delete(target.id);
+    modeBusy.value = busy;
   }
 }
 
@@ -1077,6 +1102,20 @@ onBeforeUnmount(() => {
                 <span v-if="card.sub.done">✓</span>
               </button>
               <span class="ovw-sub-title">{{ card.sub.title }}</span>
+              <span class="ovw-mode ovw-nodrag" :class="{ set: card.sub.workMode }">
+                <button
+                  class="ai"
+                  :class="{ on: card.sub.workMode === 'ai' }"
+                  title="Делаю с ИИ"
+                  @click="pickMode('tasks', card.sub, 'ai', $event)"
+                >🤖</button>
+                <button
+                  class="manual"
+                  :class="{ on: card.sub.workMode === 'manual' }"
+                  title="Делаю руками"
+                  @click="pickMode('tasks', card.sub, 'manual', $event)"
+                >✋</button>
+              </span>
               <button
                 v-if="card.sub.linkedItemId"
                 class="ovw-sub-move ovw-nodrag"
@@ -1139,12 +1178,20 @@ onBeforeUnmount(() => {
                 >{{ card.item.title }}
               </span>
               <span v-if="card.item.priority" class="ovw-card-prio">{{ "!".repeat(card.item.priority) }}</span>
-              <span
-                v-if="card.item.workMode"
-                class="ovw-card-mode"
-                :title="card.item.workMode === 'ai' ? 'Делаю с ИИ' : 'Делаю руками'"
-                >{{ card.item.workMode === "ai" ? "🤖" : "✋" }}</span
-              >
+              <span class="ovw-mode ovw-nodrag" :class="{ set: card.item.workMode }">
+                <button
+                  class="ai"
+                  :class="{ on: card.item.workMode === 'ai' }"
+                  title="Делаю с ИИ"
+                  @click="pickMode('items', card.item, 'ai', $event)"
+                >🤖</button>
+                <button
+                  class="manual"
+                  :class="{ on: card.item.workMode === 'manual' }"
+                  title="Делаю руками"
+                  @click="pickMode('items', card.item, 'manual', $event)"
+                >✋</button>
+              </span>
               <button
                 class="ovw-card-carry ovw-nodrag"
                 :class="{ on: card.item.autoCarry }"
@@ -1864,9 +1911,50 @@ onBeforeUnmount(() => {
   flex-shrink: 0;
 }
 
-.ovw-card-mode {
-  font-size: 12px;
+/* «С ИИ / руками»: две половинки одной таблетки. Пока ничего не выбрано —
+   обе приглушены; выбранная горит, вторая остаётся видна, чтобы переключить. */
+.ovw-mode {
+  display: inline-flex;
   flex-shrink: 0;
+  border: 1px solid #2f3340;
+  border-radius: 14px;
+  overflow: hidden;
+  align-self: flex-start;
+}
+
+.ovw-mode button {
+  background: transparent;
+  border: none;
+  min-width: 28px;
+  height: 26px;
+  padding: 0 4px;
+  font-size: 13px;
+  cursor: pointer;
+  opacity: 0.35;
+  filter: grayscale(1);
+  transition: opacity 0.15s, filter 0.15s, background 0.15s;
+}
+
+.ovw-mode button:hover {
+  opacity: 0.8;
+  filter: none;
+}
+
+.ovw-mode button.on {
+  opacity: 1;
+  filter: none;
+}
+
+.ovw-mode button.ai.on {
+  background: #2a2140;
+}
+
+.ovw-mode button.manual.on {
+  background: #1b2b1d;
+}
+
+.ovw-mode.set {
+  border-color: #454a5a;
 }
 
 /* --- Время на карточке --- */

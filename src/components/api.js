@@ -921,6 +921,18 @@ export async function setWorkItemCarry(id, autoCarry) {
 
 // Схлопнуть карточку дня с привязанной подзадачей главной страницы в одно дело:
 // на доске остаётся только карточка. collapsed: false — развернуть обратно.
+// «Делаю с ИИ / руками» прямо с доски. kind: "items" — карточка дня,
+// "tasks" — подзадача с главной. workMode: "ai" | "manual" | "" (снять).
+export async function setWorkMode(kind, id, workMode) {
+  const response = await authorizedFetch(`${W}/${kind}/${id}/work-mode`, {
+    method: "POST",
+    body: JSON.stringify({ workMode }),
+  });
+  if (!response.ok) {
+    throw new Error((await response.json().catch(() => ({}))).error || "не удалось сохранить пометку");
+  }
+}
+
 export async function collapseWorkItemTask(id, taskId, collapsed) {
   const response = await authorizedFetch(`${W}/items/${id}/collapse`, {
     method: "POST",
