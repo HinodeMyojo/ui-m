@@ -2,6 +2,7 @@
 import { ref, computed, watch } from "vue";
 import MarkdownView from "./MarkdownView.vue";
 import TaskLogPanel from "@/components/tasklog/TaskLogPanel.vue";
+import JiraLinks from "./JiraLinks.vue";
 import {
   collapseWorkItemTask,
   updateWorkItem,
@@ -379,6 +380,10 @@ function toggleLog(taskId) {
       <h1 class="wiv-title">
         <span v-if="item.emoji" class="wiv-emoji">{{ item.emoji }}</span>{{ item.title }}
       </h1>
+
+      <!-- Код Jira ищем и в названии карточки, и в привязанных задачах:
+           карточку часто называют по-своему, а код живёт в подзадаче. -->
+      <JiraLinks :texts="[item.title, ...(item.tasks || []).map((t) => t.title)]" />
 
       <div v-if="item.tags?.length" class="wiv-tags">
         <span v-for="t in item.tags" :key="t.id" class="wiv-tag" :style="{ borderColor: t.color, color: t.color }">

@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed, watch, onBeforeUnmount } from "vue";
 import TaskLogPanel from "@/components/tasklog/TaskLogPanel.vue";
+import JiraLinks from "./JiraLinks.vue";
 import {
   updateTaskAPI,
   checkTask,
@@ -235,6 +236,8 @@ function human(minutes) {
       </div>
 
       <h1 class="msp-title" :class="{ done: sub.done }">{{ sub.title }}</h1>
+
+      <JiraLinks :texts="[sub.title]" />
 
       <div class="msp-meta">
         <span class="msp-when" :class="{ soon: !sub.done && deadlineHint.startsWith('осталось'), bad: deadlineHint.startsWith('просрочена') }">
