@@ -3,6 +3,7 @@ import { ref, computed, watch, onMounted, onBeforeUnmount } from "vue";
 import confetti from "@/composables/useConfetti.js";
 import MarkdownView from "./MarkdownView.vue";
 import { AUTUMN_COLORS } from "@/composables/useAutumn.js";
+import { jiraLinks } from "@/composables/jira.js";
 import {
   checkTask,
   collapseWorkItemTask,
@@ -567,6 +568,14 @@ async function pickMode(kind, target, mode, event) {
   }
 }
 
+// Значок «J» на доске: только подсказка, что внутри есть ссылка в Jira.
+// Сама кнопка перехода — в открытой карточке. Тексты те же, что там.
+function jiraKeys(...texts) {
+  return jiraLinks(...texts)
+    .map((l) => l.key)
+    .join(", ");
+}
+
 // Подпись «день 2 из 5» у многодневной карточки.
 function spanLabel(item) {
   return (item.spanDays || 1) > 1 ? `${item.spanIndex}/${item.spanDays}` : "";
@@ -1102,6 +1111,11 @@ onBeforeUnmount(() => {
                 <span v-if="card.sub.done">✓</span>
               </button>
               <span class="ovw-sub-title">{{ card.sub.title }}</span>
+              <span
+                v-if="jiraKeys(card.sub.title)"
+                class="ovw-jira"
+                :title="'Есть ссылка в Jira: ' + jiraKeys(card.sub.title)"
+              >J</span>
               <span class="ovw-mode ovw-nodrag" :class="{ set: card.sub.workMode }">
                 <button
                   class="ai"
@@ -1177,6 +1191,14 @@ onBeforeUnmount(() => {
                 <span v-if="card.item.emoji" class="ovw-card-emoji">{{ card.item.emoji }}</span
                 >{{ card.item.title }}
               </span>
+              <span
+                v-if="jiraKeys(card.item.title, ...(card.item.tasks || []).map((t) => t.title))"
+                class="ovw-jira"
+                :title="
+                  'Есть ссылка в Jira: ' +
+                  jiraKeys(card.item.title, ...(card.item.tasks || []).map((t) => t.title))
+                "
+              >J</span>
               <span v-if="card.item.priority" class="ovw-card-prio">{{ "!".repeat(card.item.priority) }}</span>
               <span class="ovw-mode ovw-nodrag" :class="{ set: card.item.workMode }">
                 <button
@@ -1909,6 +1931,23 @@ onBeforeUnmount(() => {
   font-weight: 700;
   font-size: 12px;
   flex-shrink: 0;
+}
+
+/* Признак ссылки в Jira — тот же синий кружок, что на кнопке в карточке. */
+.ovw-jira {
+  flex-shrink: 0;
+  align-self: flex-start;
+  margin-top: 3px;
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #2684ff;
+  color: #fff;
+  font-size: 10.5px;
+  font-weight: 800;
+  line-height: 1;
 }
 
 /* «С ИИ / руками»: две половинки одной таблетки. Пока ничего не выбрано —
