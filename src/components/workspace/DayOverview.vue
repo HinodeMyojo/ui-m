@@ -1139,6 +1139,12 @@ onBeforeUnmount(() => {
                 >{{ card.item.title }}
               </span>
               <span v-if="card.item.priority" class="ovw-card-prio">{{ "!".repeat(card.item.priority) }}</span>
+              <span
+                v-if="card.item.workMode"
+                class="ovw-card-mode"
+                :title="card.item.workMode === 'ai' ? 'Делаю с ИИ' : 'Делаю руками'"
+                >{{ card.item.workMode === "ai" ? "🤖" : "✋" }}</span
+              >
               <button
                 class="ovw-card-carry ovw-nodrag"
                 :class="{ on: card.item.autoCarry }"
@@ -1854,6 +1860,11 @@ onBeforeUnmount(() => {
 .ovw-card-prio {
   color: #e5484d;
   font-weight: 700;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.ovw-card-mode {
   font-size: 12px;
   flex-shrink: 0;
 }

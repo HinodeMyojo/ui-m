@@ -45,6 +45,12 @@ const PRIORITIES = [
   { value: 3, label: "!!!", title: "высокий" },
 ];
 
+// Как собираюсь делать — справочная пометка. Повторный клик снимает выбор.
+const WORK_MODES = [
+  { key: "ai", label: "🤖 С ИИ", title: "делаю с помощью ИИ (Claude)" },
+  { key: "manual", label: "✋ Руками", title: "делаю сам, без ИИ" },
+];
+
 const COLORS = ["#1767fd", "#6e4aff", "#63c94f", "#ffd666", "#e5484d", "#4aa8ff", "#ff7ac6", "#8f95a6"];
 const EMOJIS = ["🎯", "💻", "📚", "🐛", "✍️", "🎨", "📞", "🧪", "🔥", "🧠", "⚙️", "📈", "🌱", "🎮", "🏋️", "🇬🇧"];
 
@@ -98,6 +104,7 @@ function blank() {
     status: "todo",
     dropReason: "",
     priority: 0,
+    workMode: "",
     deadline: null,
     deadlineHasTime: false,
     estimateMinutes: 0,
@@ -128,6 +135,7 @@ function hydrate(item) {
     status: item.status || "todo",
     dropReason: item.dropReason || "",
     priority: item.priority || 0,
+    workMode: item.workMode || "",
     deadline: item.deadline || null,
     deadlineHasTime: !!item.deadlineHasTime,
     estimateMinutes: item.estimateMinutes || 0,
@@ -197,6 +205,7 @@ async function save({ silent = false } = {}) {
       status: form.value.status,
       dropReason: form.value.dropReason,
       priority: form.value.priority,
+      workMode: form.value.workMode,
       deadline: form.value.deadline,
       deadlineHasTime: form.value.deadlineHasTime,
       estimateMinutes: Number(form.value.estimateMinutes) || 0,
@@ -752,6 +761,20 @@ const totalSpent = computed(
       placeholder="Почему отменено?"
     />
 
+    <div class="wie-modes">
+      <span class="wie-modes-label">Как делаю:</span>
+      <button
+        v-for="m in WORK_MODES"
+        :key="m.key"
+        class="wie-mode"
+        :class="[m.key, { on: form.workMode === m.key }]"
+        :title="m.title"
+        @click="form.workMode = form.workMode === m.key ? '' : m.key"
+      >
+        {{ m.label }}
+      </button>
+    </div>
+
     <!-- Время -->
     <section class="wie-block">
       <div class="wie-block-head">⏱ Сроки и время</div>
@@ -1270,6 +1293,43 @@ const totalSpent = computed(
 .wie-prio.on {
   border-color: #e5484d;
   color: #ff9ba0;
+}
+
+.wie-modes {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.wie-modes-label {
+  color: #8f95a6;
+  font-size: 12.5px;
+}
+
+.wie-mode {
+  background: #1e2027;
+  border: 1px solid #2f3340;
+  color: #9aa0b1;
+  border-radius: 20px;
+  padding: 6px 13px;
+  cursor: pointer;
+  font-size: 12.5px;
+  min-height: 34px;
+}
+
+.wie-mode.ai.on {
+  border-color: #b18cff;
+  color: #cdb6ff;
+  background: #1f1a2c;
+  font-weight: 600;
+}
+
+.wie-mode.manual.on {
+  border-color: #63c94f;
+  color: #9be38b;
+  background: #18241a;
+  font-weight: 600;
 }
 
 .wie-colors {

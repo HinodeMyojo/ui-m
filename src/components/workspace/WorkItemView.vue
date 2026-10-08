@@ -362,6 +362,9 @@ function toggleLog(taskId) {
         <span v-if="item.priority" class="wiv-prio" :title="'Приоритет ' + item.priority">
           {{ "!".repeat(item.priority) }}
         </span>
+        <span v-if="item.workMode" class="wiv-mode" :class="item.workMode">
+          {{ item.workMode === "ai" ? "🤖 с ИИ" : "✋ руками" }}
+        </span>
         <button
           class="wiv-blocker-add"
           :class="{ hot: openBlockers }"
@@ -668,6 +671,23 @@ function toggleLog(taskId) {
   color: #e5484d;
   font-weight: 700;
   font-size: 13px;
+}
+
+.wiv-mode {
+  border: 1px solid #2f3340;
+  border-radius: 20px;
+  padding: 2px 9px;
+  font-size: 12px;
+}
+
+.wiv-mode.ai {
+  border-color: #b18cff;
+  color: #cdb6ff;
+}
+
+.wiv-mode.manual {
+  border-color: #63c94f;
+  color: #9be38b;
 }
 
 .wiv-blocker-add {
