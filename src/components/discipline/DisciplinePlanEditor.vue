@@ -184,7 +184,7 @@ const activitySource = computed(
 // чтобы пустое поле не выглядело выключенным уровнем.
 const SOURCE_DEFAULTS = {
   sport: { min: 50, mid: 75, max: 100 },
-  japanese: { min: 2, mid: 3, max: 5 },
+  japanese: { min: 1, mid: 3, max: 5 },
 };
 
 function sourcePlaceholder(level) {
