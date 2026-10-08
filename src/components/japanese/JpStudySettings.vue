@@ -89,7 +89,9 @@ function add() {
     enabled: true,
     itemTypes: ["kanji"],
     newPerDay: 6,
-    sessionSec: 360,
+    // Как у учёбы по умолчанию на сервере: письмо знака идёт четырьмя
+    // ступенями и в шесть минут вместе с повторениями не помещается.
+    sessionSec: 480,
     examEvery: 20,
     remindText: "10:00, 15:00, 20:00",
   });

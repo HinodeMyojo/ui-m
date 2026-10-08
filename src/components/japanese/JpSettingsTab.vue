@@ -14,6 +14,11 @@ import {
 } from "@/components/japaneseApi.js";
 import { jpSoundEnabled, setJpSoundEnabled, jpPlay } from "./jpSound.js";
 import JpStudySettings from "./JpStudySettings.vue";
+import { isAdmin } from "@/components/session.js";
+
+// Перевод пишет в общий справочник, поэтому и кнопка, и сервер — только для
+// администратора.
+const admin = isAdmin();
 
 // Настройки раздела. Всё, кроме темпа новых: его подбирает система, и ручку
 // «столько-то в день» здесь не заводим намеренно — она мгновенно превращается
@@ -234,26 +239,13 @@ onMounted(() => {
               <option :value="0.95">95% — держать крепче</option>
             </select>
           </div>
-          <div class="jp-field">
-            <label>Новых в день</label>
-            <input
-              v-model.number="form.newPerDay"
-              class="jp-input"
-              type="number"
-              min="1"
-              max="30"
-              :disabled="form.autoPace"
-            />
-          </div>
         </div>
-        <label class="jp-check" style="margin-top: 10px">
-          <input v-model="form.autoPace" type="checkbox" />
-          Темп подбирает система по долгу повторений
-        </label>
-        <label class="jp-check" style="margin-top: 8px">
-          <input v-model="form.showRomaji" type="checkbox" />
-          Показывать ромадзи
-        </label>
+        <!-- «Новых в день», автотемп и ромадзи отсюда убраны: норму и длину
+             сессии задаёт учёба (ниже), а ромадзи приложение не показывает
+             нигде. Ручки, которые ничего не меняют, хуже их отсутствия. -->
+        <p class="jp-muted" style="margin-top: 10px">
+          Сколько новых в день и длина сессии — в настройках учёбы ниже.
+        </p>
         <!-- Звук хранится на устройстве, а не на сервере: в метро он нужен, за
              рабочим столом — нет, и это разные ответы для одного человека. -->
         <label class="jp-check" style="margin-top: 8px">
@@ -289,8 +281,9 @@ onMounted(() => {
           </div>
         </div>
         <p class="jp-muted" style="margin-top: 8px">
-          Бот пишет не чаще раза в четыре часа. Поводов два: накопившийся долг и — после 20:00 —
-          стрик под угрозой. Токен бота задаётся на сервере, здесь только адресат.
+          Бот пишет в часы напоминаний учёбы (по умолчанию 10:00, 15:00 и 20:00) — по одному
+          сообщению на час, пока день не закрыт: сессией, засчитанной в стрик, или пятнадцатью
+          ответами. Токен бота задаётся на сервере, здесь только адресат.
         </p>
       </section>
 
@@ -332,7 +325,7 @@ onMounted(() => {
         </p>
       </section>
 
-      <section class="jp-card">
+      <section v-if="admin" class="jp-card">
         <h3>Русские значения кандзи</h3>
         <p class="jp-muted">
           Свободного источника русских значений кандзи не существует: KANJIDIC2 даёт английские,

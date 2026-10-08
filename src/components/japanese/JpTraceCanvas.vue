@@ -89,6 +89,10 @@ const misses = ref(0);
 // Промахи по черте, которую пишут прямо сейчас: по ним решается, пора ли
 // показать её и пора ли зачесть.
 const strokeMisses = ref(0);
+// Черты, засчитанные за человека: пятый промах или «пропустить черту». Знак,
+// где хоть одну черту написала программа, не написан — это провал письма, а
+// не «почти» (родитель решает по полю failed в событии done).
+const forced = ref(0);
 // Почему черта не принята — словами. Молчаливая тряска не учит: человек
 // повторяет ровно то же самое и решает, что сломан не он, а программа.
 const rejected = ref("");
@@ -239,6 +243,7 @@ function reset() {
   attempts.value = 0;
   misses.value = 0;
   strokeMisses.value = 0;
+  forced.value = 0;
   rejected.value = "";
 }
 
@@ -304,6 +309,7 @@ function end() {
   // получит честно. А вот упереться в черту и не выйти из карточки вовсе —
   // это не строгость, это тупик.
   if (strokeMisses.value >= FORCE_AFTER) {
+    forced.value++;
     accept();
     rejected.value = "засчитано с натяжкой — посмотри, как она пишется";
   }
@@ -313,9 +319,17 @@ function accept() {
   doneCount.value++;
   strokeMisses.value = 0;
   rejected.value = "";
-  if (finished.value) {
-    emit("done", { attempts: attempts.value, misses: misses.value });
-  }
+  if (finished.value) emitDone();
+}
+
+// Итог письма. Провал — черту пришлось писать за человека, или промахов
+// больше, чем черт в знаке: такой знак по памяти не написан.
+function emitDone() {
+  emit("done", {
+    attempts: attempts.value,
+    misses: misses.value,
+    failed: forced.value > 0 || misses.value > total.value,
+  });
 }
 
 // --- Сверка ---
@@ -446,10 +460,11 @@ const currentPath = computed(() => {
 // двух промахов и денег не стоит — стоит промах, который уже случился.
 function hint() {
   misses.value++;
+  forced.value++;
   strokeMisses.value = 0;
   rejected.value = "";
   doneCount.value++;
-  if (finished.value) emit("done", { attempts: attempts.value, misses: misses.value });
+  if (finished.value) emitDone();
 }
 
 onMounted(measure);

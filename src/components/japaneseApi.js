@@ -143,12 +143,15 @@ export function markSpeechRecognitionBroken() {
 // «неверно». Поэтому засчитывается и сам знак, и запись слова, и чтение.
 //
 // Вхождение, а не равенство: распознавание любит дописывать частицы и
-// склеивать слова, «やま» внутри «やまです» — то же самое чтение.
+// склеивать слова, «やま» внутри «やまです» — то же самое чтение. Но только в
+// одну сторону: услышанное должно содержать ожидаемое. Обратное направление
+// («ожидаемое содержит услышанное») засчитывало обрывок — одиночное «か»
+// подходило к любому чтению, где есть «か».
 export function jpSpeechMatches(heard, expected) {
   const said = jpNormalizeReading(heard);
   const want = jpNormalizeReading(expected);
   if (!said || !want) return false;
-  if (said.includes(want) || want.includes(said)) return true;
+  if (said.includes(want)) return true;
   // Запись знаком или словом: сравниваем как есть, без приведения каны.
   const rawSaid = String(heard || "").replace(/[\s.,。、！？!?]/g, "");
   const rawWant = String(expected || "").replace(/[\s.,。、！？!?]/g, "");

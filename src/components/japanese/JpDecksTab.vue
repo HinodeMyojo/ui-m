@@ -29,6 +29,19 @@ const systemDecks = computed(() => decks.value.filter((d) => d.kind === "system"
 const userDecks = computed(() => decks.value.filter((d) => d.kind !== "system"));
 const enabledDecks = computed(() => decks.value.filter((d) => d.enabled));
 
+// Поток делится отдельно у иероглифов и у слов: их учат разные учёбы, и
+// «N5 — 60%, слова — 40%» в одной строке читалось так, будто в «Иероглифы»
+// попадают слова.
+const CONTENT_LABELS = { kanji: "Иероглифы", word: "Слова" };
+const flowGroups = computed(() => {
+  const groups = [];
+  for (const content of ["kanji", "word"]) {
+    const list = enabledDecks.value.filter((d) => (d.content || "kanji") === content);
+    if (list.length) groups.push({ content, label: CONTENT_LABELS[content], decks: list });
+  }
+  return groups;
+});
+
 // Долю в потоке считает сервер: вес сам по себе не значит ничего, важно
 // отношение к сумме весов включённых наборов.
 function pct(deck) {
@@ -140,9 +153,12 @@ onMounted(load);
 
         <div v-if="enabledDecks.length" class="jpd-flow">
           <span class="jp-muted">Поток новых сейчас делят:</span>
-          <span v-for="d in enabledDecks" :key="d.id" class="jpd-flow-chip">
-            {{ d.name }} — {{ d.sharePct }}%
-          </span>
+          <template v-for="g in flowGroups" :key="g.content">
+            <span class="jp-muted">{{ g.label }}:</span>
+            <span v-for="d in g.decks" :key="d.id" class="jpd-flow-chip">
+              {{ d.name }} — {{ d.sharePct }}%
+            </span>
+          </template>
         </div>
         <div v-else class="jp-error" style="margin-top: 10px">
           Ни один набор не включён — новых единиц не будет вовсе.

@@ -44,6 +44,9 @@ import {
   speakableOf,
   jpAutoSpeakEnabled,
   JP_WRITE_BY_KEYS,
+  JP_WRITE_OUTLINE,
+  JP_WRITE_ZONES,
+  JP_WRITE_BLIND,
   jpAcceptedReadings,
   jpMainReadings,
   jpReadingParts,
@@ -147,6 +150,7 @@ async function begin(nextRound = 1) {
       round: nextRound,
     });
     session.value = data;
+    answered.value = 0;
     round.value = data?.round || nextRound;
     queue.value = data?.cards || [];
     index.value = 0;
@@ -309,10 +313,14 @@ function learned() {
 // обманки, и порядок там перемешан.
 const realTiles = computed(() => (card.value?.components || []).map((c) => c.char));
 
+// Смотрим на показанный вопрос (mechanic), а не на тот, что прислал сервер:
+// «вслух» без микрофона показывается вводом чтения, и проверка по исходному
+// «speak» держала кнопку «Ответить» выключенной при верно набранном ответе —
+// выйти можно было только через «Не знаю», и карточка крутилась по кругу.
 const canSubmit = computed(() => {
   if (!card.value) return false;
-  if (card.value.mechanic === JP_MECH_READING) return typed.value.length > 0;
-  if (card.value.mechanic === JP_MECH_BUILD) return tiles.value.length > 0;
+  if (mechanic.value === JP_MECH_READING) return typed.value.length > 0;
+  if (mechanic.value === JP_MECH_BUILD) return tiles.value.length > 0;
   return false;
 });
 
@@ -324,11 +332,28 @@ const canSubmit = computed(() => {
 // создаёт новый массив на каждую перерисовку, и следящий за ним потомок уходит
 // в бесконечный круг. Так и случилось: вкладка падала на второй обводке.
 const EMPTY = [];
+
+// Подпись к письму — по ступени. Раньше она ждала поле traceBlind, которого
+// сервер не присылал, и на письме по памяти просила «обвести по контуру».
+const TRACE_HINTS = {
+  [JP_WRITE_BY_KEYS]: "Обведи знак по контуру — цветом показаны ключи",
+  [JP_WRITE_OUTLINE]: "Обведи знак по контуру, черту за чертой",
+  [JP_WRITE_ZONES]: "Напиши знак по зонам ключей — контура нет",
+  [JP_WRITE_BLIND]: "Напиши знак по памяти — контура нет",
+};
+const traceHint = computed(
+  () => TRACE_HINTS[card.value?.writeStage || JP_WRITE_BY_KEYS] || TRACE_HINTS[JP_WRITE_OUTLINE],
+);
 const tracePaths = computed(() => card.value?.strokePaths || EMPTY);
 const traceGroups = computed(() => card.value?.strokeGroups || EMPTY);
 
-function traceDone({ misses }) {
-  reveal(misses === 0 ? "right" : "close");
+// Письмо проваливается, если хоть одну черту пришлось засчитать за человека
+// (пять промахов или «пропустить черту») или промахов больше, чем черт.
+// Раньше любая обводка была «верно» или «почти»: десять неверных черт из
+// десяти давали «Верно, с промахами», и письмо по памяти не проверяло ничего.
+function traceDone({ misses, failed }) {
+  if (failed) reveal("wrong");
+  else reveal(misses === 0 ? "right" : "close");
 }
 
 function pickOption(i) {
@@ -354,7 +379,7 @@ function toggleTile(ch) {
 
 function submit() {
   if (phase.value !== PHASE.ASK || !canSubmit.value) return;
-  if (card.value.mechanic === JP_MECH_READING) {
+  if (mechanic.value === JP_MECH_READING) {
     reveal(checkReading());
     return;
   }
@@ -450,8 +475,12 @@ async function rate(rating) {
       rating,
       mechanic: current.mechanic,
       writeStage: current.writeStage || 0,
+      // Номер шага штурма: по нему сервер закрывает ровно этот шаг, а не
+      // «следующий по счёту», и проваленный шаг не перепрыгивается.
+      drillStep: current.drillStep || 0,
       thinkMs: Math.max(0, Date.now() - shownAt.value),
     });
+    answered.value++;
     // Провал возвращает карточку в конец этой же сессии — так и задумано,
     // ошибку надо переспросить, пока она свежая. Варианты перетасовываются:
     // тот же порядок запоминается как «третья кнопка», а не как ответ.
@@ -497,6 +526,27 @@ function advance() {
   }
   index.value = next;
   nextTick(ask);
+}
+
+// Сколько ответов ушло на сервер в этой сессии. По нему решается, есть ли что
+// закрывать при выходе по ✕.
+const answered = ref(0);
+
+// Выход посреди сессии — тоже её конец. Раньше ✕ просто уходил с экрана:
+// ответы были записаны, а стрик, опыт в профиль и отметка в трекере — нет,
+// и двадцать ответов без «Хватит» день не закрывали.
+async function exitSession() {
+  if (answered.value > 0 && session.value?.sessionId && phase.value !== PHASE.DONE) {
+    stopTicker();
+    try {
+      await finishJpSession(session.value.sessionId, {
+        durationSec: Math.round(activeMs() / 1000),
+      });
+    } catch {
+      /* итог не сохранился — ответы всё равно записаны, уходим */
+    }
+  }
+  emit("exit");
 }
 
 async function finish() {
@@ -731,7 +781,7 @@ onBeforeUnmount(() => {
     <!-- Шапка: сколько осталось времени и карточек. Ничего нажимаемого, кроме
          выхода: он должен быть далеко от кнопок ответа. -->
     <header class="jps-top">
-      <button class="jps-close" aria-label="Выйти" @click="emit('exit')">✕</button>
+      <button class="jps-close" aria-label="Выйти" @click="exitSession">✕</button>
       <div class="jps-progress">
         <div class="jps-progress-fill" :style="{ width: `${progressPct}%` }" />
       </div>
@@ -785,6 +835,9 @@ onBeforeUnmount(() => {
       <div class="jps-done-rows">
         <div v-if="result?.streakGained" class="jps-done-row is-good">
           🔥 Стрик {{ result.streak }} — день закрыт
+        </div>
+        <div v-if="result?.freezeUsed" class="jps-done-row is-good">
+          🧊 Заморозка спасла стрик за пропущенный день
         </div>
         <div v-if="result?.disciplineMarked" class="jps-done-row">🎯 Отмечено в трекере</div>
         <div v-if="result?.newLearned" class="jps-done-row">
@@ -1183,11 +1236,7 @@ onBeforeUnmount(() => {
 
           <template v-else-if="mechanic === JP_MECH_TRACE">
             <div class="jps-trace-hint">
-              {{
-                card.traceBlind
-                  ? "Напиши знак по памяти — контура нет"
-                  : "Обведи знак по контуру, черту за чертой"
-              }}
+              {{ traceHint }}
             </div>
             <JpTraceCanvas
               :paths="tracePaths"
