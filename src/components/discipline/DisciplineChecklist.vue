@@ -172,10 +172,22 @@ const skillRows = computed(() => {
 
   const visible = rows.filter((r) => r.leveled.length > 0 || r.counters.length > 0 || !r.active);
   return visible.sort((a, b) => {
+    // скрытые — последним блоком, под раскрывашкой
+    if (!!a.skill.hidden !== !!b.skill.hidden) return a.skill.hidden ? 1 : -1;
     const rank = (r) => (!r.active ? 2 : r.closed || r.rested ? 1 : 0);
     return rank(a) - rank(b) || a.skill.position - b.skill.position;
   });
 });
+
+// Скрытые навыки считаются в статус дня как обычные, но на экране свёрнуты
+// в отдельный блок: раскрываешь, когда нужно отметить. Сколько из них ещё
+// не закрыто — видно и в свёрнутом виде, чтобы не забыть про них.
+const openRows = computed(() => skillRows.value.filter((r) => !r.skill.hidden));
+const hiddenRows = computed(() => skillRows.value.filter((r) => r.skill.hidden));
+const hiddenPending = computed(
+  () => hiddenRows.value.filter((r) => r.active && !r.closed && !r.rested).length,
+);
+const hiddenOpen = ref(false);
 
 // --- Связка с roadmap: у читательских активностей можно указать материал ---
 // docs/roadmap-module.md, раздел 5.5. Список тянем один раз и лениво: если
@@ -299,6 +311,8 @@ const unmarkedMin = computed(() => {
   const list = [];
   for (const row of skillRows.value) {
     if (!row.active || row.rested) continue;
+    // свёрнутые скрытые вслепую не закрываем — только то, что видно
+    if (row.skill.hidden && !hiddenOpen.value) continue;
     for (const a of row.leveled) {
       // Активность с источником закрывается занятием, а не кнопкой.
       if (a.minDesc && !isAuto(a) && !entryFor(a.id)) list.push(a);
@@ -429,7 +443,14 @@ function saveNote() {
     <button v-if="unmarkedMin.length > 1" class="dsc-bulk-min" :disabled="busy" @click="completeAllMin">
       ⚡ Закрыть весь минимум ({{ unmarkedMin.length }})
     </button>
-    <div v-for="row in skillRows" :key="row.skill.planSkillId" class="dsc-skill"
+    <template v-for="group in ['open', 'hidden']" :key="group">
+    <button v-if="group === 'hidden' && hiddenRows.length" class="dsc-hidden-toggle"
+      :class="{ 'dsc-hidden-pending': hiddenPending }" @click="hiddenOpen = !hiddenOpen">
+      <span>{{ hiddenOpen ? "▾" : "▸" }} Скрытые ({{ hiddenRows.length }})</span>
+      <span class="dsc-hidden-state">{{ hiddenPending ? `не закрыто: ${hiddenPending}` : "✓ всё закрыто" }}</span>
+    </button>
+    <div v-for="row in group === 'open' ? openRows : hiddenOpen ? hiddenRows : []"
+      :key="row.skill.planSkillId" class="dsc-skill"
       :class="{ 'dsc-skill-closed': row.closed || row.rested, 'dsc-skill-inactive': !row.active }">
       <div class="dsc-skill-head">
         <span class="dsc-skill-title" :style="{ color: row.skill.color || '#8ab4ff' }">
@@ -520,6 +541,7 @@ function saveNote() {
         </div>
       </template>
     </div>
+    </template>
 
     <div class="dsc-adhoc">
       <button v-if="!adhocOpen" class="dsc-adhoc-toggle" @click="adhocOpen = true">+ сверх плана</button>
@@ -578,6 +600,36 @@ function saveNote() {
 
 .dsc-lvl {
   cursor: pointer;
+}
+
+.dsc-hidden-toggle {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  background: transparent;
+  border: 1px dashed #333748;
+  color: #8f95a6;
+  border-radius: 8px;
+  padding: 6px 10px;
+  cursor: pointer;
+  font-size: 12px;
+  min-height: 34px;
+  text-align: left;
+}
+
+.dsc-hidden-toggle:hover {
+  border-color: #6e4aff;
+  color: #cfd3e0;
+}
+
+.dsc-hidden-state {
+  font-size: 11px;
+  color: #6c7284;
+}
+
+.dsc-hidden-pending .dsc-hidden-state {
+  color: #ffd666;
 }
 
 .dsc-skill {

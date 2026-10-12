@@ -152,6 +152,17 @@ async function moveSkill(ps, delta) {
   await changed();
 }
 
+// Скрытый навык на главной свёрнут под «Скрытые», но в расчёт дня идёт.
+async function toggleSkillHidden(ps) {
+  await updateDisciplinePlanSkill(ps.planSkillId, {
+    position: ps.position,
+    startDay: ps.startDay ? Number(ps.startDay) : null,
+    endDay: ps.endDay ? Number(ps.endDay) : null,
+    hidden: !ps.hidden,
+  });
+  await changed();
+}
+
 async function saveSkillDates(ps) {
   await updateDisciplinePlanSkill(ps.planSkillId, {
     position: ps.position,
@@ -419,6 +430,11 @@ async function removeActivity() {
     <div v-for="s in month.skills" v-show="planView === 'skills'" :key="s.planSkillId" class="dpe-skill">
       <div class="dpe-skill-head">
         <b :style="{ color: s.color || '#8ab4ff' }">{{ s.icon }} {{ s.title }}</b>
+        <button class="dpe-btn" :class="{ 'dpe-btn-hidden-on': s.hidden }"
+          :title="s.hidden ? 'Скрытый: на главной свёрнут, в статус дня идёт. Нажми, чтобы показать' : 'Спрятать на главной под «Скрытые» — в статус дня всё равно идёт'"
+          @click="toggleSkillHidden(s)">
+          {{ s.hidden ? "🙈 скрыт" : "👁" }}
+        </button>
         <label class="dpe-inline">с <input type="number" min="1" max="31" :value="s.startDay"
             @change="s.startDay = $event.target.value; saveSkillDates(s)" placeholder="1" /></label>
         <label class="dpe-inline">по <input type="number" min="1" max="31" :value="s.endDay"
@@ -698,6 +714,11 @@ async function removeActivity() {
 .dpe-btn-danger {
   border-color: #a33;
   color: #ff7875;
+}
+
+.dpe-btn-hidden-on {
+  border-color: #6e4aff;
+  color: #b37feb;
 }
 
 .dpe-quota-form {
