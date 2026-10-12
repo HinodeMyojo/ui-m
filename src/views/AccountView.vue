@@ -205,6 +205,45 @@ function resetUserPassword(user) {
       </section>
 
       <section class="card">
+        <h2>Claude — план дня голосом</h2>
+        <p class="hint">
+          Подключи планировщик к Claude один раз — и дальше просто надиктовывай
+          ему план на день, хоть с телефона. Новое он заведёт карточками в
+          «Сегодня», а недоделанное из прошлых дней найдёт и подтянет.
+        </p>
+
+        <template v-if="connectorUrl">
+          <p class="notice">Адрес готов. Он показывается один раз — скопируй его сейчас.</p>
+          <div class="row">
+            <input class="connector-url" :value="connectorUrl" readonly @focus="$event.target.select()" />
+            <button class="primary" @click="copyConnector">{{ copied ? "Скопировано ✓" : "Скопировать" }}</button>
+          </div>
+          <ol class="steps">
+            <li>Открой <b>claude.ai</b> → Настройки → <b>Connectors</b> (Коннекторы).</li>
+            <li><b>Add custom connector</b>: имя — «Планировщик», URL — этот адрес. Авторизацию не заполняй.</li>
+            <li>Готово: коннектор сам появится и в приложении Claude на телефоне. Скажи там, например: «план на сегодня: подстричь траву, в три созвон, купить молоко и хлеб».</li>
+          </ol>
+        </template>
+
+        <p v-else-if="connector?.issued" class="hint">
+          Подключено {{ formatWhen(connector.createdAt) }}.
+          <template v-if="connector.lastUsedAt">Последний раз Claude заходил {{ formatWhen(connector.lastUsedAt) }}.</template>
+          <template v-else>Claude ещё ни разу не заходил.</template>
+        </p>
+
+        <div class="row">
+          <button class="primary" :disabled="connectorBusy" @click="issueConnector">
+            {{ connector?.issued ? "Выпустить новый адрес" : "Подключить Claude" }}
+          </button>
+          <button v-if="connector?.issued" class="ghost" :disabled="connectorBusy" @click="revokeConnector">
+            Отключить
+          </button>
+        </div>
+        <p v-if="me.role === 'guest'" class="hint">С гостевой учёткой Claude сможет только смотреть план.</p>
+        <p v-if="connectorError" class="error">{{ connectorError }}</p>
+      </section>
+
+      <section class="card">
         <h2>Пароль</h2>
         <input
           v-model="oldPassword"
@@ -267,45 +306,6 @@ function resetUserPassword(user) {
 
         <p v-if="emailError" class="error">{{ emailError }}</p>
         <p v-if="emailNotice" class="notice">{{ emailNotice }}</p>
-      </section>
-
-      <section class="card">
-        <h2>Claude — план дня голосом</h2>
-        <p class="hint">
-          Подключи планировщик к Claude один раз — и дальше просто надиктовывай
-          ему план на день, хоть с телефона. Новое он заведёт карточками в
-          «Сегодня», а недоделанное из прошлых дней найдёт и подтянет.
-        </p>
-
-        <template v-if="connectorUrl">
-          <p class="notice">Адрес готов. Он показывается один раз — скопируй его сейчас.</p>
-          <div class="row">
-            <input class="connector-url" :value="connectorUrl" readonly @focus="$event.target.select()" />
-            <button class="primary" @click="copyConnector">{{ copied ? "Скопировано ✓" : "Скопировать" }}</button>
-          </div>
-          <ol class="steps">
-            <li>Открой <b>claude.ai</b> → Настройки → <b>Connectors</b> (Коннекторы).</li>
-            <li><b>Add custom connector</b>: имя — «Планировщик», URL — этот адрес. Авторизацию не заполняй.</li>
-            <li>Готово: коннектор сам появится и в приложении Claude на телефоне. Скажи там, например: «план на сегодня: подстричь траву, в три созвон, купить молоко и хлеб».</li>
-          </ol>
-        </template>
-
-        <p v-else-if="connector?.issued" class="hint">
-          Подключено {{ formatWhen(connector.createdAt) }}.
-          <template v-if="connector.lastUsedAt">Последний раз Claude заходил {{ formatWhen(connector.lastUsedAt) }}.</template>
-          <template v-else>Claude ещё ни разу не заходил.</template>
-        </p>
-
-        <div class="row">
-          <button class="primary" :disabled="connectorBusy" @click="issueConnector">
-            {{ connector?.issued ? "Выпустить новый адрес" : "Подключить Claude" }}
-          </button>
-          <button v-if="connector?.issued" class="ghost" :disabled="connectorBusy" @click="revokeConnector">
-            Отключить
-          </button>
-        </div>
-        <p v-if="me.role === 'guest'" class="hint">С гостевой учёткой Claude сможет только смотреть план.</p>
-        <p v-if="connectorError" class="error">{{ connectorError }}</p>
       </section>
 
       <section v-if="isAdmin" class="card">

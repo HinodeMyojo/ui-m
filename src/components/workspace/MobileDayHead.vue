@@ -32,10 +32,14 @@ function shift(delta) {
   emit("update:date", iso(d));
 }
 
-const title = computed(() => {
-  const d = new Date(props.date + "T12:00:00");
-  return d.toLocaleDateString("ru-RU", { weekday: "long", day: "numeric", month: "long" });
-});
+// «12 октября» крупно, день недели — второй строкой: в одну строку
+// «понедельник, 12 октября» на 390 пикселях не помещается рядом со стрелками.
+const title = computed(() =>
+  new Date(props.date + "T12:00:00").toLocaleDateString("ru-RU", { day: "numeric", month: "long" }),
+);
+const weekday = computed(() =>
+  new Date(props.date + "T12:00:00").toLocaleDateString("ru-RU", { weekday: "long" }),
+);
 
 // Неделя выбранного дня, с понедельника: соседние дни — в одно касание, без
 // календаря. Дальше недели прыгают через дату в заголовке.
@@ -82,10 +86,7 @@ function pick(key) {
       <button class="mdh-arrow" aria-label="Предыдущий день" @click="shift(-1)">‹</button>
       <label class="mdh-title">
         <span class="mdh-day">{{ title }}</span>
-        <span class="mdh-sub">
-          <template v-if="isToday">сегодня</template>
-          <template v-else>{{ date.split("-").reverse().join(".") }}</template>
-        </span>
+        <span class="mdh-sub">{{ weekday }}<template v-if="isToday"> · сегодня</template></span>
         <!-- Нативный выбор даты поверх заголовка: на телефоне он лучше любого своего. -->
         <input
           class="mdh-date-input"
@@ -191,9 +192,8 @@ function pick(key) {
   padding: 2px 4px;
 }
 .mdh-day {
-  font-size: 18px;
+  font-size: 19px;
   font-weight: 700;
-  text-transform: capitalize;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
