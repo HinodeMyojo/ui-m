@@ -3,7 +3,10 @@ import { computed, onMounted, ref } from "vue";
 import {
   changePassword,
   confirmEmail,
+  fetchAssistantConnector,
   fetchMe,
+  issueAssistantConnector,
+  revokeAssistantConnector,
   fetchUsers,
   logout,
   setEmail,
@@ -27,6 +30,14 @@ const emailNotice = ref("");
 const emailError = ref("");
 const awaitingCode = ref(false);
 
+// Коннектор Claude: адрес, по которому Claude раскладывает надиктованный план
+// по «Сегодня». Сам адрес виден только сразу после выпуска.
+const connector = ref(null);
+const connectorUrl = ref("");
+const connectorError = ref("");
+const connectorBusy = ref(false);
+const copied = ref(false);
+
 // Панель пользователей — только у администратора.
 const users = ref([]);
 const usersError = ref("");
@@ -48,12 +59,59 @@ onMounted(async () => {
     // человек ходил по приложению со старым токеном.
     saveSession({ accessToken: localStorage.getItem("token"), user: me.value });
     if (me.value.role === "admin") await loadUsers();
+    connector.value = await fetchAssistantConnector().catch(() => null);
   } catch (err) {
     error.value = String(err?.message || err);
   } finally {
     loading.value = false;
   }
 });
+
+async function issueConnector() {
+  if (connector.value?.issued && !confirm("Старый адрес перестанет работать — в Claude его нужно будет заменить. Выпустить новый?")) return;
+  connectorBusy.value = true;
+  connectorError.value = "";
+  try {
+    const data = await issueAssistantConnector();
+    connector.value = data;
+    connectorUrl.value = data.url;
+    copied.value = false;
+  } catch (err) {
+    connectorError.value = String(err?.message || err);
+  } finally {
+    connectorBusy.value = false;
+  }
+}
+
+async function revokeConnector() {
+  if (!confirm("Отключить Claude от планировщика?")) return;
+  connectorBusy.value = true;
+  connectorError.value = "";
+  try {
+    await revokeAssistantConnector();
+    connector.value = { issued: false };
+    connectorUrl.value = "";
+  } catch (err) {
+    connectorError.value = String(err?.message || err);
+  } finally {
+    connectorBusy.value = false;
+  }
+}
+
+async function copyConnector() {
+  try {
+    await navigator.clipboard.writeText(connectorUrl.value);
+    copied.value = true;
+  } catch {
+    // Буфер недоступен (http, старый браузер) — поле выделено, копируют руками.
+    document.querySelector(".connector-url")?.select();
+  }
+}
+
+function formatWhen(value) {
+  if (!value) return "";
+  return new Date(value).toLocaleString("ru-RU", { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" });
+}
 
 async function loadUsers() {
   try {
@@ -209,6 +267,45 @@ function resetUserPassword(user) {
 
         <p v-if="emailError" class="error">{{ emailError }}</p>
         <p v-if="emailNotice" class="notice">{{ emailNotice }}</p>
+      </section>
+
+      <section class="card">
+        <h2>Claude — план дня голосом</h2>
+        <p class="hint">
+          Подключи планировщик к Claude один раз — и дальше просто надиктовывай
+          ему план на день, хоть с телефона. Новое он заведёт карточками в
+          «Сегодня», а недоделанное из прошлых дней найдёт и подтянет.
+        </p>
+
+        <template v-if="connectorUrl">
+          <p class="notice">Адрес готов. Он показывается один раз — скопируй его сейчас.</p>
+          <div class="row">
+            <input class="connector-url" :value="connectorUrl" readonly @focus="$event.target.select()" />
+            <button class="primary" @click="copyConnector">{{ copied ? "Скопировано ✓" : "Скопировать" }}</button>
+          </div>
+          <ol class="steps">
+            <li>Открой <b>claude.ai</b> → Настройки → <b>Connectors</b> (Коннекторы).</li>
+            <li><b>Add custom connector</b>: имя — «Планировщик», URL — этот адрес. Авторизацию не заполняй.</li>
+            <li>Готово: коннектор сам появится и в приложении Claude на телефоне. Скажи там, например: «план на сегодня: подстричь траву, в три созвон, купить молоко и хлеб».</li>
+          </ol>
+        </template>
+
+        <p v-else-if="connector?.issued" class="hint">
+          Подключено {{ formatWhen(connector.createdAt) }}.
+          <template v-if="connector.lastUsedAt">Последний раз Claude заходил {{ formatWhen(connector.lastUsedAt) }}.</template>
+          <template v-else>Claude ещё ни разу не заходил.</template>
+        </p>
+
+        <div class="row">
+          <button class="primary" :disabled="connectorBusy" @click="issueConnector">
+            {{ connector?.issued ? "Выпустить новый адрес" : "Подключить Claude" }}
+          </button>
+          <button v-if="connector?.issued" class="ghost" :disabled="connectorBusy" @click="revokeConnector">
+            Отключить
+          </button>
+        </div>
+        <p v-if="me.role === 'guest'" class="hint">С гостевой учёткой Claude сможет только смотреть план.</p>
+        <p v-if="connectorError" class="error">{{ connectorError }}</p>
       </section>
 
       <section v-if="isAdmin" class="card">
@@ -395,6 +492,22 @@ select:focus {
 .badge.ok {
   background: #1e3b2c;
   color: #7ee0a5;
+}
+.connector-url {
+  flex: 1 1 220px;
+  min-width: 0;
+  font-family: ui-monospace, monospace;
+  font-size: 0.85rem;
+}
+.steps {
+  margin: 0;
+  padding-left: 20px;
+  color: #c8cad4;
+  font-size: 0.9rem;
+  line-height: 1.55;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 .users {
   display: flex;

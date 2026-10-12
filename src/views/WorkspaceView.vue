@@ -14,6 +14,9 @@ import MainTasksPanel from "@/components/workspace/MainTasksPanel.vue";
 import MainSubtaskPanel from "@/components/workspace/MainSubtaskPanel.vue";
 import RoadmapWidget from "@/components/roadmap/RoadmapWidget.vue";
 import DisciplineChecklist from "@/components/discipline/DisciplineChecklist.vue";
+import MobileDayHead from "@/components/workspace/MobileDayHead.vue";
+import MobileDayList from "@/components/workspace/MobileDayList.vue";
+import { isMobile } from "@/composables/useIsMobile.js";
 import {
   fetchWorkDay,
   saveWorkDay,
@@ -28,6 +31,11 @@ import {
 
 const router = useRouter();
 const route = useRoute();
+
+// На телефоне день — список, а не доска (MobileDayHead + MobileDayList).
+// ?board=1 возвращает полную доску и на телефоне — как ?desktop=1 у главной.
+const boardForced = ref(route.query.board === "1");
+const mobileLayout = computed(() => isMobile.value && !boardForced.value);
 
 // Переход из задачи открывает нужный день сразу: /today?date=2026-07-28&item=<id>
 const queryDate = typeof route.query.date === "string" ? route.query.date : "";
@@ -297,6 +305,76 @@ async function undeferItem({ id, shiftDeadline }) {
   await load({ keepSelection: false });
 }
 
+// --- Телефон ---
+
+// Статус карточки из списка: без пересчёта порядка доски — в списке его не
+// видно, а место карточки на доске пусть остаётся тем, что выстроили руками.
+async function setItemStatus({ id, status }) {
+  const item = day.value?.items?.find((i) => i.id === id);
+  if (!item) return;
+  const previous = item.status;
+  item.status = status;
+  try {
+    await setWorkItemStatus(id, { status, closeTasks: false });
+  } catch (e) {
+    item.status = previous;
+    error.value = e.message;
+  }
+  await load();
+}
+
+// Дело строкой: на телефоне редактор с двумя десятками полей ради одного
+// названия только мешает — подробности добавляют потом, открыв карточку.
+async function quickAdd(title) {
+  try {
+    await createWorkItem({ date: date.value, title });
+    await load();
+  } catch (e) {
+    error.value = e.message;
+  }
+}
+
+function mobileDefer({ id }) {
+  deferItem({ id, shiftDeadline: localStorage.getItem("deferShiftDeadline") !== "0" });
+}
+
+function mobileUndefer({ id }) {
+  undeferItem({ id, shiftDeadline: localStorage.getItem("deferShiftDeadline") !== "0" });
+}
+
+function onMobileTool(key) {
+  switch (key) {
+    case "search":
+      searchOpen.value = true;
+      break;
+    case "note":
+      noteOpen.value = !noteOpen.value;
+      break;
+    case "main":
+      mainOpen.value = !mainOpen.value;
+      break;
+    case "discipline":
+      toggleDiscipline();
+      break;
+    case "sport":
+      sportOpen.value = !sportOpen.value;
+      break;
+    case "roadmap":
+      roadmapOpen.value = !roadmapOpen.value;
+      break;
+    case "sort":
+      sortByTime();
+      break;
+    case "google":
+      googleOpen.value = true;
+      break;
+    case "board":
+      boardForced.value = true;
+      router.replace({ query: { ...route.query, board: "1" } });
+      break;
+  }
+}
+
 // Ключ сортировки: сначала то, у чего есть слот в дне, потом дедлайны со
 // временем, потом «до конца дня», и в самом хвосте — карточки без времени.
 function timeKey(item) {
@@ -417,7 +495,20 @@ function humanMinutes(minutes) {
 </script>
 
 <template>
-  <div class="ws">
+  <div class="ws" :class="{ 'ws-m': mobileLayout }">
+    <MobileDayHead
+      v-if="mobileLayout"
+      v-model:date="date"
+      v-model:focus="dayFocus"
+      :is-today="isToday"
+      :totals="totals"
+      :open="{ note: noteOpen, main: mainOpen, discipline: disciplineOpen, sport: sportOpen, roadmap: roadmapOpen }"
+      :show-google="isOn('integration.google_calendar')"
+      @today="goToday"
+      @tool="onMobileTool"
+    />
+
+    <template v-else>
     <header class="ws-head">
       <div class="ws-nav">
         <button class="ws-icon" title="Предыдущий день" @click="shiftDate(-1)">‹</button>
@@ -456,8 +547,6 @@ function humanMinutes(minutes) {
       </div>
     </header>
 
-    <div v-if="error" class="ws-error">{{ error }}</div>
-
     <section class="ws-strip">
       <input
         v-model="dayFocus"
@@ -495,6 +584,9 @@ function humanMinutes(minutes) {
         :style="{ width: Math.min(100, ((totals.estimateMinutes || 0) / (dayCapacity * 60)) * 100) + '%' }"
       ></div>
     </div>
+    </template>
+
+    <div v-if="error" class="ws-error" @click="error = ''">{{ error }}</div>
 
     <section v-if="disciplineOpen" class="ws-discipline">
       <DisciplineChecklist
@@ -521,7 +613,7 @@ function humanMinutes(minutes) {
       <MainTasksPanel :date="date" @added="load" />
     </section>
 
-    <section class="ws-daynote">
+    <section v-if="!mobileLayout || noteOpen" class="ws-daynote">
       <button class="ws-daynote-toggle" @click="noteOpen = !noteOpen">
         {{ noteOpen ? "▾" : "▸" }} Холст дня
         <span v-if="!noteOpen && dayNote" class="ws-dim">— есть записи</span>
@@ -535,6 +627,26 @@ function humanMinutes(minutes) {
     </section>
 
     <div v-if="loading" class="ws-empty">Загружаю…</div>
+
+    <MobileDayList
+      v-else-if="mobileLayout"
+      :items="items"
+      :date="date"
+      :is-today="isToday"
+      :main-subtasks="day?.mainSubtasks || []"
+      :task-statuses="day?.taskStatuses || []"
+      :tomorrow="day?.tomorrow || []"
+      :board-order="day?.boardOrder || []"
+      :carry-count="carryCount"
+      @open="openItem"
+      @open-sub="openSub"
+      @status="setItemStatus"
+      @defer="mobileDefer"
+      @undefer="mobileUndefer"
+      @add="quickAdd"
+      @carry="carryOpen = true"
+      @refresh="load"
+    />
 
     <DayOverview
       v-else
@@ -636,6 +748,13 @@ function humanMinutes(minutes) {
 </template>
 
 <style scoped>
+/* Телефон: шапка и список свои, отступы плотнее — на 390px каждый пиксель
+   по краям отнимается у названия дела. */
+.ws.ws-m {
+  padding: 10px 12px 24px;
+  gap: 12px;
+  min-height: auto;
+}
 .ws {
   min-height: 100vh;
   width: 100%;

@@ -127,6 +127,29 @@ export async function fetchMe() {
   return await response.json();
 }
 
+// --- Коннектор Claude: план дня голосом из Claude на телефоне ---
+
+export async function fetchAssistantConnector() {
+  const response = await authorizedFetch(`${API_BASE_URL}/api/v1/assistant/connector`);
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw data.error || "Не удалось узнать состояние коннектора";
+  return data;
+}
+
+// Адрес показывается один раз, сразу после выпуска: на сервере лежит только
+// его отпечаток. Новый выпуск гасит старый адрес.
+export async function issueAssistantConnector() {
+  const response = await authorizedFetch(`${API_BASE_URL}/api/v1/assistant/connector`, { method: "POST" });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw data.error || "Не удалось выпустить адрес";
+  return data;
+}
+
+export async function revokeAssistantConnector() {
+  const response = await authorizedFetch(`${API_BASE_URL}/api/v1/assistant/connector`, { method: "DELETE" });
+  if (!response.ok) throw "Не удалось отключить коннектор";
+}
+
 export async function changePassword(oldPassword, newPassword) {
   const response = await authorizedFetch(
     `${API_BASE_URL}/api/v1/auth/change-password`,
