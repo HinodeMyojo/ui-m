@@ -6,6 +6,7 @@ import JpSentenceList from "./JpSentenceList.vue";
 import JpTraceCanvas from "./JpTraceCanvas.vue";
 import JpReadings from "./JpReadings.vue";
 import JpWordRows from "./JpWordRows.vue";
+import JpPoints from "./JpPoints.vue";
 
 // Знак крупным планом: как он пишется, из чего состоит и как живёт во фразе.
 //
@@ -68,6 +69,13 @@ watch(
 
         <template v-else-if="data">
           <div class="jks-meaning">{{ (data.meaningsRu || []).slice(0, 3).join(", ") }}</div>
+          <!-- Насколько знак уже знаком: шкала баллов, если он учится. -->
+          <JpPoints
+            v-if="data.inStudy"
+            class="jks-points"
+            :points="data.points || 0"
+            :learn-iter="data.learnIter || 0"
+          />
 
           <!-- Он и кун: главные крупно, остальные строкой, всё произносится по
                тапу. У ключа чтений нет, зато есть японское имя: にんべん. -->
@@ -189,6 +197,10 @@ watch(
   font-size: 15px;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
+}
+
+.jks-points {
+  margin: 6px 0 2px;
 }
 
 .jks-meaning {

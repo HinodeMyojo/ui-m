@@ -63,6 +63,13 @@ export const fetchJpWord = (text) => request(`/word/${encodeURIComponent(text)}`
 // этого уже учится. Первый знак строки — не разбор.
 export const analyzeJpText = (text) => post("/analyze", { text });
 export const fetchJpGrid = () => request("/grid");
+// Знаки, которые учатся или выучены, с баллами знания (0..10).
+export const fetchJpKnown = () => request("/known");
+
+// Шкала баллов знания иероглифа: 6 — выучен, ещё 4 — закрепление.
+export const JP_POINTS_LEARNED = 6;
+export const JP_POINTS_MAX = 10;
+export const JP_LEARN_ITERATIONS = 3;
 export const fetchJpAchievements = () => request("/achievements");
 export const importJpTranslations = (text) => post("/translations", { text });
 export const fetchJpPendingTranslations = (chunk = 1) =>

@@ -17,7 +17,7 @@ const router = useRouter();
 // Список разрешённых типов — защита от произвольной строки в адресе, а не
 // перечень возможностей: сервер знает и «сверх нормы», и экзамен, и арену,
 // и в мини-апп из бота приходят как раз они.
-const SESSION_KINDS = ["mix", "review", "weak", "ahead", "exam", "arena"];
+const SESSION_KINDS = ["mix", "review", "old", "weak", "ahead", "exam", "arena"];
 
 const kind = ref(SESSION_KINDS.includes(route.query.kind) ? route.query.kind : "mix");
 

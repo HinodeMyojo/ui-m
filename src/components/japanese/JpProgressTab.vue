@@ -2,6 +2,7 @@
 import { ref, computed, onMounted } from "vue";
 import { fetchJpOverview, fetchJpDecks, fetchJpAchievements } from "@/components/japaneseApi.js";
 import JpGrid from "./JpGrid.vue";
+import JpKnownList from "./JpKnownList.vue";
 
 // Прогресс. Цель — крепкий N3, и вся страница отвечает на один вопрос: далеко
 // ли до неё. Поэтому первой строкой идёт не XP и не уровень, а пройденная доля
@@ -157,6 +158,8 @@ onMounted(load);
           </div>
         </div>
       </section>
+
+      <JpKnownList />
 
       <JpGrid @open="emit('open', $event)" />
 

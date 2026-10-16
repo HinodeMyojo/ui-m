@@ -10,6 +10,7 @@ import JpStrokeOrder from "./JpStrokeOrder.vue";
 import JpSentenceList from "./JpSentenceList.vue";
 import JpReadings from "./JpReadings.vue";
 import JpWordRows from "./JpWordRows.vue";
+import JpPoints from "./JpPoints.vue";
 import { jpPlay } from "./jpSound.js";
 import { sessionFocus } from "@/composables/useSessionFocus.js";
 import {
@@ -51,6 +52,8 @@ import {
   jpMainReadings,
   jpReadingParts,
   jpReadingSpoken,
+  JP_LEARN_ITERATIONS,
+  JP_POINTS_MAX,
 } from "@/components/japaneseApi.js";
 
 // Сессия изучения — общий экран для телефона и десктопа.
@@ -478,13 +481,34 @@ async function rate(rating) {
       // Номер шага штурма: по нему сервер закрывает ровно этот шаг, а не
       // «следующий по счёту», и проваленный шаг не перепрыгивается.
       drillStep: current.drillStep || 0,
+      // Итерация изучения иероглифа: ответ на вопрос уже откаченной итерации
+      // сервер не засчитает.
+      iteration: current.iteration || 0,
       thinkMs: Math.max(0, Date.now() - shownAt.value),
     });
     answered.value++;
-    // Провал возвращает карточку в конец этой же сессии — так и задумано,
-    // ошибку надо переспросить, пока она свежая. Варианты перетасовываются:
-    // тот же порядок запоминается как «третья кнопка», а не как ответ.
-    if (answer?.againInSession) {
+    syncPoints(current.cardId, answer);
+    const note = noticeFor(answer, current);
+    if (note) showNotice(note.text, note.tone);
+    // Итерация изучения иероглифа закончилась — пройдена или откатилась.
+    // Оставшиеся вопросы по знаку убираем, вопросы новой итерации ставим
+    // вперемешку с остальной очередью.
+    if (answer?.replaceSteps) {
+      dropPending(current.cardId);
+      if (answer.requeue?.length) insertSpaced(answer.requeue);
+    } else if (answer?.againInSession && current.flow) {
+      // Повторение иероглифа: ошибку переспросим, но это уже тренировка —
+      // балл решился первым ответом. Письмо переспрашиваем с подсказкой
+      // ступенью ниже.
+      const back = reshuffled(current);
+      if (current.mechanic === JP_MECH_TRACE) {
+        back.writeStage = Math.max(JP_WRITE_BY_KEYS, (current.writeStage || JP_WRITE_BLIND) - 1);
+      }
+      queue.value.push(back);
+    } else if (answer?.againInSession) {
+      // Провал возвращает карточку в конец этой же сессии — так и задумано,
+      // ошибку надо переспросить, пока она свежая. Варианты перетасовываются:
+      // тот же порядок запоминается как «третья кнопка», а не как ответ.
       // Провал письма возвращает на ступень назад: помощь возвращается ровно в
       // том объёме, которого не хватило. Заваленная ступень идёт следом — иначе
       // «сброс на шаг назад» означал бы, что её можно пропустить.
@@ -506,6 +530,97 @@ async function rate(rating) {
     sending.value = false;
   }
 }
+
+// Баллы знака после ответа — во все его карточки, что ещё в очереди: шкала
+// на следующих вопросах не должна показывать старое.
+function syncPoints(cardId, answer) {
+  if (typeof answer?.points !== "number") return;
+  for (const c of queue.value) {
+    if (c.cardId === cardId && c.flow) c.points = answer.points;
+  }
+}
+
+// Убрать из очереди ещё не заданные вопросы по карточке: её итерация
+// закончилась, и они относятся к прошлой.
+function dropPending(cardId) {
+  const head = queue.value.slice(0, index.value + 1);
+  const tail = queue.value
+    .slice(index.value + 1)
+    .filter((c) => c.cardId !== cardId || c.mechanic === JP_MECH_LESSON);
+  queue.value = [...head, ...tail];
+}
+
+// Вопросы новой итерации — через одну карточку из уже стоящих в очереди, а не
+// подряд: «какой знак так читается» сразу после «выбери чтение» проверяет
+// внимание, а не память.
+function insertSpaced(cards) {
+  const head = queue.value.slice(0, index.value + 1);
+  const tail = queue.value.slice(index.value + 1);
+  const out = [];
+  let t = 0;
+  for (const c of cards) {
+    if (t < tail.length) out.push(tail[t++]);
+    out.push(c);
+  }
+  queue.value = [...head, ...out, ...tail.slice(t)];
+}
+
+// Короткая плашка с итогом: балл, пройденная или проваленная итерация. Ответ
+// приходит, когда на экране уже следующий вопрос, — поэтому плашка, а не текст
+// в разборе.
+const notice = ref(null);
+let noticeTimer = null;
+function showNotice(text, tone) {
+  notice.value = { text, tone };
+  clearTimeout(noticeTimer);
+  noticeTimer = setTimeout(() => (notice.value = null), 3200);
+}
+
+const WRITE_HELP = {
+  1: "письмо с полной подсказкой",
+  2: "письмо по зонам ключей",
+  3: "письмо по памяти",
+};
+
+function noticeFor(answer, current) {
+  if (!answer || !current?.flow) return null;
+  const ch = current.char;
+  if (answer.pointsDelta > 0 && current.flow === "learn") {
+    return { text: `🎉 ${ch} выучен первично — 1 балл. Повторим завтра`, tone: "good" };
+  }
+  if (answer.pointsDelta > 0) {
+    return { text: `⭐ ${ch}: +1 балл — ${answer.points}/${JP_POINTS_MAX}`, tone: "good" };
+  }
+  if (answer.pointsDelta < 0) {
+    return answer.points > 0
+      ? { text: `${ch}: была ошибка — −1 балл, ${answer.points}/${JP_POINTS_MAX}`, tone: "bad" }
+      : { text: `${ch} забыт — выучим заново с урока`, tone: "bad" };
+  }
+  if (answer.iterationPassed) {
+    const help = WRITE_HELP[answer.iteration];
+    return {
+      text: `✓ ${ch}: итерация пройдена — дальше ${answer.iteration} из ${JP_LEARN_ITERATIONS}${help ? `, ${help}` : ""}`,
+      tone: "good",
+    };
+  }
+  if (answer.iterationFailed) {
+    return { text: `↩ ${ch}: снова итерация ${answer.iteration} из ${JP_LEARN_ITERATIONS}`, tone: "bad" };
+  }
+  return null;
+}
+
+// Что будет после ошибки — видно сразу в разборе, до «Дальше».
+const flowAfterFail = computed(() => {
+  const c = card.value;
+  if (!c?.flow || !failed.value) return "";
+  if (c.flow === "learn") {
+    return c.iteration > 1
+      ? `Итерация ${c.iteration} не пройдена — вернёмся на ${c.iteration - 1}`
+      : "Итерация 1 не пройдена — пройдём её заново";
+  }
+  if (c.flow === "review") return "Ошибка на повторении — балл снимется";
+  return "";
+});
 
 function reshuffled(c) {
   if (!Array.isArray(c.options) || c.options.length < 2) return { ...c };
@@ -772,6 +887,7 @@ onMounted(() => {
 });
 onBeforeUnmount(() => {
   stopTicker();
+  clearTimeout(noticeTimer);
   sessionFocus.value = false;
 });
 </script>
@@ -798,7 +914,9 @@ onBeforeUnmount(() => {
             ? "Арена гоняет только закреплённое — пока закреплять нечего."
             : isAhead
               ? "Кончилось совсем: ни новых единиц в наборах, ни повторений впереди."
-              : "На сегодня норма закрыта.")
+              : kindNow === "old"
+                ? "Повторять пока нечего — ни один знак ещё не выучен первично."
+                : "На сегодня норма закрыта.")
         }}
       </p>
       <div class="jps-done-actions">
@@ -871,10 +989,22 @@ onBeforeUnmount(() => {
     <template v-else-if="card">
       <!-- Вопрос -->
       <div ref="midEl" class="jps-mid">
+        <div v-if="notice" class="jps-notice" :class="`is-${notice.tone}`">{{ notice.text }}</div>
         <div class="jps-kind">
           {{ jpItemLabel(card.itemType) }}
           <span v-if="teaching" class="jps-new">знакомимся {{ lessonNo }} из {{ lessonTotal }}</span>
+          <span v-else-if="card.flow === 'learn'" class="jps-new">
+            изучение · итерация {{ card.iteration }} из {{ JP_LEARN_ITERATIONS }}
+          </span>
+          <span v-else-if="card.flow === 'review'" class="jps-flow">повторение</span>
+          <span v-else-if="card.flow === 'practice'" class="jps-flow">повтор вне срока</span>
           <span v-else-if="card.isNew" class="jps-new">новое</span>
+          <JpPoints
+            v-if="card.flow && card.flow !== 'learn'"
+            :points="card.points || 0"
+            size="sm"
+            class="jps-points"
+          />
         </div>
 
         <!-- Урок: единицу видят впервые. Сначала показываем всё, что о ней
@@ -1079,6 +1209,7 @@ onBeforeUnmount(() => {
         <!-- Разбор после ответа -->
         <div v-if="phase === PHASE.REVEAL" class="jps-answer" :class="`is-${verdict}`">
           <div class="jps-answer-head">{{ verdictLabel }}</div>
+          <div v-if="flowAfterFail" class="jps-answer-flow">{{ flowAfterFail }}</div>
           <div class="jps-answer-body">
             <!-- Ответ на «как читается» — это чтения, они стоят чипами ниже;
                  здесь сам знак и что он значит. -->
@@ -1274,6 +1405,18 @@ onBeforeUnmount(() => {
         </template>
 
         <!-- Оценки. При ошибке уверенность не спрашиваем — она уже известна. -->
+        <!-- Иероглиф: оценивать уверенность незачем — балл решает только
+             «верно или нет», поэтому кнопка одна. -->
+        <div v-else-if="card.flow" class="jps-rates">
+          <button
+            class="jps-rate"
+            :class="failed ? 'is-again' : 'is-good'"
+            :disabled="sending"
+            @click="rate(failed ? JP_RATING_AGAIN : goodRating)"
+          >
+            Дальше
+          </button>
+        </div>
         <div v-else class="jps-rates">
           <template v-if="failed">
             <button class="jps-rate is-again" :disabled="sending" @click="rate(JP_RATING_AGAIN)">
@@ -1408,6 +1551,63 @@ onBeforeUnmount(() => {
   border-radius: 999px;
   background: rgba(110, 74, 255, 0.18);
   color: #a58bff;
+}
+
+.jps-flow {
+  margin-left: 6px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--m-card-2);
+  color: var(--m-text);
+}
+
+/* Шкала баллов — в той же строке, что и подпись круга, справа. */
+.jps-kind {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  row-gap: 6px;
+}
+
+.jps-points {
+  margin-left: auto;
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 400;
+}
+
+/* Итог прошлого ответа: балл или итерация. */
+.jps-notice {
+  margin-bottom: 10px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  background: var(--m-card-2);
+  color: var(--m-text);
+  animation: jps-notice-in 0.2s ease-out;
+}
+
+.jps-notice.is-good {
+  border-left: 3px solid var(--m-green, #3fb950);
+}
+
+.jps-notice.is-bad {
+  border-left: 3px solid var(--m-red, #f85149);
+}
+
+@keyframes jps-notice-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
+.jps-answer-flow {
+  margin-top: 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--m-red, #f85149);
 }
 
 .jps-char-box {

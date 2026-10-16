@@ -55,6 +55,12 @@ function study() {
   router.push({ path: "/japanese/today", query: kind.value === "review" ? { kind: "review" } : {} });
 }
 
+// Повторить уже изученное — без новых знаков: подошедшие по сроку дают баллы,
+// остальное слабое идёт тренировкой.
+function studyOld() {
+  router.push({ path: "/japanese/today", query: { kind: "old" } });
+}
+
 onMounted(load);
 </script>
 
@@ -103,6 +109,7 @@ onMounted(load);
         {{ minutes }} минут
         <span v-if="kind === 'review'" class="mjp-go-sub">повторение</span>
       </button>
+      <button class="m-btn mjp-old" @click="studyOld">Повторить старое</button>
     </template>
   </section>
 </template>
@@ -163,6 +170,11 @@ onMounted(load);
   width: 100%;
   min-height: 52px;
   font-size: 16px;
+}
+
+.mjp-old {
+  width: 100%;
+  min-height: 44px;
 }
 
 .mjp-go-sub {
