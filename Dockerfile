@@ -1,10 +1,7 @@
-FROM node:lts-alpine AS builder
-WORKDIR /app
-COPY package*.json ./
-RUN npm ci
-COPY . .
-RUN npm run build
-
+# Фронт собирается в CI (шаг Build), а сюда приезжает готовый dist. Раньше
+# образ собирал его второй раз прямо на сервере, и с диаграммами «Архитектуры»
+# (LikeC4, Mermaid, CodeMirror) vite на сервере упирался в 2 ГБ кучи и падал:
+# там 0.2 ядра и мало памяти, а у раннера GitHub — 7 ГБ.
 FROM node:lts-alpine
 
 # Зеркало Alpine. С боевого сервера dl-cdn.alpinelinux.org не отвечает вообще —
@@ -18,8 +15,8 @@ RUN sed -i "s|https\?://dl-cdn.alpinelinux.org/alpine|${ALPINE_MIRROR}|g" /etc/a
 
 WORKDIR /app
 
-# Static files
-COPY --from=builder /app/dist /usr/share/nginx/html
+# Static files — собранные в CI
+COPY dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/http.d/default.conf
 
 # Proxy server
