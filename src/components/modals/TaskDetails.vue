@@ -189,6 +189,9 @@
             </div>
           </div>
 
+          <!-- К каким проектам «Архитектуры» относится задача -->
+          <ArchLinkChips kind="task" :target-id="task.id" style="margin: 8px 0" />
+
           <!-- Статус, блокеры и лента выбранной подзадачи (или самой задачи) -->
           <div class="subtask-log">
             <button class="subtask-log-toggle" @click="logPanelOpen = !logPanelOpen">
@@ -625,6 +628,7 @@ import SvgIcon from "@jamescoyle/vue-icon";
 import UniversalSubtaskModal from "./UniversalSubtaskModal.vue";
 import TaskLogPanel from "../tasklog/TaskLogPanel.vue";
 import BlockedByChip from "../tasklog/BlockedByChip.vue";
+import ArchLinkChips from "../arch/ArchLinkChips.vue";
 
 import {
   fetchTasks,

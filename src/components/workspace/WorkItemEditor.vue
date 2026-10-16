@@ -3,6 +3,7 @@ import { ref, computed, watch, onBeforeUnmount } from "vue";
 import MarkdownField from "./MarkdownField.vue";
 import TaskPickerModal from "./TaskPickerModal.vue";
 import TaskLogPanel from "@/components/tasklog/TaskLogPanel.vue";
+import ArchLinkChips from "@/components/arch/ArchLinkChips.vue";
 import {
   updateWorkItem,
   fetchWorkItem,
@@ -854,6 +855,8 @@ const totalSpent = computed(
           </select>
         </label>
       </div>
+
+      <ArchLinkChips kind="card" :target-id="item.id" style="margin-bottom: 10px" />
 
       <div class="wie-tasks">
         <div class="wie-row-head">

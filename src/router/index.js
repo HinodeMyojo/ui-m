@@ -152,6 +152,14 @@ const router = createRouter({
       component: () => import("../views/VentureView.vue"),
     },
     {
+      // Архитектура сервисов: C4-модель, сценарии, механизмы, стадии.
+      // calm — без листопада: листья падали поверх редактора кода и диаграмм.
+      path: "/arch/:slug?/:tab?",
+      name: "Arch",
+      component: () => import("../views/ArchView.vue"),
+      meta: { calm: true },
+    },
+    {
       path: "/japanese",
       name: "Japanese",
       component: () => import("../views/JapaneseView.vue"),

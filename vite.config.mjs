@@ -17,6 +17,11 @@ export default defineConfig({
     __BUILD_TIME__: JSON.stringify(new Date().toISOString()),
   },
   plugins: [vue(), vueDevTools(), tailwindcss(), mdiCss()],
+  // Поток разбора LikeC4 («Архитектура») подгружает части парсера лениво, а
+  // формат iife по умолчанию динамических импортов внутри воркера не умеет.
+  worker: {
+    format: "es",
+  },
   build: {
     rollupOptions: {
       // Две точки входа: обычное приложение и мини-апп Telegram. Репозиторий

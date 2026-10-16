@@ -3,6 +3,7 @@ import { ref, computed, watch } from "vue";
 import MarkdownView from "./MarkdownView.vue";
 import TaskLogPanel from "@/components/tasklog/TaskLogPanel.vue";
 import JiraLinks from "./JiraLinks.vue";
+import ArchLinkChips from "@/components/arch/ArchLinkChips.vue";
 import {
   collapseWorkItemTask,
   updateWorkItem,
@@ -384,6 +385,9 @@ function toggleLog(taskId) {
       <!-- Код Jira ищем и в названии карточки, и в привязанных задачах:
            карточку часто называют по-своему, а код живёт в подзадаче. -->
       <JiraLinks :texts="[item.title, ...(item.tasks || []).map((t) => t.title)]" />
+
+      <!-- К каким проектам «Архитектуры» относится карточка -->
+      <ArchLinkChips kind="card" :target-id="item.id" style="margin: 6px 0" />
 
       <div v-if="item.tags?.length" class="wiv-tags">
         <span v-for="t in item.tags" :key="t.id" class="wiv-tag" :style="{ borderColor: t.color, color: t.color }">
