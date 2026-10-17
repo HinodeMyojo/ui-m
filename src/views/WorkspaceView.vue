@@ -143,6 +143,8 @@ async function load({ keepSelection = true } = {}) {
     const stillHere = day.value.items.some((i) => i.id === previous);
     selectedId.value =
       (forced || keepSelection) && stillHere ? previous : day.value.items[0]?.id || null;
+    // Пришли по ссылке на карточку (?item=…) — открываем её, а не только день.
+    if (forced && stillHere) openItem(previous);
   } catch (e) {
     error.value = e.message || "не удалось загрузить день";
     day.value = null;

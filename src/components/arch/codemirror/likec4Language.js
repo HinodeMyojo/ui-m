@@ -186,7 +186,7 @@ export function likec4Completions(getModel) {
   };
 }
 
-// markdownRefCompletions — подсказка внутри [[…]]: элементы, view:, file:.
+// markdownRefCompletions — подсказка внутри [[…]]: элементы, view:, file:, adr:.
 export function markdownRefCompletions(getModel, getPaths) {
   return (context) => {
     const m = context.matchBefore(/\[\[[^\]\n]*/);
@@ -201,6 +201,8 @@ export function markdownRefCompletions(getModel, getPaths) {
     }
     for (const p of getPaths()) {
       options.push({ label: "file:" + p, type: "text", apply: "file:" + p + "]]" });
+      const adr = /^decisions\/(\d{4})-/.exec(p);
+      if (adr) options.push({ label: "adr:" + adr[1], type: "text", detail: p, apply: "adr:" + adr[1] + "]]" });
     }
     return { from: m.from + 2, options, validFor: /^[\w.:/-]*$/ };
   };

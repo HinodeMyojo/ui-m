@@ -85,7 +85,16 @@ export function parseRef(raw) {
   const [target, label] = text.split("|").map((s) => s.trim());
   if (target.startsWith("view:")) return { kind: "view", target: target.slice(5), label };
   if (target.startsWith("file:")) return { kind: "file", target: target.slice(5), label };
+  if (target.startsWith("adr:")) return { kind: "adr", target: target.slice(4).trim(), label };
   return { kind: "element", target, label };
+}
+
+// adrPath — файл решения по номеру из [[adr:0002]]: decisions/0002-<имя>.md.
+export function adrPath(paths, num) {
+  const n = String(num).replace(/^0+/, "");
+  if (!/^\d+$/.test(n)) return null;
+  const prefix = `decisions/${n.padStart(4, "0")}-`;
+  return paths.find((p) => p.startsWith(prefix) && p.endsWith(".md")) || null;
 }
 
 export function refsIn(text) {
@@ -169,10 +178,17 @@ export const ADR_STATUS = {
   superseded: { title: "заменено", color: "#64748b" },
 };
 
-// Метка механизма ↔ файл concepts/<метка>.md.
+// Метка механизма ↔ файл concepts/<метка>.md. Регистр не важен: файл могли
+// назвать contentaddress.md, а метку — #contentAddress.
 export function conceptPathForTag(paths, tag) {
   const exact = `concepts/${tag}.md`;
-  return paths.includes(exact) ? exact : null;
+  if (paths.includes(exact)) return exact;
+  const lower = exact.toLowerCase();
+  return paths.find((p) => p.toLowerCase() === lower) || null;
+}
+
+export function sameTag(a, b) {
+  return String(a).toLowerCase() === String(b).toLowerCase();
 }
 
 // mentionsOf — какие документы ссылаются на элемент или диаграмму.

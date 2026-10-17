@@ -11,7 +11,7 @@ import {
   stageTitle,
 } from "@/components/archApi.js";
 import { applyTextEdits, buildModel, editFromDiagram, locateInSource } from "./likec4/client.js";
-import { docTitle, fileKind, richText } from "./archModel.js";
+import { adrPath, docTitle, fileKind, richText } from "./archModel.js";
 import ArchOverview from "./ArchOverview.vue";
 import ArchDiagrams from "./ArchDiagrams.vue";
 import ArchDocs from "./ArchDocs.vue";
@@ -102,6 +102,53 @@ async function load() {
   } catch (err) {
     loadError.value = err.message || String(err);
   }
+}
+
+// pullRemote подтягивает правки, сделанные в другом месте (Claude через MCP,
+// вторая вкладка). Файлы с несохранённым у нас не трогаем — их разрулит
+// баннер конфликта при сохранении.
+let pulling = false;
+async function pullRemote() {
+  if (pulling || saving.value || !project.value || document.hidden) return;
+  pulling = true;
+  try {
+    const full = await fetchArchProject(props.projectId);
+    const clean = (p) => saved[p] && files[p] === saved[p].content;
+    let changed = false;
+    const onServer = new Set();
+    for (const f of full.files) {
+      onServer.add(f.path);
+      if (files[f.path] === undefined || (clean(f.path) && f.version > saved[f.path].version)) {
+        files[f.path] = f.content;
+        saved[f.path] = { content: f.content, version: f.version };
+        changed = true;
+      }
+    }
+    for (const p of Object.keys(files)) {
+      if (!onServer.has(p) && clean(p)) {
+        delete files[p];
+        delete saved[p];
+        changed = true;
+      }
+    }
+    const { files: _files, layouts: _layouts, ...rest } = full;
+    project.value = rest;
+    if (changed) {
+      fileVersion.value++;
+      changeStamp++;
+      scheduleBuild();
+    }
+  } catch {
+    // сеть моргнула — попробуем в следующий раз
+  } finally {
+    pulling = false;
+  }
+}
+
+const PULL_EVERY_MS = 30000;
+let pullTimer = null;
+function onVisible() {
+  if (!document.hidden) pullRemote();
 }
 
 // Только метаданные: стадия, связи, итог проверки. Тексты файлов не трогаем —
@@ -331,11 +378,18 @@ async function openSource(params) {
 function openRef(ref) {
   if (ref.kind === "view") openView(ref.target);
   else if (ref.kind === "file") openFile(ref.target);
-  else openElement(ref.target);
+  else if (ref.kind === "adr") {
+    const p = adrPath(Object.keys(files), ref.target);
+    if (p) openFile(p);
+  } else openElement(ref.target);
 }
 
 function resolveRef(ref) {
   const d = dump.value;
+  if (ref.kind === "adr") {
+    const p = adrPath(Object.keys(files), ref.target);
+    return { exists: !!p, label: p ? `ADR-${ref.target} ${docTitle(p, files[p])}` : `ADR-${ref.target}`, hint: p || "" };
+  }
   if (ref.kind === "view") {
     const v = d?.views?.[ref.target];
     return { exists: !!v, label: v?.title || ref.target, hint: v ? "диаграмма" : "" };
@@ -427,11 +481,15 @@ onMounted(() => {
   load();
   window.addEventListener("keydown", onKey);
   window.addEventListener("beforeunload", beforeUnload);
+  document.addEventListener("visibilitychange", onVisible);
+  pullTimer = setInterval(pullRemote, PULL_EVERY_MS);
 });
 
 onBeforeUnmount(() => {
   window.removeEventListener("keydown", onKey);
   window.removeEventListener("beforeunload", beforeUnload);
+  document.removeEventListener("visibilitychange", onVisible);
+  clearInterval(pullTimer);
   clearTimeout(buildTimer);
   if (dirtyPaths.value.length) save();
 });

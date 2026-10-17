@@ -20,7 +20,7 @@ function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 }
 
-const ICONS = { element: "◇", view: "▦", file: "¶" };
+const ICONS = { element: "◇", view: "▦", file: "¶", adr: "⚖" };
 
 function renderRef(raw) {
   const ref = parseRef(raw);
@@ -53,6 +53,12 @@ const parser = new Marked({
     },
   ],
   renderer: {
+    // Сырой HTML показываем текстом: в описаниях архитектуры угловые скобки —
+    // это «raw/<sha256>» и «List<T>», а не разметка. Заодно в документ
+    // нельзя протащить скрипт.
+    html({ text }) {
+      return escapeHtml(text);
+    },
     code({ text, lang }) {
       if (lang === "mermaid") {
         return `<div class="ar-mermaid" data-mermaid="${encodeURIComponent(text)}">…</div>`;

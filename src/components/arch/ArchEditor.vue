@@ -129,6 +129,16 @@ async function removeSnippet(s) {
 const NEW_FILE_HINT =
   "Путь нового файла: model/flows/payment.c4, concepts/dedup.md, states/payment.mmd, contracts/openapi.yaml";
 
+// flowStarter — пустой сценарий с id из имени файла: model/flows/refund.c4 →
+// refundFlow. Шагов нет — у шаблонных client/api/db в чужой модели нет пары.
+function flowStarter(path) {
+  const words = path.split("/").pop().replace(/\.\w+$/, "").split(/[^A-Za-z0-9]+/).filter(Boolean);
+  let id = words.map((w, i) => (i ? w[0].toUpperCase() + w.slice(1) : w.toLowerCase())).join("") || "new";
+  if (/^\d/.test(id)) id = "flow" + id;
+  if (!/flow$/i.test(id)) id += "Flow";
+  return `views {\n  dynamic view ${id} {\n    title '…'\n    variant sequence\n\n    // шаг: откуда -> куда 'что делает' — вставка «Шаг с заметкой» в палитре\n  }\n}\n`;
+}
+
 async function newFile() {
   const raw = window.prompt(NEW_FILE_HINT, "model/flows/");
   if (!raw) return;
@@ -139,7 +149,7 @@ async function newFile() {
   }
   const starter =
     fileKind(path) === "c4" && path.includes("flows/")
-      ? allSnippets.value.find((s) => s.key === "flow-sequence")?.body || ""
+      ? flowStarter(path)
       : fileKind(path) === "md"
         ? `# ${path.split("/").pop().replace(/\.md$/, "")}\n\n`
         : "";

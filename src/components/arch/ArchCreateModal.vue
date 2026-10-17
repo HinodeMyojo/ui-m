@@ -73,11 +73,11 @@ async function submit() {
       <div class="ar-form-grid">
         <div class="ar-field ar-full">
           <label class="ar-label">Название</label>
-          <input ref="titleInput" v-model="form.title" class="ar-input" placeholder="TaxService" @keydown.enter="submit" />
+          <input ref="titleInput" v-model="form.title" class="ar-input" placeholder="Например, Payments API" @keydown.enter="submit" />
         </div>
         <div class="ar-field">
           <label class="ar-label">Короткое имя — адрес и имя для Claude</label>
-          <input v-model="form.slug" class="ar-input ar-mono" :placeholder="slugPreview || 'tax-service'" />
+          <input v-model="form.slug" class="ar-input ar-mono" :placeholder="slugPreview || 'payments-api'" />
           <span class="ar-dim" style="font-size: 12px; margin-top: 3px">/arch/{{ slugPreview || "…" }}</span>
         </div>
         <div class="ar-field">
@@ -86,7 +86,7 @@ async function submit() {
         </div>
         <div class="ar-field ar-full">
           <label class="ar-label">Что это, одной-двумя фразами</label>
-          <textarea v-model="form.summary" class="ar-textarea" placeholder="Приём и проведение налоговых платежей через Paygrid" />
+          <textarea v-model="form.summary" class="ar-textarea" placeholder="Что делает сервис и для кого — одной-двумя фразами" />
         </div>
         <div class="ar-field ar-full">
           <label class="ar-label">Репозиторий</label>

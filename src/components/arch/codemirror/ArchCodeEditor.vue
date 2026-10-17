@@ -190,6 +190,22 @@ function insert(text) {
     .split("\n")
     .map((l, i) => (i === 0 || !l ? l : indent + l))
     .join("\n");
+  if (line.text.trim() === "" && state.selection.main.empty) {
+    // Пустая строка между блоками — разделитель: вставка встаёт между пустыми
+    // строками, а не съедает единственную.
+    const prev = line.number > 1 ? state.doc.line(line.number - 1).text.trim() : "";
+    const next = line.number < state.doc.lines ? state.doc.line(line.number + 1).text.trim() : "";
+    const before = prev && !/[{(]$/.test(prev) ? "\n" : "";
+    const after = next && !/^[})]/.test(next) ? "\n" : "";
+    const text = before + indent + body + after;
+    view.dispatch({
+      changes: { from: line.from, to: line.to, insert: text },
+      selection: { anchor: line.from + before.length + indent.length + body.length },
+      scrollIntoView: true,
+    });
+    view.focus();
+    return;
+  }
   const insertText = atLineStart ? body : "\n" + indent + body;
   view.dispatch({
     changes: { from: pos, to: state.selection.main.to, insert: insertText },

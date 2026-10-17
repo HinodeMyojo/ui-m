@@ -1,12 +1,12 @@
 <script setup>
 import { computed, inject } from "vue";
 import { STAGE_COLORS, stageTitle } from "@/components/archApi.js";
-import { ADR_STATUS, docTitle, frontMatter, viewList } from "./archModel.js";
+import { ADR_STATUS, conceptPathForTag, docTitle, frontMatter, sameTag, viewList } from "./archModel.js";
 
 // Обзор: проект на одном экране — что внутри модели, какие сценарии и
 // механизмы описаны, какие решения приняты, что открыто по делам.
 const arch = inject("arch");
-const { project, dump, files, paths, errors } = arch;
+const { project, dump, files, paths, errors, building } = arch;
 
 const elements = computed(() => Object.values(dump.value?.elements || {}));
 const relationsCount = computed(() => Object.keys(dump.value?.relations || {}).length);
@@ -21,8 +21,9 @@ const concepts = computed(() => {
     .filter((p) => p.startsWith("concepts/") && p.endsWith(".md"))
     .map((p) => {
       const tag = p.slice("concepts/".length, -3);
-      const usedBy = elements.value.filter((e) => (e.tags || []).includes(tag)).length;
-      const relUsed = Object.values(dump.value?.relations || {}).filter((r) => (r.tags || []).includes(tag)).length;
+      const has = (tags) => (tags || []).some((t) => sameTag(t, tag));
+      const usedBy = elements.value.filter((e) => has(e.tags)).length;
+      const relUsed = Object.values(dump.value?.relations || {}).filter((r) => has(r.tags)).length;
       return { path: p, tag, title: docTitle(p, files[p]), usedBy: usedBy + relUsed };
     });
 });
@@ -44,7 +45,7 @@ const events = computed(() => project.value?.stageEvents || []);
 // Метки из словаря, у которых нет описания механизма.
 const undocumentedTags = computed(() => {
   const tags = Object.keys(dump.value?.specification?.tags || {});
-  return tags.filter((t) => !paths.value.includes(`concepts/${t}.md`) && elements.value.some((e) => (e.tags || []).includes(t)));
+  return tags.filter((t) => !conceptPathForTag(paths.value, t) && elements.value.some((e) => (e.tags || []).includes(t)));
 });
 
 const AUTHOR = { user: "вы", claude: "Claude", template: "шаблон" };
@@ -55,7 +56,8 @@ const fmt = (iso) => new Date(iso).toLocaleString("ru-RU", { day: "numeric", mon
   <div class="ar-grid" style="grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); align-items: start">
     <div class="ar-card">
       <div class="ar-h2">Модель</div>
-      <div class="ar-kv">
+      <div v-if="!dump && building" class="ar-muted" style="font-size: 13px">Разбираю модель…</div>
+      <div v-else class="ar-kv">
         <span>Элементов</span><span>{{ elements.length }}</span>
         <span>Связей</span><span>{{ relationsCount }}</span>
         <span>Диаграмм структуры</span><span>{{ structure.length }}</span>

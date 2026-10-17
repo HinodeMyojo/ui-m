@@ -81,7 +81,12 @@ async function createDoc(kindKey) {
   const p = presets[kindKey];
   const name = window.prompt(p.ask, "");
   if (!name) return;
-  const slug = name.trim().toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "");
+  // Механизм называется как метка в модели, а метки бывают в camelCase
+  // (#contentAddress): регистр здесь не трогаем, иначе описание не найдётся.
+  const slug =
+    kindKey === "concept"
+      ? name.trim().replace(/[^A-Za-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "")
+      : name.trim().toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "");
   if (!slug) return;
   const file = p.dir + (kindKey === "decision" ? `${nextAdrNumber()}-${slug}` : slug) + p.ext;
   if (files[file] !== undefined) {
