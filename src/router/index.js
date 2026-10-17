@@ -151,13 +151,13 @@ const router = createRouter({
       path: "/hub",
       name: "Hub",
       component: () => import("../views/HubView.vue"),
-      meta: { calm: true },
+      meta: { calm: true, noWeatherOnPhone: true },
     },
     {
       path: "/hub/:id",
       name: "HubPlan",
       component: () => import("../views/HubPlanView.vue"),
-      meta: { calm: true },
+      meta: { calm: true, noWeatherOnPhone: true },
     },
     {
       // Дорожная карта разработки бизнеса. С /roadmap не пересекается: там учёба.

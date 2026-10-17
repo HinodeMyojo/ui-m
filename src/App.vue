@@ -81,7 +81,11 @@ const showTabBar = computed(() => {
        тоже: листья летали по кнопкам ответа. -->
   <template v-if="!route.path.endsWith('/print')">
     <AutumnLayer v-if="!sessionFocus && !hasOwnScenery && !route.meta?.calm && isOn('layer.autumn')" />
-    <WeatherPanel v-if="!route.meta?.public && isOn('layer.weather')" />
+    <!-- noWeatherOnPhone — экраны, где язычок погоды на телефоне ложится на
+         содержимое (доска хаба, путь по ступеням). -->
+    <WeatherPanel
+      v-if="!route.meta?.public && isOn('layer.weather') && !(isMobile && route.meta?.noWeatherOnPhone)"
+    />
   </template>
 </template>
 

@@ -250,4 +250,28 @@ function submit() {
   opacity: 0.5;
   cursor: default;
 }
+
+/* Телефон: снизу листом — до кнопок дотягивается большой палец */
+@media (max-width: 640px) {
+  .hpm-overlay {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  .hpm {
+    width: 100%;
+    max-height: 92dvh;
+    border-radius: 20px 20px 0 0;
+    padding-bottom: calc(18px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .hpm-input {
+    font-size: 16px;
+  }
+
+  .hpm-actions .hpm-btn {
+    flex: 1;
+    padding: 13px 16px;
+  }
+}
 </style>

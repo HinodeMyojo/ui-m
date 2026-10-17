@@ -129,10 +129,15 @@ function timeLabel(d) {
       <button class="hav-btn" title="Закрыть · Esc" @click="close">✕</button>
       <div class="hav-title">{{ file.title || file.filename }}</div>
       <div class="hav-save" :class="saveState">
-        <template v-if="saveState === 'saving'">сохраняю…</template>
-        <template v-else-if="saveState === 'error'">не сохранилось</template>
-        <template v-else-if="savedAt">прогресс сохранён · {{ timeLabel(savedAt) }}</template>
-        <template v-else>прогресс сохранится сам</template>
+        <span class="hav-save-full">
+          <template v-if="saveState === 'saving'">сохраняю…</template>
+          <template v-else-if="saveState === 'error'">не сохранилось</template>
+          <template v-else-if="savedAt">прогресс сохранён · {{ timeLabel(savedAt) }}</template>
+          <template v-else>прогресс сохранится сам</template>
+        </span>
+        <span class="hav-save-short" :title="savedAt ? 'прогресс сохранён' : ''">
+          {{ saveState === "saving" ? "…" : saveState === "error" ? "⚠" : savedAt ? "✓" : "" }}
+        </span>
       </div>
       <button class="hav-btn hav-reset" title="Начать артефакт заново" @click="reset">↺</button>
     </div>
@@ -232,9 +237,20 @@ function timeLabel(d) {
   color: #7d8399;
 }
 
+/* Телефон: подпись сокращается до значка, но не прячется — иначе не видно,
+   дошёл ли прогресс. */
+.hav-save-short {
+  display: none;
+}
+
 @media (max-width: 640px) {
-  .hav-save {
+  .hav-save-full {
     display: none;
+  }
+
+  .hav-save-short {
+    display: inline;
+    font-size: 14px;
   }
 }
 </style>

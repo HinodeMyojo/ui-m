@@ -372,6 +372,31 @@ const childKinds = HUB_KINDS.filter((k) => k.key !== "stage");
 @media (max-width: 640px) {
   .htn-row {
     padding-left: calc(4px + var(--depth) * 14px);
+    padding-top: 8px;
+    padding-bottom: 8px;
+  }
+
+  /* Галочка под палец: 22px на телефоне — это промах через раз */
+  .htn-check {
+    width: 28px;
+    height: 28px;
+    margin-top: -2px;
+  }
+
+  .htn-add {
+    width: 34px;
+    height: 34px;
+    margin-top: -4px;
+  }
+
+  .htn-chip {
+    padding: 7px 11px;
+    font-size: 13px;
+  }
+
+  .htn-kind,
+  .htn-input {
+    font-size: 16px;
   }
 
   .htn-adder {

@@ -14,6 +14,7 @@ import HubTreeNode from "@/components/hub/HubTreeNode.vue";
 import HubNodeDrawer from "@/components/hub/HubNodeDrawer.vue";
 import HubArtifactViewer from "@/components/hub/HubArtifactViewer.vue";
 import HubPlanModal from "@/components/hub/HubPlanModal.vue";
+import { isMobile } from "@/composables/useIsMobile.js";
 
 // План из хаба: путь по ступеням (N5 → N4 → N3 🏁), под выбранной ступенью —
 // темы, учебники и главы с артефактами. docs/hub-module.md (back-m).
@@ -111,6 +112,12 @@ function addStage() {
 function addChild({ parentId, kind, title }) {
   run(() => createHubNode({ parentId, kind, title }));
 }
+
+// На телефоне поле узкое — длинная подсказка обрезалась на полуслове.
+const quickPlaceholder = computed(() => {
+  if (isMobile.value) return "Название…";
+  return currentStage.value ? `Что входит в ${currentStage.value.title}: тема, учебник…` : "Тема или материал на весь план";
+});
 
 const quickTitle = ref("");
 const quickKind = ref("topic");
@@ -222,17 +229,19 @@ const horizonLabel = computed(() => {
   <div class="hp" :class="{ 'has-drawer': !!selected }">
     <div class="hp-main">
       <header v-if="plan" class="hp-head" :style="{ '--planet': plan.color || '#8b7cff' }">
-        <button class="hp-back" @click="router.push('/hub')">← Космос</button>
+        <div class="hp-head-top">
+          <button class="hp-back" @click="router.push('/hub')">← Космос</button>
+          <button class="hp-settings" title="Настроить план" @click="planModal = true">⚙ Настроить</button>
+        </div>
         <div class="hp-title-row">
           <span class="hp-planet">{{ plan.emoji || "🪐" }}</span>
           <div class="hp-title-block">
             <h1 class="hp-title" @click="selectedId = plan.id">{{ plan.title }}</h1>
             <div class="hp-sub">
               {{ horizonLabel }} · {{ percent(plan.progress) }}%
-              <template v-if="plan.leavesAll"> · пройдено {{ plan.leavesDone }} из {{ plan.leavesAll }}</template>
+              <template v-if="plan.leavesAll"> · {{ plan.leavesDone }}/{{ plan.leavesAll }}</template>
             </div>
           </div>
-          <button class="hp-btn" @click="planModal = true">Настроить</button>
         </div>
         <p v-if="plan.description" class="hp-desc">{{ plan.description }}</p>
         <div class="hp-bar"><i :style="{ width: percent(plan.progress) + '%' }" /></div>
@@ -316,10 +325,12 @@ const horizonLabel = computed(() => {
           <input
             v-model="quickTitle"
             class="hp-input"
-            :placeholder="currentStage ? `Что входит в ${currentStage.title}: тема, учебник…` : 'Тема или материал на весь план'"
+            :placeholder="quickPlaceholder"
             @keydown.enter.prevent="quickAdd"
           />
-          <button class="hp-btn" @click="quickAdd">Добавить</button>
+          <button class="hp-btn hp-add" title="Добавить" @click="quickAdd">
+            <span class="hp-add-full">Добавить</span><span class="hp-add-short">＋</span>
+          </button>
         </div>
 
         <div class="hp-tree">
@@ -411,14 +422,33 @@ const horizonLabel = computed(() => {
   border: 1px solid #22263a;
 }
 
-.hp-back {
+.hp-head-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.hp-back,
+.hp-settings {
   background: none;
   border: 0;
   color: #9aa2c4;
   font-size: 13px;
   cursor: pointer;
-  padding: 0;
-  margin-bottom: 10px;
+  padding: 6px 0;
+}
+
+.hp-settings {
+  padding: 6px 10px;
+  border-radius: 9px;
+  border: 1px solid #2c3146;
+  background: rgba(26, 29, 44, 0.7);
+  color: #cfd3e6;
+}
+
+.hp-add-short {
+  display: none;
 }
 
 .hp-title-row {
@@ -785,14 +815,15 @@ const horizonLabel = computed(() => {
 }
 
 /* Телефон: панель узла — поверх, на весь экран */
+/* Телефон и узкое окно: панель узла — поверх всего, включая таб-бар: раньше
+   под ней оставалась пустая полоса на месте меню. */
 @media (max-width: 900px) {
   .hp-drawer {
     position: fixed;
     inset: 0;
     width: auto;
     height: auto;
-    z-index: 1500;
-    padding-bottom: var(--tabbar-h, 0px);
+    z-index: 1600;
     background: #0f1119;
   }
 }
@@ -800,6 +831,46 @@ const horizonLabel = computed(() => {
 @media (max-width: 640px) {
   .hp-main {
     padding: 12px 12px 40px;
+    padding-top: calc(12px + env(safe-area-inset-top, 0px));
+  }
+
+  .hp-head {
+    padding: 12px 14px;
+  }
+
+  .hp-stage {
+    width: 76px;
+  }
+
+  .hp-stage-orb {
+    width: 54px;
+    height: 54px;
+    font-size: 16px;
+  }
+
+  .hp-link {
+    width: 26px;
+    margin-top: 26px;
+  }
+
+  .hp-stage-title {
+    max-width: 76px;
+    font-size: 13px;
+  }
+
+  .hp-add-full {
+    display: none;
+  }
+
+  .hp-add-short {
+    display: inline;
+    font-size: 18px;
+  }
+
+  .hp-add {
+    width: 44px;
+    padding: 0;
+    flex-shrink: 0;
   }
 
   .hp-path-wrap {
@@ -823,16 +894,19 @@ const horizonLabel = computed(() => {
   }
 
   .hp-quick {
-    flex-wrap: wrap;
+    gap: 6px;
   }
 
+  /* Вид узла — узкий: эмодзи и короткое слово, остальное отдано названию */
   .hp-select {
-    flex: 1;
+    width: 96px;
+    flex-shrink: 0;
+    padding: 9px 6px;
   }
 
+  .hp-select,
   .hp-input {
-    flex-basis: 100%;
-    order: 3;
+    font-size: 16px; /* меньше 16 — iOS приближает страницу при фокусе */
   }
 }
 </style>

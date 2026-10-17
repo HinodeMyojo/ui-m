@@ -8,11 +8,16 @@ import {
   saveHubPositions,
 } from "@/components/hubApi.js";
 import HubPlanModal from "@/components/hub/HubPlanModal.vue";
+import { isMobile } from "@/composables/useIsMobile.js";
 
 // Хаб — все планы на одной доске, docs/hub-module.md (back-m).
 // Доска — открытый космос: в центре ты, на ближней орбите планы с понятным
 // сроком, на дальней — далёкие, без чёткого начала и конца. Планету можно
 // утащить куда угодно, тап по ней открывает план.
+//
+// Зум — смысловой: масштабируются расстояния между планетами, а сами планеты
+// и подписи остаются своего размера. Раньше масштабировалось всё целиком, и на
+// телефоне, чтобы влезла дальняя орбита, название плана выходило в 5 пикселей.
 
 const ORBIT_NEAR = 300;
 const ORBIT_FAR = 540;
@@ -51,6 +56,7 @@ function posOf(plan) {
 }
 
 function planetSize(plan) {
+  if (isMobile.value) return plan.horizon === "far" ? 44 : 54;
   return plan.horizon === "far" ? 74 : 96;
 }
 
@@ -123,24 +129,60 @@ function measure() {
   drawStars();
 }
 
-// Камера встаёт так, чтобы влезла дальняя орбита — на телефоне это мельче.
+// Камера встаёт так, чтобы влезла дальняя орбита. На телефоне — по ширине:
+// экран узкий и высокий, и вписывание по меньшей стороне — это и есть ширина,
+// но запас под подписи нужен меньше, чем на десктопе.
 function center() {
-  const fit = Math.min(size.w, size.h) / (2 * (ORBIT_FAR + 90));
-  view.scale = Math.max(0.35, Math.min(1, fit));
+  const fit = isMobile.value
+    ? (size.w / 2 - 14) / ORBIT_FAR
+    : Math.min(size.w, size.h) / (2 * (ORBIT_FAR + 90));
+  view.scale = Math.max(0.2, Math.min(1, fit));
   view.x = 0;
-  view.y = 0;
+  // Снизу на телефоне полоса карточек планов — центр системы чуть выше неё.
+  view.y = isMobile.value ? -40 : 0;
 }
 
+// Плоскость только сдвигается: масштаб применяется к координатам, а не к
+// размерам — см. «смысловой зум» выше.
 const planeStyle = computed(() => ({
-  transform: `translate(${size.w / 2 + view.x}px, ${size.h / 2 + view.y}px) scale(${view.scale})`,
+  transform: `translate(${size.w / 2 + view.x}px, ${size.h / 2 + view.y}px)`,
 }));
+
+// Издалека у планеты остаётся только название: процент и путь по ступеням
+// при таком масштабе наезжали на соседей, а на телефоне их и так показывает
+// полоса карточек внизу.
+const compact = computed(() => view.scale < 0.5);
+
+const orbitNear = computed(() => ORBIT_NEAR * 2 * view.scale + "px");
+const orbitFar = computed(() => ORBIT_FAR * 2 * view.scale + "px");
+
+// Подпись у края экрана сдвигается внутрь: иначе у планеты на краю
+// название обрезалось. Ширина подписи оценивается по длине названия — точная
+// мерка потребовала бы второго прохода отрисовки ради пары пикселей.
+function labelShift(plan, pos) {
+  const half = Math.min(isMobile.value ? 75 : 110, plan.title.length * 3.9 + 6);
+  const x = size.w / 2 + view.x + pos.x * view.scale;
+  const margin = 8;
+  if (x - half < margin) return margin - (x - half);
+  if (x + half > size.w - margin) return size.w - margin - (x + half);
+  return 0;
+}
+
+function openPlan(plan) {
+  router.push(`/hub/${plan.id}`);
+}
+
+function nextStage(plan) {
+  const s = (plan.stages || []).find((x) => x.status !== "done");
+  return s ? s.title : "";
+}
 
 function zoomAt(factor, clientX, clientY) {
   const el = space.value;
   const rect = el.getBoundingClientRect();
   const px = (clientX ?? rect.left + rect.width / 2) - rect.left - size.w / 2 - view.x;
   const py = (clientY ?? rect.top + rect.height / 2) - rect.top - size.h / 2 - view.y;
-  const next = Math.min(2.2, Math.max(0.25, view.scale * factor));
+  const next = Math.min(2.5, Math.max(0.2, view.scale * factor));
   const k = next / view.scale;
   // Точка под курсором остаётся на месте.
   view.x -= px * (k - 1);
@@ -286,11 +328,11 @@ onBeforeUnmount(() => resizeObserver?.disconnect());
         :style="{ left: t.left, top: t.top, animationDelay: t.delay, animationDuration: t.duration }"
       />
 
-      <div class="hub-plane" :style="planeStyle">
-        <div class="hub-orbit far" :style="{ width: ORBIT_FAR * 2 + 'px', height: ORBIT_FAR * 2 + 'px' }">
+      <div class="hub-plane" :class="{ compact }" :style="planeStyle">
+        <div class="hub-orbit far" :style="{ width: orbitFar, height: orbitFar }">
           <span class="hub-orbit-label">далёкие · без чётких сроков</span>
         </div>
-        <div class="hub-orbit near" :style="{ width: ORBIT_NEAR * 2 + 'px', height: ORBIT_NEAR * 2 + 'px' }">
+        <div class="hub-orbit near" :style="{ width: orbitNear, height: orbitNear }">
           <span class="hub-orbit-label">близкие · до 5–10 лет</span>
         </div>
 
@@ -302,8 +344,17 @@ onBeforeUnmount(() => resizeObserver?.disconnect());
           v-for="p in planets"
           :key="p.plan.id"
           class="hub-planet"
-          :class="[p.plan.horizon, { done: p.plan.status === 'done', paused: p.plan.status === 'paused' }]"
-          :style="{ left: p.pos.x + 'px', top: p.pos.y + 'px', '--planet': p.color, '--d': p.d + 'px' }"
+          :class="[
+            p.plan.horizon,
+            { done: p.plan.status === 'done', paused: p.plan.status === 'paused', 'label-up': p.pos.y < -40 },
+          ]"
+          :style="{
+            left: p.pos.x * view.scale + 'px',
+            top: p.pos.y * view.scale + 'px',
+            '--planet': p.color,
+            '--d': p.d + 'px',
+            '--shift': labelShift(p.plan, p.pos) + 'px',
+          }"
           @pointerdown="onPointerDown($event, p.plan)"
         >
           <svg class="hub-ring" :width="p.ring.size" :height="p.ring.size">
@@ -357,8 +408,32 @@ onBeforeUnmount(() => resizeObserver?.disconnect());
       </div>
       <button class="hub-tool primary" @click="modalOpen = true">＋ План</button>
       <button class="hub-tool" title="Вернуть в центр" @click="center">⌖</button>
-      <button class="hub-tool" title="Приблизить" @click="zoomAt(1.2)">＋</button>
-      <button class="hub-tool" title="Отдалить" @click="zoomAt(1 / 1.2)">－</button>
+      <!-- На телефоне зум — щипком, кнопки только занимали бы верх -->
+      <template v-if="!isMobile">
+        <button class="hub-tool" title="Приблизить" @click="zoomAt(1.2)">＋</button>
+        <button class="hub-tool" title="Отдалить" @click="zoomAt(1 / 1.2)">－</button>
+      </template>
+    </div>
+
+    <!-- Телефон: планеты бывают рядом, и в нужную пальцем не попасть.
+         Полоса карточек внизу открывает любой план одним тапом. -->
+    <div v-if="isMobile && plans.length" class="hub-dock" @pointerdown.stop>
+      <button
+        v-for="p in planets"
+        :key="p.plan.id"
+        class="hub-dock-card"
+        :style="{ '--planet': p.color }"
+        @click="openPlan(p.plan)"
+      >
+        <span class="hub-dock-orb">{{ p.plan.emoji || "🪐" }}</span>
+        <span class="hub-dock-text">
+          <span class="hub-dock-title">{{ p.plan.title }}</span>
+          <span class="hub-dock-meta">
+            {{ percent(p.plan.progress) }}%<template v-if="nextStage(p.plan)"> · дальше {{ nextStage(p.plan) }}</template>
+          </span>
+          <span class="hub-dock-bar"><i :style="{ width: percent(p.plan.progress) + '%' }" /></span>
+        </span>
+      </button>
     </div>
 
     <div v-if="error" class="hub-error" @pointerdown.stop @click="error = ''">{{ error }}</div>
@@ -576,6 +651,10 @@ onBeforeUnmount(() => resizeObserver?.disconnect());
   filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5));
 }
 
+.hub-planet-label {
+  transform: translateX(var(--shift, 0px));
+}
+
 /* Ширина — по тексту: у планеты, стоящей в точке нулевой ширины, иначе
    доступно ноль пикселей, и название ломалось по словам. */
 .hub-planet-label {
@@ -727,6 +806,147 @@ onBeforeUnmount(() => resizeObserver?.disconnect());
   color: #ffb3b8;
   font-size: 13px;
   cursor: pointer;
+}
+
+/* Полоса карточек планов — только телефон */
+.hub-dock {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  gap: 8px;
+  padding: 10px 12px 12px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+  background: linear-gradient(to top, rgba(4, 5, 11, 0.92) 55%, transparent);
+}
+
+.hub-dock::-webkit-scrollbar {
+  display: none;
+}
+
+.hub-dock-card {
+  flex: 0 0 auto;
+  width: min(250px, 72vw);
+  scroll-snap-align: start;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 16px;
+  border: 1px solid rgba(120, 130, 190, 0.25);
+  background: rgba(14, 16, 28, 0.85);
+  backdrop-filter: blur(10px);
+  color: #e9ecf8;
+  text-align: left;
+}
+
+.hub-dock-orb {
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 19px;
+  background:
+    radial-gradient(circle at 32% 28%, rgba(255, 255, 255, 0.5), transparent 34%),
+    radial-gradient(circle, color-mix(in srgb, var(--planet) 80%, #fff), var(--planet) 60%, color-mix(in srgb, var(--planet) 45%, #000));
+}
+
+.hub-dock-text {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.hub-dock-title {
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hub-dock-meta {
+  font-size: 12px;
+  color: #9aa2c4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hub-dock-bar {
+  height: 3px;
+  margin-top: 3px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.hub-dock-bar i {
+  display: block;
+  height: 100%;
+  background: var(--planet);
+}
+
+/* Планета над солнцем подписывается сверху: подпись снизу ложилась на солнце. */
+.hub-planet.label-up .hub-planet-label {
+  position: absolute;
+  bottom: calc(100% + 12px);
+  left: 50%;
+  translate: -50% 0;
+  margin: 0;
+}
+
+.hub-plane.compact .hub-planet-meta,
+.hub-plane.compact .hub-planet-path {
+  display: none;
+}
+
+.hub-plane.compact .hub-planet-label {
+  margin-top: 7px;
+}
+
+@media (max-width: 768px) {
+  .hub-sun {
+    width: 54px;
+    height: 54px;
+  }
+
+  .hub-sun-core {
+    font-size: 12px;
+  }
+
+  .hub-planet-title {
+    font-size: 13px;
+  }
+
+  .hub-planet-label {
+    margin-top: 9px;
+    max-width: 150px;
+  }
+
+  .hub-planet-meta {
+    font-size: 11.5px;
+  }
+
+  .hub-orbit-label {
+    font-size: 10.5px;
+  }
+
+  .hub-empty {
+    top: auto;
+    bottom: 24px;
+  }
+
+  .hub-error {
+    bottom: 110px;
+  }
 }
 
 @media (max-width: 640px) {

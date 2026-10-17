@@ -641,6 +641,30 @@ function lastOpened(file) {
   font-size: 13px;
 }
 
+@media (max-width: 900px) {
+  .hnd {
+    border-left: 0;
+  }
+
+  .hnd-bar {
+    padding-top: calc(12px + env(safe-area-inset-top, 0px));
+  }
+
+  .hnd-body {
+    padding-bottom: calc(40px + env(safe-area-inset-bottom, 0px));
+  }
+
+  /* меньше 16px — iOS приближает страницу при фокусе на поле */
+  .hnd-input {
+    font-size: 16px;
+  }
+
+  .hnd-icon-btn {
+    width: 40px;
+    height: 40px;
+  }
+}
+
 .hnd-delete {
   align-self: flex-start;
   margin-top: 8px;
