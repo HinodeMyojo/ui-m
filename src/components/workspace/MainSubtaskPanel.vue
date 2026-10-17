@@ -29,6 +29,14 @@ let saveTimer = null;
 let savePending = false;
 let skipNextSave = false;
 
+// Состояние чеклиста объявлено до watch ниже: тот срабатывает сразу
+// (immediate) и зовёт loadChecks, а обращение к const до её строки — это
+// ReferenceError. Async-функция глотала его молча, и чеклист не грузился.
+const checks = ref([]);
+const newCheck = ref("");
+const checksLoading = ref(false);
+let checksTimer = null;
+
 // Правка идёт от карточки: пока панель открыта на этой подзадаче, чужие
 // перезагрузки дня не должны затирать то, что человек уже набрал.
 watch(
@@ -62,11 +70,6 @@ onBeforeUnmount(() => {
 });
 
 // --- Чеклист ---
-
-const checks = ref([]);
-const newCheck = ref("");
-const checksLoading = ref(false);
-let checksTimer = null;
 
 async function loadChecks() {
   checksLoading.value = true;
