@@ -1,11 +1,12 @@
 <script setup>
 import { computed, inject, ref, watch } from "vue";
-import { VIEW_GROUPS, viewList } from "./archModel.js";
+import { richText, scopedViewOf, sortViews, VIEW_GROUPS, VIEW_SORTS, viewList, viewTrail } from "./archModel.js";
 import ArchDiagram from "./ArchDiagram.vue";
 import ArchElementPanel from "./ArchElementPanel.vue";
 
-// Диаграммы проекта: структура C4, сценарии, развёртывание. Клик по блоку —
-// карточка элемента справа, клик по стрелке сценария — подробности шага.
+// Диаграммы проекта: структура C4, сценарии, развёртывание. Клик по блоку
+// проваливает внутрь него, если внутри есть своя диаграмма, и показывает
+// карточку справа; клик по стрелке сценария — подробности шага.
 const arch = inject("arch");
 const { dump, selection, layouts, errors } = arch;
 
@@ -14,7 +15,25 @@ const editable = ref(false);
 const variant = ref("");
 const edge = ref(null);
 
-const views = computed(() => viewList(dump.value));
+// Порядок сценариев помнится между заходами.
+const SORT_KEY = "arch.viewSort";
+function readSort() {
+  try {
+    return localStorage.getItem(SORT_KEY) || "title";
+  } catch {
+    return "title";
+  }
+}
+const sortMode = ref(readSort());
+watch(sortMode, (v) => {
+  try {
+    localStorage.setItem(SORT_KEY, v);
+  } catch {
+    // приватное окно — просто не запомним
+  }
+});
+
+const views = computed(() => sortViews(viewList(dump.value), sortMode.value));
 const groups = computed(() => {
   const q = query.value.trim().toLowerCase();
   return VIEW_GROUPS.map((g) => ({
@@ -47,12 +66,32 @@ watch(
   },
 );
 
+const trail = computed(() => (current.value ? viewTrail(dump.value, current.value.id) : []));
+
 const hasManual = computed(() => !!(current.value && layouts.value[current.value.id]));
 
 function onNode(node) {
   edge.value = null;
-  selection.element = node.modelRef || node.id;
+  const fqn = node.modelRef || node.id;
+  const inner = scopedViewOf(dump.value, fqn);
+  if (inner && inner.id !== current.value?.id) {
+    // Провалились внутрь — схеме нужна вся ширина; о блоке скажет строка сверху.
+    selection.view = inner.id;
+    selection.element = "";
+    return;
+  }
+  selection.element = fqn;
 }
+
+// О чём текущая схема: блок, внутрь которого провалились, или описание схемы.
+const about = computed(() => {
+  const v = current.value;
+  if (!v) return null;
+  const el = v.viewOf ? dump.value?.elements?.[v.viewOf] : null;
+  const text = richText(el?.description) || v.description || "";
+  const first = text.split(/\n\s*\n/)[0].replace(/[*`]/g, "").replace(/\s+/g, " ").trim();
+  return first ? { text: first, element: el ? v.viewOf : "" } : null;
+});
 
 function onEdge(e) {
   selection.element = "";
@@ -66,14 +105,22 @@ function closePanel() {
 </script>
 
 <template>
-  <div class="ar-split" :class="{ 'is-three': selection.element || edge }">
+  <div class="ar-split" :class="{ 'is-three is-panel': selection.element || edge }">
     <div class="ar-side">
       <input v-model="query" class="ar-input" placeholder="Найти диаграмму" style="margin-bottom: 4px" />
       <div v-if="!views.length" class="ar-muted" style="padding: 10px; font-size: 13px">
         Диаграмм пока нет. Добавьте <span class="ar-mono">views</span> в модель — во вкладке «Редактор».
       </div>
       <template v-for="g in groups" :key="g.type">
-        <div class="ar-group-title">{{ g.icon }} {{ g.title }}</div>
+        <div class="ar-group-title ar-row" style="gap: 6px">
+          <span>{{ g.icon }} {{ g.title }}</span>
+          <template v-if="g.type === 'dynamic'">
+            <span class="ar-spacer" />
+            <select v-model="sortMode" class="ar-select is-tiny" title="Порядок сценариев">
+              <option v-for="o in VIEW_SORTS" :key="o.code" :value="o.code">{{ o.title }}</option>
+            </select>
+          </template>
+        </div>
         <div
           v-for="v in g.views"
           :key="v.id"
@@ -91,8 +138,11 @@ function closePanel() {
     <div class="ar-pane">
       <div class="ar-pane-head">
         <template v-if="current">
+          <template v-for="t in trail" :key="t.id">
+            <a href="#" class="ar-crumb" @click.prevent="selection.view = t.id">{{ t.title }}</a>
+            <span class="ar-dim">›</span>
+          </template>
           <strong style="font-size: 14px">{{ current.title }}</strong>
-          <span class="ar-mono ar-dim" style="font-size: 12px">{{ current.id }}</span>
         </template>
         <div class="ar-spacer" />
         <template v-if="current?.type === 'dynamic'">
@@ -119,6 +169,13 @@ function closePanel() {
       <div v-if="errors.length" class="ar-note" style="margin: 8px 10px 0">
         В модели ошибки ({{ errors.length }}) — показана последняя часть, которая разобралась.
         <a href="#" @click.prevent="arch.go('editor')">Открыть редактор</a>
+      </div>
+      <div v-if="about" class="ar-about">
+        {{ about.text }}
+        <a v-if="about.element" href="#" @click.prevent="selection.element = about.element">подробнее</a>
+      </div>
+      <div v-if="current?.type === 'element'" class="ar-hint">
+        Нажмите на блок: если внутри есть схема — провалитесь в неё, иначе справа откроется, что он делает.
       </div>
       <div class="ar-pane-body">
         <ArchDiagram

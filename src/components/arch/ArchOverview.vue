@@ -1,7 +1,7 @@
 <script setup>
 import { computed, inject } from "vue";
 import { STAGE_COLORS, stageTitle } from "@/components/archApi.js";
-import { ADR_STATUS, conceptPathForTag, docTitle, frontMatter, sameTag, viewList } from "./archModel.js";
+import { ADR_STATUS, conceptPathForTag, docTitle, frontMatter, sameTag, sortViews, viewList } from "./archModel.js";
 
 // Обзор: проект на одном экране — что внутри модели, какие сценарии и
 // механизмы описаны, какие решения приняты, что открыто по делам.
@@ -10,7 +10,7 @@ const { project, dump, files, paths, errors, building } = arch;
 
 const elements = computed(() => Object.values(dump.value?.elements || {}));
 const relationsCount = computed(() => Object.keys(dump.value?.relations || {}).length);
-const views = computed(() => viewList(dump.value));
+const views = computed(() => sortViews(viewList(dump.value), "title"));
 const flows = computed(() => views.value.filter((v) => v.type === "dynamic"));
 const structure = computed(() => views.value.filter((v) => v.type === "element"));
 const deployments = computed(() => views.value.filter((v) => v.type === "deployment"));

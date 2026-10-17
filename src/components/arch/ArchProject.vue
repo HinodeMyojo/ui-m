@@ -19,6 +19,7 @@ import ArchEditor from "./ArchEditor.vue";
 import ArchTasks from "./ArchTasks.vue";
 import ArchHistory from "./ArchHistory.vue";
 import ArchProjectModal from "./ArchProjectModal.vue";
+import ArchSearch from "./ArchSearch.vue";
 
 // Открытый проект. Здесь живёт всё общее для вкладок: тексты файлов,
 // разобранная модель, сохранение и переходы «открой элемент / диаграмму /
@@ -30,15 +31,17 @@ const props = defineProps({
 });
 const emit = defineEmits(["tab", "renamed", "removed"]);
 
+// Первой открывается схема: общий вид сервиса, из которого проваливаются
+// глубже. Сводка с цифрами — для того, кто уже знает, что ищет.
 const TABS = [
-  { code: "overview", title: "Обзор" },
-  { code: "diagrams", title: "Диаграммы" },
+  { code: "diagrams", title: "Схема" },
+  { code: "overview", title: "Сводка" },
   { code: "docs", title: "Документы" },
   { code: "editor", title: "Редактор" },
   { code: "tasks", title: "Задачи" },
   { code: "history", title: "История" },
 ];
-const activeTab = computed(() => (TABS.some((t) => t.code === props.tab) ? props.tab : "overview"));
+const activeTab = computed(() => (TABS.some((t) => t.code === props.tab) ? props.tab : "diagrams"));
 
 const project = ref(null);
 const loadError = ref("");
@@ -527,7 +530,10 @@ function onSaved(event) {
       <div class="ar-head">
         <div class="ar-head-emoji">{{ project.emoji || "🧩" }}</div>
         <div style="flex: 1; min-width: 220px">
-          <button class="ar-back" @click="$router.push({ name: 'Arch' })">← Все проекты</button>
+          <div class="ar-row" style="gap: 14px">
+            <button class="ar-back" @click="$router.push('/')">← На главную</button>
+            <button class="ar-back" @click="$router.push({ name: 'Arch' })">Все проекты</button>
+          </div>
           <div class="ar-row" style="gap: 10px">
             <h1 class="ar-title">{{ project.title }}</h1>
             <span class="ar-mono ar-dim" style="font-size: 12px">{{ project.slug }}</span>
@@ -598,18 +604,21 @@ function onSaved(event) {
         <button class="ar-btn is-small is-danger" @click="save({ force: true })">Оставить мою версию всех</button>
       </div>
 
-      <div class="ar-tabs">
-        <button
-          v-for="t in TABS"
-          :key="t.code"
-          class="ar-tab"
-          :class="{ 'is-active': activeTab === t.code }"
-          @click="go(t.code)"
-        >
-          {{ t.title }}
-          <span v-if="t.code === 'editor' && errors.length" class="ar-badge is-bad">{{ errors.length }}</span>
-          <span v-if="t.code === 'tasks' && project.openLinks" class="ar-badge">{{ project.openLinks }}</span>
-        </button>
+      <div class="ar-bar">
+        <div class="ar-tabs">
+          <button
+            v-for="t in TABS"
+            :key="t.code"
+            class="ar-tab"
+            :class="{ 'is-active': activeTab === t.code }"
+            @click="go(t.code)"
+          >
+            {{ t.title }}
+            <span v-if="t.code === 'editor' && errors.length" class="ar-badge is-bad">{{ errors.length }}</span>
+            <span v-if="t.code === 'tasks' && project.openLinks" class="ar-badge">{{ project.openLinks }}</span>
+          </button>
+        </div>
+        <ArchSearch v-if="dump" />
       </div>
 
       <ArchOverview v-if="activeTab === 'overview'" />

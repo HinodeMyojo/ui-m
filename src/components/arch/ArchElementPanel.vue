@@ -2,17 +2,19 @@
 import { computed, inject } from "vue";
 import {
   childrenOf,
-  conceptPathForTag,
   docTitle,
   mentionsOf,
   relationsOf,
   richText,
+  scopedViewOf,
+  tagInfo,
   viewsWithElement,
 } from "./archModel.js";
 import ArchMarkdown from "./ArchMarkdown.vue";
 
-// Всё, что известно об элементе: описание, технологии, метки-механизмы,
-// связи, диаграммы и документы, где он есть, и привязанные дела.
+// Всё, что известно об элементе, в порядке «что это → как устроено → где
+// встречается»: сначала описание и механизмы человеческими словами, в конце —
+// служебное для разработчика (id, технологии, код).
 const props = defineProps({
   elementId: { type: String, default: "" },
   edge: { type: Object, default: null },
@@ -37,9 +39,11 @@ const mentions = computed(() => {
   void arch.fileVersion.value;
   return props.elementId ? mentionsOf(files, "element", props.elementId) : [];
 });
-const tags = computed(() =>
-  (el.value?.tags || []).map((t) => ({ tag: t, concept: conceptPathForTag(paths.value, t) })),
-);
+const mechanisms = computed(() => (el.value?.tags || []).map((t) => tagInfo(files, paths.value, t)));
+const inner = computed(() => (el.value ? scopedViewOf(dump.value, props.elementId) : null));
+const flows = computed(() => views.value.filter((v) => v.type === "dynamic"));
+const schemes = computed(() => views.value.filter((v) => v.type !== "dynamic"));
+const edgeMechanisms = computed(() => (props.edge?.tags || []).map((t) => tagInfo(files, paths.value, t)));
 const metadata = computed(() => Object.entries(el.value?.metadata || {}));
 const links = computed(() =>
   (project.value?.links || []).filter((l) => l.anchor === props.elementId || l.anchor === "view:" + props.elementId),
@@ -83,46 +87,80 @@ const STATUS = { todo: "в плане", doing: "в работе", paused: "па�
         <div>
           <div class="ar-el-kind">{{ kindSpec?.notation || el.notation || el.kind }}</div>
           <div class="ar-el-title">{{ el.title }}</div>
-          <div class="ar-mono ar-dim" style="font-size: 12px">{{ el.id }}</div>
         </div>
 
-        <div class="ar-row">
-          <button class="ar-btn is-small" @click="arch.openSource({ element: el.id })">‹› В коде</button>
-          <button class="ar-btn is-small" @click="linkTask">📌 Привязать дело</button>
-        </div>
+        <ArchMarkdown v-if="richText(el.description)" :text="richText(el.description)" />
+        <div v-else class="ar-muted" style="font-size: 13px">Описания пока нет.</div>
 
-        <div v-if="el.technology || parent || metadata.length" class="ar-kv">
-          <template v-if="el.technology">
-            <span>Технологии</span><span>{{ el.technology }}</span>
-          </template>
-          <template v-if="parent">
-            <span>Внутри</span>
-            <span><a href="#" @click.prevent="arch.openElement(parent.id)">{{ parent.title }}</a></span>
-          </template>
-          <template v-for="[k, v] in metadata" :key="k">
-            <span>{{ k }}</span><span class="ar-mono" style="font-size: 12px">{{ Array.isArray(v) ? v.join(", ") : v }}</span>
-          </template>
-        </div>
+        <button
+          v-if="inner && inner.id !== viewId"
+          class="ar-btn is-primary is-small"
+          style="align-self: flex-start"
+          @click="arch.openView(inner.id)"
+        >
+          ▦ Заглянуть внутрь: {{ inner.title }}
+        </button>
 
-        <div v-if="tags.length">
-          <div class="ar-label">Механизмы и метки</div>
-          <div class="ar-row" style="gap: 6px">
-            <span
-              v-for="t in tags"
-              :key="t.tag"
-              class="ar-chip"
-              :class="{ 'is-link': t.concept }"
-              :title="t.concept ? 'Открыть описание механизма' : 'Описания нет — заведите concepts/' + t.tag + '.md'"
-              @click="t.concept && arch.openFile(t.concept)"
+        <div v-if="mechanisms.length">
+          <div class="ar-label">Какие механизмы здесь работают</div>
+          <div style="display: grid; gap: 6px">
+            <a
+              v-for="m in mechanisms"
+              :key="m.tag"
+              class="ar-mech"
+              :title="m.path ? 'Открыть описание' : 'Описания нет — заведите concepts/' + m.tag + '.md'"
+              @click.prevent="m.path && arch.openFile(m.path)"
             >
-              <span class="ar-tag">#{{ t.tag }}</span>
-              <span v-if="t.concept">· {{ docTitle(t.concept, files[t.concept]) }}</span>
-            </span>
+              <div class="ar-mech-title">⚙ {{ m.title }}</div>
+              <div v-if="m.summary" class="ar-mech-summary">{{ m.summary }}</div>
+            </a>
           </div>
         </div>
 
-        <div v-if="richText(el.description)" class="ar-card" style="padding: 0">
-          <ArchMarkdown :text="richText(el.description)" />
+        <div v-if="children.length">
+          <div class="ar-label">Из чего состоит ({{ children.length }})</div>
+          <div v-for="c in children" :key="c.id" class="ar-item" @click="arch.openElement(c.id)">
+            <span class="ar-item-label">{{ c.title }}</span>
+          </div>
+        </div>
+
+        <div v-if="rels.outgoing.length">
+          <div class="ar-label">Что делает с другими</div>
+          <div v-for="r in rels.outgoing" :key="r.id" class="ar-rel">
+            <span class="ar-dim">→</span>
+            <a href="#" @click.prevent="arch.openElement(r.target)">{{ title(r.target) }}</a>
+            <span class="ar-muted">{{ r.title }}</span>
+          </div>
+        </div>
+        <div v-if="rels.incoming.length">
+          <div class="ar-label">Кто к нему обращается</div>
+          <div v-for="r in rels.incoming" :key="r.id" class="ar-rel">
+            <span class="ar-dim">←</span>
+            <a href="#" @click.prevent="arch.openElement(r.source)">{{ title(r.source) }}</a>
+            <span class="ar-muted">{{ r.title }}</span>
+          </div>
+        </div>
+
+        <div v-if="flows.length">
+          <div class="ar-label">Участвует в сценариях</div>
+          <div v-for="v in flows" :key="v.id" class="ar-item" @click="arch.openView(v.id)">
+            <span class="ar-item-icon">⇄</span>
+            <span class="ar-item-label">{{ v.title }}</span>
+          </div>
+        </div>
+        <div v-if="schemes.length">
+          <div class="ar-label">Есть на схемах</div>
+          <div class="ar-row" style="gap: 6px">
+            <span v-for="v in schemes" :key="v.id" class="ar-chip is-link" @click="arch.openView(v.id)">{{ v.title }}</span>
+          </div>
+        </div>
+
+        <div v-if="mentions.length">
+          <div class="ar-label">Где описан подробнее</div>
+          <div v-for="p in mentions" :key="p" class="ar-item" @click="arch.openFile(p)">
+            <span class="ar-item-icon">¶</span>
+            <span class="ar-item-label">{{ docTitle(p, files[p]) }}</span>
+          </div>
         </div>
 
         <div v-if="(el.links || []).length">
@@ -132,56 +170,32 @@ const STATUS = { todo: "в плане", doing: "в работе", paused: "па�
           </div>
         </div>
 
-        <div v-if="children.length">
-          <div class="ar-label">Внутри ({{ children.length }})</div>
-          <div v-for="c in children" :key="c.id" class="ar-item" @click="arch.openElement(c.id)">
-            <span class="ar-item-label">{{ c.title }}</span>
-            <span class="ar-dim" style="font-size: 12px">{{ c.kind }}</span>
-          </div>
-        </div>
-
-        <div v-if="rels.outgoing.length">
-          <div class="ar-label">Обращается к</div>
-          <div v-for="r in rels.outgoing" :key="r.id" class="ar-rel">
-            <span class="ar-dim">→</span>
-            <a href="#" @click.prevent="arch.openElement(r.target)">{{ title(r.target) }}</a>
-            <span class="ar-muted">{{ r.title }}</span>
-            <span v-if="r.technology" class="ar-dim" style="font-size: 12px">· {{ r.technology }}</span>
-            <span v-for="t in r.tags" :key="t" class="ar-tag">#{{ t }}</span>
-          </div>
-        </div>
-        <div v-if="rels.incoming.length">
-          <div class="ar-label">К нему обращаются</div>
-          <div v-for="r in rels.incoming" :key="r.id" class="ar-rel">
-            <span class="ar-dim">←</span>
-            <a href="#" @click.prevent="arch.openElement(r.source)">{{ title(r.source) }}</a>
-            <span class="ar-muted">{{ r.title }}</span>
-            <span v-if="r.technology" class="ar-dim" style="font-size: 12px">· {{ r.technology }}</span>
-          </div>
-        </div>
-
-        <div v-if="views.length">
-          <div class="ar-label">На диаграммах</div>
-          <div class="ar-row" style="gap: 6px">
-            <span v-for="v in views" :key="v.id" class="ar-chip is-link" @click="arch.openView(v.id)">{{ v.title }}</span>
-          </div>
-        </div>
-
-        <div v-if="mentions.length">
-          <div class="ar-label">Упоминается в документах</div>
-          <div v-for="p in mentions" :key="p" class="ar-item" @click="arch.openFile(p)">
-            <span class="ar-item-icon">¶</span>
-            <span class="ar-item-label">{{ docTitle(p, files[p]) }}</span>
-          </div>
-        </div>
-
-        <div v-if="links.length">
+        <div>
           <div class="ar-label">Дела</div>
           <div v-for="l in links" :key="l.id" class="ar-item" @click="arch.go('tasks')">
             <span class="ar-item-icon">{{ l.done ? "✔" : "○" }}</span>
             <span class="ar-item-label" :style="{ textDecoration: l.done ? 'line-through' : 'none' }">{{ l.title }}</span>
             <span class="ar-dim" style="font-size: 12px">{{ STATUS[l.status] || l.status }}</span>
           </div>
+          <button class="ar-btn is-small" style="margin-top: 4px" @click="linkTask">📌 Привязать дело</button>
+        </div>
+
+        <div class="ar-section">
+          <div class="ar-label">Для разработчика</div>
+          <div class="ar-kv">
+            <span>Id в модели</span><span class="ar-mono" style="font-size: 12px">{{ el.id }}</span>
+            <template v-if="el.technology">
+              <span>Технологии</span><span>{{ el.technology }}</span>
+            </template>
+            <template v-if="parent">
+              <span>Внутри</span>
+              <span><a href="#" @click.prevent="arch.openElement(parent.id)">{{ parent.title }}</a></span>
+            </template>
+            <template v-for="[k, v] in metadata" :key="k">
+              <span>{{ k }}</span><span class="ar-mono" style="font-size: 12px">{{ Array.isArray(v) ? v.join(", ") : v }}</span>
+            </template>
+          </div>
+          <button class="ar-btn is-small" style="margin-top: 6px" @click="arch.openSource({ element: el.id })">‹› Открыть в коде модели</button>
         </div>
       </div>
 
@@ -195,16 +209,11 @@ const STATUS = { todo: "в плане", doing: "в работе", paused: "па�
           <template v-if="edge.technology"><span>Технологии</span><span>{{ edge.technology }}</span></template>
           <template v-if="edge.kind"><span>Вид</span><span>{{ edge.kind }}</span></template>
         </div>
-        <div v-if="(edge.tags || []).length" class="ar-row" style="gap: 6px">
-          <span
-            v-for="t in edge.tags"
-            :key="t"
-            class="ar-chip"
-            :class="{ 'is-link': conceptPathForTag(paths, t) }"
-            @click="conceptPathForTag(paths, t) && arch.openFile(conceptPathForTag(paths, t))"
-          >
-            <span class="ar-tag">#{{ t }}</span>
-          </span>
+        <div v-if="edgeMechanisms.length" style="display: grid; gap: 6px">
+          <a v-for="m in edgeMechanisms" :key="m.tag" class="ar-mech" @click.prevent="m.path && arch.openFile(m.path)">
+            <div class="ar-mech-title">⚙ {{ m.title }}</div>
+            <div v-if="m.summary" class="ar-mech-summary">{{ m.summary }}</div>
+          </a>
         </div>
         <div v-if="edgeNotes" class="ar-card" style="padding: 0">
           <ArchMarkdown :text="edgeNotes" />

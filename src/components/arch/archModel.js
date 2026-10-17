@@ -27,6 +27,176 @@ export function viewList(dump) {
   }));
 }
 
+// --- Порядок сценариев ---
+
+export const VIEW_SORTS = [
+  { code: "title", title: "по номеру" },
+  { code: "model", title: "как в модели" },
+];
+
+// sortViews — сценарии по названию с учётом чисел («С-2» раньше «С-10»).
+// Структурные диаграммы держат порядок модели: это уровни C4 сверху вниз.
+export function sortViews(list, mode) {
+  if (mode !== "title") return list;
+  const byTitle = (a, b) => a.title.localeCompare(b.title, "ru", { numeric: true, sensitivity: "base" });
+  const dynamic = list.filter((v) => v.type === "dynamic").sort(byTitle);
+  let i = 0;
+  return list.map((v) => (v.type === "dynamic" ? dynamic[i++] : v));
+}
+
+// --- Провал вглубь ---
+
+// scopedViewOf — диаграмма «внутри элемента» (view … of fqn), если она есть.
+export function scopedViewOf(dump, fqn) {
+  return viewList(dump).find((v) => v.type === "element" && v.viewOf === fqn) || null;
+}
+
+// viewTrail — путь от общей схемы к текущей: Контекст › Система › Контейнер.
+export function viewTrail(dump, viewId) {
+  const views = viewList(dump);
+  const current = views.find((v) => v.id === viewId);
+  if (!current) return [];
+  const root = views.find((v) => v.id === "index");
+  const trail = [];
+  if (root && root.id !== current.id) trail.push(root);
+  if (current.type === "element" && current.viewOf) {
+    const parts = current.viewOf.split(".");
+    for (let n = 1; n < parts.length; n++) {
+      const v = scopedViewOf(dump, parts.slice(0, n).join("."));
+      if (v && v.id !== current.id) trail.push(v);
+    }
+  }
+  return trail;
+}
+
+// --- Метки по-человечески ---
+
+// conceptSummary — первая содержательная фраза описания механизма: без
+// заголовков, цитат-ссылок и списков.
+export function conceptSummary(text) {
+  const { body } = frontMatter(text || "");
+  for (const block of body.split(/\n\s*\n/)) {
+    const t = block.trim();
+    if (!t || /^(#|>|[-*]\s|\||```|\d+\.\s)/.test(t)) continue;
+    return t
+      .replace(/\[\[([^\]|]+\|)?([^\]]+)\]\]/g, "$2")
+      .replace(/[`*_]/g, "")
+      .replace(/\s+/g, " ")
+      .replace(/^Простыми словами\.\s*/i, "");
+  }
+  return "";
+}
+
+// tagInfo — название механизма вместо #метки и его суть одной фразой.
+export function tagInfo(files, paths, tag) {
+  const path = conceptPathForTag(paths, tag);
+  if (!path) return { tag, path: null, title: "#" + tag, summary: "" };
+  return { tag, path, title: docTitle(path, files[path]), summary: conceptSummary(files[path]) };
+}
+
+// --- Поиск по проекту ---
+
+// plainText — markdown без разметки: ссылки [[…]] становятся подписями,
+// заголовки, цитаты, таблицы и выделение — обычным текстом.
+// resolve(ref) отдаёт название по ссылке; без него остаётся сама цель.
+export function plainText(text, resolve) {
+  return String(text || "")
+    .replace(REF_RE, (_, raw) => {
+      const ref = parseRef(raw);
+      return ref.label || resolve?.(ref) || ref.target;
+    })
+    .replace(/^\s*(#+|>|[-*]|\d+\.)\s+/gm, "")
+    .replace(/\|/g, " ")
+    .replace(/[`*_]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function snippetAround(text, q, resolve, width = 110) {
+  const flat = plainText(text, resolve);
+  const i = flat.toLowerCase().indexOf(q);
+  if (i < 0) return "";
+  const from = Math.max(0, i - width / 3);
+  const s = flat.slice(from, from + width).trim();
+  return (from > 0 ? "…" : "") + s + (from + width < flat.length ? "…" : "");
+}
+
+// glossaryRows — строки таблицы глоссария: «| Термин | Значение |».
+function glossaryRows(files, resolve) {
+  const out = [];
+  for (const [path, text] of Object.entries(files)) {
+    if (!/glossary|глоссарий/i.test(path + " " + docTitle(path, text))) continue;
+    for (const line of String(text).split("\n")) {
+      const m = /^\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|/.exec(line);
+      if (!m || /^-+$/.test(m[1]) || /^термин$/i.test(m[1])) continue;
+      out.push({ path, term: plainText(m[1], resolve), meaning: plainText(m[2], resolve) });
+    }
+  }
+  return out;
+}
+
+// searchProject — всё, что есть в проекте по слову: термины глоссария,
+// механизмы, элементы, диаграммы и документы. У каждого — короткое
+// объяснение, чтобы понять, не открывая.
+export function searchProject(dump, files, paths, raw, limit = 40) {
+  const q = String(raw || "").trim().toLowerCase();
+  if (q.length < 2) return [];
+  const out = [];
+  const has = (s) => String(s || "").toLowerCase().includes(q);
+  const starts = (s) => String(s || "").toLowerCase().startsWith(q);
+  // Ссылки [[…]] в подсказках — настоящими названиями, а не id.
+  const resolve = (ref) => {
+    if (ref.kind === "view") return dump?.views?.[ref.target]?.title;
+    if (ref.kind === "file") return files[ref.target] !== undefined ? docTitle(ref.target, files[ref.target]) : "";
+    if (ref.kind === "adr") {
+      const p = adrPath(paths, ref.target);
+      return p ? docTitle(p, files[p]) : "";
+    }
+    return dump?.elements?.[ref.target]?.title;
+  };
+
+  for (const g of glossaryRows(files, resolve)) {
+    if (has(g.term) || has(g.meaning)) {
+      out.push({ kind: "term", score: starts(g.term) ? 0 : has(g.term) ? 1 : 4, title: g.term, hint: g.meaning, path: g.path });
+    }
+  }
+  const tags = Object.keys(dump?.specification?.tags || {});
+  for (const tag of tags) {
+    const info = tagInfo(files, paths, tag);
+    if (has(tag) || has(info.title) || has(info.summary)) {
+      out.push({ kind: "concept", score: has(info.title) || has(tag) ? 1 : 4, title: info.title, hint: info.summary, path: info.path, tag });
+    }
+  }
+  for (const e of Object.values(dump?.elements || {})) {
+    const desc = richText(e.description);
+    if (has(e.title) || has(e.id) || has(e.technology) || has(desc)) {
+      out.push({
+        kind: "element",
+        score: starts(e.title) ? 1 : has(e.title) || has(e.id) ? 2 : 5,
+        title: e.title || e.id,
+        hint: has(desc) && !has(e.title) ? snippetAround(desc, q, resolve) : plainText(desc.split(/\n\s*\n/)[0], resolve),
+        id: e.id,
+      });
+    }
+  }
+  for (const v of viewList(dump)) {
+    if (has(v.title) || has(v.id) || has(v.description)) {
+      out.push({ kind: "view", score: has(v.title) ? 2 : 5, title: v.title, hint: v.description, id: v.id, type: v.type });
+    }
+  }
+  const conceptPaths = new Set(out.filter((r) => r.kind === "concept").map((r) => r.path));
+  for (const p of paths) {
+    if (fileKind(p) !== "md" && fileKind(p) !== "mmd") continue;
+    if (conceptPaths.has(p)) continue; // механизм уже в списке — с пояснением
+    const text = frontMatter(files[p] || "").body;
+    const title = docTitle(p, files[p] || "");
+    if (has(title) || has(text)) {
+      out.push({ kind: "doc", score: has(title) ? 2 : 6, title, hint: snippetAround(text, q, resolve), path: p });
+    }
+  }
+  return out.sort((a, b) => a.score - b.score || a.title.localeCompare(b.title, "ru")).slice(0, limit);
+}
+
 export function elementList(dump) {
   if (!dump?.elements) return [];
   return Object.values(dump.elements)

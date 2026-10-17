@@ -110,6 +110,7 @@ function ago(iso) {
   <div v-else class="ar">
     <div class="ar-row">
       <div>
+        <button class="ar-back" @click="$router.push('/')">← На главную</button>
         <h1 class="ar-title">Архитектура</h1>
         <div class="ar-muted">C4-модели сервисов, сценарии, механизмы и стадии</div>
       </div>

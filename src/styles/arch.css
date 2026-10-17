@@ -44,10 +44,34 @@
 .ar-modal-back {
   font-size: 14px;
 }
+/* Схема, документы и редактор: рабочая область ровно в экран. Шапка со
+   стадиями уезжает при прокрутке, вкладки липнут к верху — так остаётся
+   весь экран под список слева и диаграмму справа. */
 .ar.is-full {
-  height: calc(100dvh - var(--tabbar-h, 0px));
-  min-height: 0;
+  --ar-tabs-h: 42px;
   padding-bottom: 12px;
+}
+.ar-bar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  background: var(--ar-bg);
+  margin: 0 calc(-1 * clamp(10px, 2.4vw, 32px));
+  padding: 4px clamp(10px, 2.4vw, 32px);
+  min-height: var(--ar-tabs-h, 42px);
+  border-bottom: 1px solid var(--ar-line);
+}
+.ar-bar > .ar-tabs {
+  flex: 1;
+  border-bottom: none;
+}
+.ar.is-full > .ar-split {
+  flex: none;
+  height: calc(100dvh - var(--tabbar-h, 0px) - var(--ar-tabs-h) - 24px);
 }
 
 /* --- Общие кирпичи --- */
@@ -858,14 +882,138 @@
   .ar-split > .ar-side {
     max-height: 220px;
   }
-  .ar.is-full {
+  .ar.is-full > .ar-split {
     height: auto;
-    min-height: calc(100dvh - var(--tabbar-h, 0px));
   }
   .ar-pane {
     min-height: 60vh;
   }
   .ar-form-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* --- Понятность: крошки, подсказки, поиск --- */
+
+.ar-select.is-tiny {
+  padding: 2px 6px;
+  font-size: 11px;
+  width: auto;
+  height: auto;
+}
+.ar-crumb {
+  color: var(--ar-accent-2);
+  font-size: 13px;
+  text-decoration: none;
+}
+.ar-crumb:hover {
+  text-decoration: underline;
+}
+.ar-hint {
+  color: var(--ar-dim);
+  font-size: 12px;
+  padding: 4px 12px 0;
+}
+
+.ar-search {
+  position: relative;
+  min-width: 260px;
+  flex: 0 1 380px;
+}
+.ar-search-list {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  width: max(100%, 460px);
+  max-height: 70vh;
+  overflow: auto;
+  background: var(--ar-card);
+  border: 1px solid var(--ar-line);
+  border-radius: 12px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
+  z-index: 50;
+  padding: 6px;
+}
+.ar-search-item {
+  display: grid;
+  grid-template-columns: 22px 1fr;
+  gap: 2px 8px;
+  padding: 7px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.ar-search-item:hover,
+.ar-search-item.is-active {
+  background: var(--ar-hover, rgba(255, 255, 255, 0.06));
+}
+.ar-search-item-icon {
+  grid-row: span 2;
+  text-align: center;
+  opacity: 0.8;
+}
+.ar-search-item-title {
+  font-weight: 600;
+  font-size: 13px;
+}
+.ar-search-item-kind {
+  color: var(--ar-dim);
+  font-weight: 400;
+  font-size: 11px;
+  margin-left: 6px;
+}
+.ar-search-item-hint {
+  color: var(--ar-muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+.ar-section {
+  border-top: 1px solid var(--ar-line);
+  padding-top: 10px;
+}
+.ar-mech {
+  display: block;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  cursor: pointer;
+}
+.ar-mech:hover {
+  background: rgba(255, 255, 255, 0.07);
+}
+.ar-mech-title {
+  font-weight: 600;
+  font-size: 13px;
+}
+.ar-mech-summary {
+  color: var(--ar-muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+@media (max-width: 900px) {
+  .ar-search {
+    width: 100%;
+    flex: 1 1 100%;
+  }
+  .ar-search-list {
+    width: 100%;
+  }
+}
+.ar-about {
+  color: var(--ar-muted);
+  font-size: 13px;
+  line-height: 1.45;
+  padding: 6px 12px 0;
+  max-width: 1100px;
+}
+.ar-about a {
+  color: var(--ar-accent-2);
+  margin-left: 4px;
+}
+.ar-split.is-three.is-panel {
+  grid-template-columns: 230px minmax(0, 1fr) minmax(300px, 0.55fr);
+}
+@media (max-width: 900px) {
+  .ar-split.is-three.is-panel {
     grid-template-columns: 1fr;
   }
 }

@@ -64,13 +64,15 @@ function Diagram(props) {
     background: "dots",
     controls: true,
     fitView: true,
-    enableSearch: true,
+    // Свой поиск у проекта (Ctrl+K) ищет и документы с терминами, а метки на
+    // блоках вели в непонятное «Select view» — их смысл в карточке справа.
+    enableSearch: false,
     enableFocusMode: true,
     enableElementDetails: true,
     enableRelationshipDetails: true,
     enableRelationshipBrowser: true,
     enableDynamicViewWalkthrough: true,
-    enableElementTags: true,
+    enableElementTags: false,
     enableNotations: true,
     enableNotes: true,
     enableCompareWithLatest: !!editable,
