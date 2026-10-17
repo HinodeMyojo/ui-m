@@ -146,6 +146,20 @@ const router = createRouter({
       component: () => import("../views/RoadmapTodayView.vue"),
     },
     {
+      // Хаб — все планы на одной доске-космосе, docs/hub-module.md (back-m).
+      // calm — без листопада: листья поверх открытого космоса неуместны.
+      path: "/hub",
+      name: "Hub",
+      component: () => import("../views/HubView.vue"),
+      meta: { calm: true },
+    },
+    {
+      path: "/hub/:id",
+      name: "HubPlan",
+      component: () => import("../views/HubPlanView.vue"),
+      meta: { calm: true },
+    },
+    {
       // Дорожная карта разработки бизнеса. С /roadmap не пересекается: там учёба.
       path: "/venture",
       name: "Venture",
