@@ -1017,3 +1017,118 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* --- Термин: выдвижная карточка --- */
+
+.ar-drawer-back {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: rgba(0, 0, 0, 0.35);
+}
+.ar-drawer {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(600px, 100vw);
+  background: var(--ar-card);
+  border-left: 1px solid var(--ar-line);
+  box-shadow: -20px 0 50px rgba(0, 0, 0, 0.45);
+  display: flex;
+  flex-direction: column;
+  color: var(--ar-text);
+  font-size: 14px;
+}
+.ar-drawer-body {
+  overflow: auto;
+  padding: 4px 18px 30px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.ar-term-title {
+  margin: 4px 0 0;
+  font-size: 20px;
+}
+.ar-term-short {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.5;
+}
+.ar-term-h {
+  font-weight: 600;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+.ar-term-usages {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-top: 1px solid var(--ar-line);
+  padding-top: 10px;
+}
+.ar-use {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px 8px;
+  padding: 7px 9px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  cursor: pointer;
+  text-decoration: none;
+  color: inherit;
+}
+.ar-use:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+.ar-use-title {
+  font-weight: 600;
+  font-size: 13px;
+}
+.ar-use-how {
+  font-size: 11px;
+  color: var(--ar-dim);
+  align-self: center;
+}
+.ar-use-how.is-tag {
+  color: var(--ar-accent-2);
+}
+.ar-use-snip {
+  grid-column: 1 / -1;
+  color: var(--ar-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.ar-use-snip mark,
+.ar-term-mark {
+  background: rgba(169, 157, 255, 0.22);
+  color: inherit;
+  border-radius: 3px;
+  padding: 0 2px;
+}
+.ar-term-how {
+  border-top: 1px solid var(--ar-line);
+  padding-top: 10px;
+}
+.ar-term-how summary {
+  cursor: pointer;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+/* Термин в тексте документа — пунктир, клик открывает его карточку. */
+.ar-doc .ar-term {
+  color: inherit;
+  text-decoration: underline dotted var(--ar-accent-2);
+  text-underline-offset: 3px;
+  cursor: help;
+}
+.ar-doc .ar-term:hover {
+  color: var(--ar-accent-2);
+}
+.ar-return {
+  font-size: 12px;
+}

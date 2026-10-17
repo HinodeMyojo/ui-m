@@ -3,6 +3,7 @@ import { computed, inject, nextTick, onMounted, ref, watch } from "vue";
 import { Marked } from "marked";
 import hljs from "highlight.js";
 import { ADR_STATUS, frontMatter, parseRef } from "./archModel.js";
+import { firstMatch } from "./archTerms.js";
 import { renderMermaid } from "./mermaid.js";
 
 // Документ проекта: markdown, ссылки [[…]] на элементы, диаграммы и файлы,
@@ -20,7 +21,7 @@ function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 }
 
-const ICONS = { element: "◇", view: "▦", file: "¶", adr: "⚖" };
+const ICONS = { element: "◇", view: "▦", file: "¶", adr: "⚖", term: "📖" };
 
 function renderRef(raw) {
   const ref = parseRef(raw);
@@ -105,8 +106,45 @@ async function drawMermaid() {
   }
 }
 
-onMounted(drawMermaid);
-watch(html, drawMermaid);
+// linkTerms — первое упоминание каждого термина в документе становится
+// ссылкой на его карточку: так из любого текста видно, что это и где ещё
+// применяется. Код, заголовки и готовые ссылки не трогаем.
+const SKIP = "a, code, pre, h1, h2, h3, h4, h5, h6, .ar-front, .ar-mermaid";
+async function linkTerms() {
+  await nextTick();
+  const el = root.value;
+  const terms = arch.terms?.value || [];
+  if (!el || !terms.length) return;
+  for (const t of terms) {
+    if (t.conceptPath && t.conceptPath === props.path) continue;
+    if (el.querySelector(`[data-term="${CSS.escape(t.key)}"]`)) continue; // уже связан при прошлой отрисовке
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, {
+      acceptNode: (n) => (n.parentElement?.closest(SKIP) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT),
+    });
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+      const hit = firstMatch(t, n.nodeValue);
+      if (!hit) continue;
+      const word = n.splitText(hit.index);
+      word.splitText(hit.length);
+      const a = document.createElement("a");
+      a.className = "ar-term";
+      a.dataset.term = t.key;
+      a.title = t.short || t.title;
+      word.parentNode.replaceChild(a, word);
+      a.appendChild(word);
+      break;
+    }
+  }
+}
+
+async function afterRender() {
+  await drawMermaid();
+  await linkTerms();
+}
+
+onMounted(afterRender);
+watch(html, afterRender);
+watch(() => arch.terms?.value, linkTerms);
 
 function resolveLocal(href) {
   const clean = href.split("#")[0];
@@ -119,6 +157,12 @@ function resolveLocal(href) {
 }
 
 function onClick(e) {
+  const termEl = e.target.closest?.("[data-term]");
+  if (termEl) {
+    e.preventDefault();
+    arch.openTerm(termEl.dataset.term);
+    return;
+  }
   const refEl = e.target.closest?.("[data-ref]");
   if (refEl) {
     e.preventDefault();

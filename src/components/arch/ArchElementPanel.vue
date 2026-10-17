@@ -109,7 +109,7 @@ const STATUS = { todo: "в плане", doing: "в работе", paused: "па�
               :key="m.tag"
               class="ar-mech"
               :title="m.path ? 'Открыть описание' : 'Описания нет — заведите concepts/' + m.tag + '.md'"
-              @click.prevent="m.path && arch.openFile(m.path)"
+              @click.prevent="arch.openTerm('tag:' + m.tag) || (m.path && arch.openFile(m.path))"
             >
               <div class="ar-mech-title">⚙ {{ m.title }}</div>
               <div v-if="m.summary" class="ar-mech-summary">{{ m.summary }}</div>
@@ -210,7 +210,12 @@ const STATUS = { todo: "в плане", doing: "в работе", paused: "па�
           <template v-if="edge.kind"><span>Вид</span><span>{{ edge.kind }}</span></template>
         </div>
         <div v-if="edgeMechanisms.length" style="display: grid; gap: 6px">
-          <a v-for="m in edgeMechanisms" :key="m.tag" class="ar-mech" @click.prevent="m.path && arch.openFile(m.path)">
+          <a
+            v-for="m in edgeMechanisms"
+            :key="m.tag"
+            class="ar-mech"
+            @click.prevent="arch.openTerm('tag:' + m.tag) || (m.path && arch.openFile(m.path))"
+          >
             <div class="ar-mech-title">⚙ {{ m.title }}</div>
             <div v-if="m.summary" class="ar-mech-summary">{{ m.summary }}</div>
           </a>

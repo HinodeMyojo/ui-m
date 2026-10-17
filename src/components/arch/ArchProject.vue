@@ -20,6 +20,8 @@ import ArchTasks from "./ArchTasks.vue";
 import ArchHistory from "./ArchHistory.vue";
 import ArchProjectModal from "./ArchProjectModal.vue";
 import ArchSearch from "./ArchSearch.vue";
+import ArchTermDrawer from "./ArchTermDrawer.vue";
+import { findTerm, termIndex } from "./archTerms.js";
 
 // Открытый проект. Здесь живёт всё общее для вкладок: тексты файлов,
 // разобранная модель, сохранение и переходы «открой элемент / диаграмму /
@@ -378,7 +380,37 @@ async function openSource(params) {
   }
 }
 
+// --- Термины ---
+
+const terms = computed(() => {
+  void fileVersion.value;
+  return termIndex(dump.value, files, paths.value);
+});
+const termKey = ref("");
+// После перехода из карточки термина к месту применения — кнопка «назад к термину».
+const returnTerm = ref("");
+const openedTerm = computed(() => terms.value.find((t) => t.key === termKey.value) || null);
+
+function openTerm(raw) {
+  const t = findTerm(terms.value, raw);
+  if (!t) return false;
+  termKey.value = t.key;
+  returnTerm.value = "";
+  return true;
+}
+
+function closeTerm(opts) {
+  returnTerm.value = opts?.keepReturn ? termKey.value : "";
+  termKey.value = "";
+}
+
+const returnTitle = computed(() => terms.value.find((t) => t.key === returnTerm.value)?.title || "");
+
 function openRef(ref) {
+  if (ref.kind === "term") {
+    openTerm(ref.target);
+    return;
+  }
   if (ref.kind === "view") openView(ref.target);
   else if (ref.kind === "file") openFile(ref.target);
   else if (ref.kind === "adr") {
@@ -389,6 +421,10 @@ function openRef(ref) {
 
 function resolveRef(ref) {
   const d = dump.value;
+  if (ref.kind === "term") {
+    const t = findTerm(terms.value, ref.target);
+    return { exists: !!t, label: t?.title || ref.target, hint: t?.short || "" };
+  }
   if (ref.kind === "adr") {
     const p = adrPath(Object.keys(files), ref.target);
     return { exists: !!p, label: p ? `ADR-${ref.target} ${docTitle(p, files[p])}` : `ADR-${ref.target}`, hint: p || "" };
@@ -441,6 +477,8 @@ const arch = {
   openSource,
   openRef,
   resolveRef,
+  terms,
+  openTerm,
   go,
 };
 provide("arch", arch);
@@ -618,6 +656,9 @@ function onSaved(event) {
             <span v-if="t.code === 'tasks' && project.openLinks" class="ar-badge">{{ project.openLinks }}</span>
           </button>
         </div>
+        <button v-if="returnTitle" class="ar-btn is-small ar-return" @click="openTerm(returnTerm)">
+          ← 📖 {{ returnTitle }}
+        </button>
         <ArchSearch v-if="dump" />
       </div>
 
@@ -628,6 +669,8 @@ function onSaved(event) {
       <ArchTasks v-else-if="activeTab === 'tasks'" />
       <ArchHistory v-else-if="activeTab === 'history'" />
     </template>
+
+    <ArchTermDrawer v-if="openedTerm" :term="openedTerm" @close="closeTerm" />
 
     <ArchProjectModal
       v-if="projectModal && project"

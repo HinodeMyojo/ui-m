@@ -107,7 +107,7 @@ export function plainText(text, resolve) {
     })
     .replace(/^\s*(#+|>|[-*]|\d+\.)\s+/gm, "")
     .replace(/\|/g, " ")
-    .replace(/[`*_]/g, "")
+    .replace(/[`*]/g, "")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -256,6 +256,7 @@ export function parseRef(raw) {
   if (target.startsWith("view:")) return { kind: "view", target: target.slice(5), label };
   if (target.startsWith("file:")) return { kind: "file", target: target.slice(5), label };
   if (target.startsWith("adr:")) return { kind: "adr", target: target.slice(4).trim(), label };
+  if (target.startsWith("term:")) return { kind: "term", target: target.slice(5).trim(), label };
   return { kind: "element", target, label };
 }
 

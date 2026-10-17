@@ -1,6 +1,7 @@
 <script setup>
 import { computed, inject, onBeforeUnmount, onMounted, ref } from "vue";
 import { searchProject } from "./archModel.js";
+import { findTerm } from "./archTerms.js";
 
 // Поиск по всему проекту: термин, механизм, блок схемы, сценарий, документ.
 // Под каждым результатом — короткое объяснение, чтобы понять суть, ещё не
@@ -23,7 +24,15 @@ const KINDS = {
 
 const results = computed(() => {
   void arch.fileVersion.value;
-  return searchProject(dump.value, files, paths.value, query.value);
+  // Строка глоссария и механизм часто одно и то же — оставляем одну запись.
+  const seen = new Set();
+  return searchProject(dump.value, files, paths.value, query.value).filter((r) => {
+    if (r.kind !== "term" && r.kind !== "concept") return true;
+    const key = findTerm(arch.terms.value, r.tag ? "tag:" + r.tag : r.title)?.key || r.title;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 });
 
 function kindTitle(r) {
@@ -33,7 +42,9 @@ function kindTitle(r) {
 
 function choose(r) {
   if (!r) return;
-  if (r.kind === "element") arch.openElement(r.id);
+  if ((r.kind === "concept" || r.kind === "term") && arch.openTerm(r.tag ? "tag:" + r.tag : r.title)) {
+    // термин открылся карточкой
+  } else if (r.kind === "element") arch.openElement(r.id);
   else if (r.kind === "view") arch.openView(r.id);
   else if (r.path) arch.openFile(r.path);
   open.value = false;
