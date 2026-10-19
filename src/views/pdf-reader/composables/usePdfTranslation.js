@@ -1,4 +1,4 @@
-import { ref, watch } from 'vue';
+import { ref, watch, computed } from 'vue';
 
 export const LANGUAGES = [
     { code: 'EN', name: 'English' },
@@ -296,87 +296,7 @@ ${fmtNote}`;
         const prompt = buildAnalyzePrompt(text, provider);
 
         try {
-            let resultText = '';
-
-            if (provider === 'gemini') {
-                const res = await fetch(
-                    `/gemini-api/v1beta/models/gemini-2.0-flash:generateContent?key=${encodeURIComponent(apiKey)}`,
-                    {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
-                    }
-                );
-                if (!res.ok) {
-                    const d = await res.json().catch(() => ({}));
-                    throw new Error(d?.error?.message ?? `HTTP ${res.status}`);
-                }
-                const data = await res.json();
-                resultText = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
-
-            } else if (provider === 'claude') {
-                const res = await fetch('/claude-api/v1/messages', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'x-api-key': apiKey,
-                        'anthropic-version': '2023-06-01',
-                    },
-                    body: JSON.stringify({
-                        model: 'claude-haiku-4-5',
-                        max_tokens: 1024,
-                        messages: [{ role: 'user', content: prompt }],
-                    }),
-                });
-                if (!res.ok) {
-                    const d = await res.json().catch(() => ({}));
-                    throw new Error(d?.error?.message ?? `HTTP ${res.status}`);
-                }
-                const data = await res.json();
-                resultText = data.content?.[0]?.text ?? '';
-
-            } else if (provider === 'openai') {
-                const res = await fetch('/openai-api/v1/chat/completions', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${apiKey}`,
-                    },
-                    body: JSON.stringify({
-                        model: 'gpt-4o-mini',
-                        max_tokens: 1024,
-                        messages: [{ role: 'user', content: prompt }],
-                    }),
-                });
-                if (!res.ok) {
-                    const d = await res.json().catch(() => ({}));
-                    throw new Error(d?.error?.message ?? `HTTP ${res.status}`);
-                }
-                const data = await res.json();
-                resultText = data.choices?.[0]?.message?.content ?? '';
-
-            } else if (provider === 'gigachat') {
-                const token = await getGigaChatToken(apiKey);
-                const res = await fetch('/gigachat-api/api/v1/chat/completions', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${token}`,
-                    },
-                    body: JSON.stringify({
-                        model: 'GigaChat',
-                        max_tokens: 1024,
-                        messages: [{ role: 'user', content: prompt }],
-                    }),
-                });
-                if (!res.ok) {
-                    const d = await res.json().catch(() => ({}));
-                    throw new Error(d?.message ?? `GigaChat HTTP ${res.status}`);
-                }
-                const data = await res.json();
-                resultText = data.choices?.[0]?.message?.content ?? '';
-            }
-
+            const resultText = await callProvider(provider, apiKey, prompt);
             if (!resultText) throw new Error('Пустой ответ от AI');
             analyzeCache.set(key, resultText);
             analyzeResult.value = resultText;
@@ -385,6 +305,112 @@ ${fmtNote}`;
         } finally {
             isAnalyzing.value = false;
         }
+    }
+
+    // Один запрос к выбранному провайдеру. Ключ живёт в браузере, запросы идут
+    // через прокси сайта (/gemini-api, /claude-api, …) — тот же путь, что и у
+    // разбора слова в окне перевода.
+    async function callProvider(provider, apiKey, prompt) {
+        let resultText = '';
+
+        if (provider === 'gemini') {
+            const res = await fetch(
+                `/gemini-api/v1beta/models/gemini-2.0-flash:generateContent?key=${encodeURIComponent(apiKey)}`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
+                }
+            );
+            if (!res.ok) {
+                const d = await res.json().catch(() => ({}));
+                throw new Error(d?.error?.message ?? `HTTP ${res.status}`);
+            }
+            const data = await res.json();
+            resultText = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+
+        } else if (provider === 'claude') {
+            const res = await fetch('/claude-api/v1/messages', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-api-key': apiKey,
+                    'anthropic-version': '2023-06-01',
+                },
+                body: JSON.stringify({
+                    model: 'claude-haiku-4-5',
+                    max_tokens: 1024,
+                    messages: [{ role: 'user', content: prompt }],
+                }),
+            });
+            if (!res.ok) {
+                const d = await res.json().catch(() => ({}));
+                throw new Error(d?.error?.message ?? `HTTP ${res.status}`);
+            }
+            const data = await res.json();
+            resultText = data.content?.[0]?.text ?? '';
+
+        } else if (provider === 'openai') {
+            const res = await fetch('/openai-api/v1/chat/completions', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${apiKey}`,
+                },
+                body: JSON.stringify({
+                    model: 'gpt-4o-mini',
+                    max_tokens: 1024,
+                    messages: [{ role: 'user', content: prompt }],
+                }),
+            });
+            if (!res.ok) {
+                const d = await res.json().catch(() => ({}));
+                throw new Error(d?.error?.message ?? `HTTP ${res.status}`);
+            }
+            const data = await res.json();
+            resultText = data.choices?.[0]?.message?.content ?? '';
+
+        } else if (provider === 'gigachat') {
+            const token = await getGigaChatToken(apiKey);
+            const res = await fetch('/gigachat-api/api/v1/chat/completions', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`,
+                },
+                body: JSON.stringify({
+                    model: 'GigaChat',
+                    max_tokens: 1024,
+                    messages: [{ role: 'user', content: prompt }],
+                }),
+            });
+            if (!res.ok) {
+                const d = await res.json().catch(() => ({}));
+                throw new Error(d?.message ?? `GigaChat HTTP ${res.status}`);
+            }
+            const data = await res.json();
+            resultText = data.choices?.[0]?.message?.content ?? '';
+        }
+
+        return resultText;
+    }
+
+    // Свободный вопрос к ИИ — скорочтению нужно объяснение термина в контексте
+    // книги, а не разбор слова для изучающего язык.
+    const aiReady = computed(() => !!analyzeKeys.value[analyzeProvider.value]);
+    const aiLabel = computed(() => providerLabel(analyzeProvider.value));
+    const askCache = new Map();
+
+    async function askAi(prompt) {
+        const provider = analyzeProvider.value;
+        const apiKey = analyzeKeys.value[provider];
+        if (!apiKey) throw new Error(`API ключ для ${providerLabel(provider)} не задан (⚙️ в читалке).`);
+        const key = `${provider}:${prompt}`;
+        if (askCache.has(key)) return askCache.get(key);
+        const text = await callProvider(provider, apiKey, prompt);
+        if (!text) throw new Error('Пустой ответ от AI');
+        askCache.set(key, text);
+        return text;
     }
 
     function providerLabel(p) {
@@ -424,6 +450,9 @@ ${fmtNote}`;
         analyzeError,
         analyzeProvider,
         analyzeKeys,
+        askAi,
+        aiReady,
+        aiLabel,
         LANGUAGES,
     };
 }

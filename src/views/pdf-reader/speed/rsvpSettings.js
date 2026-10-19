@@ -84,9 +84,10 @@ export function useRsvpSettings() {
 }
 
 export const MODES = [
-    { code: 'rsvp', icon: '◉', label: 'Слово', hint: 'по слову в одной точке' },
-    { code: 'side', icon: '◧', label: 'С рисунками', hint: 'слова и ближайшая схема рядом' },
-    { code: 'pacer', icon: '≣', label: 'Текстом', hint: 'текст с бегущей подсветкой' },
+    { code: 'rsvp', icon: '◉', label: 'Слово', short: 'Слово', hint: 'по слову в одной точке' },
+    { code: 'side', icon: '◧', label: 'С рисунками', short: 'Рисунки', hint: 'слова и ближайшая схема рядом' },
+    { code: 'pacer', icon: '≣', label: 'Текстом', short: 'Текст', hint: 'текст с бегущей подсветкой' },
+    { code: 'read', icon: '📖', label: 'Читать', short: 'Читать', hint: 'обычное чтение, словарь справа' },
 ];
 
 export const TRAINERS = [

@@ -1320,6 +1320,24 @@
     font-size: 14px;
 }
 
+.rsvp-mode-short {
+    display: none;
+}
+
+@media (max-width: 480px) {
+    .rsvp-mode-long { display: none; }
+    .rsvp-mode-short { display: inline; }
+
+    .rsvp-modes {
+        gap: 4px;
+    }
+
+    .rsvp-mode {
+        padding: 4px 8px;
+        gap: 3px;
+    }
+}
+
 /* «Текстом»: колонка, по которой бежит подсветка фразы. */
 .rsvp-pacer {
     position: absolute;
@@ -1409,6 +1427,216 @@
     margin: 0 auto;
 }
 
+/* ── «Читать» и словарь ───────────────────────────────────────────────── */
+
+.rsvp-pacer {
+    user-select: text;
+    -webkit-user-select: text;
+}
+
+.rsvp-pacer-reading .rsvp-pacer-col {
+    padding-top: 24px;
+}
+
+.rsvp-pw-look {
+    background: rgba(233, 196, 106, 0.35);
+    box-shadow: 0 2px 0 #e9c46a;
+}
+
+.rsvp-pacer-prev {
+    display: block;
+    margin: 0 auto 18px;
+}
+
+/* Широкий экран: текст левее, словарь справа на всю высоту. */
+.rsvp-dict-docked .rsvp-pacer {
+    right: min(40%, 480px);
+}
+
+.rsvp-dict {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: min(40%, 480px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 14px 16px 24px;
+    box-sizing: border-box;
+    border-left: 1px solid var(--rsvp-panel-border);
+    background: var(--rsvp-panel);
+    cursor: auto;
+    user-select: text;
+    -webkit-user-select: text;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    z-index: 2;
+}
+
+/* Не прикреплённый — выезжает поверх: справа на широком, снизу на телефоне. */
+.rsvp-dict-sheet {
+    box-shadow: -8px 0 30px rgba(0, 0, 0, 0.3);
+}
+
+.rsvp-dict-empty {
+    margin: auto 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    text-align: center;
+}
+
+.rsvp-dict-empty-icon {
+    font-size: 34px;
+}
+
+.rsvp-dict-empty-title {
+    font-size: 16px;
+    font-weight: 700;
+}
+
+.rsvp-dict-history {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+}
+
+.rsvp-dict-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.rsvp-dict-word {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 6px 10px;
+    min-width: 0;
+}
+
+.rsvp-dict-title {
+    font-size: 22px;
+    font-weight: 700;
+    word-break: break-word;
+}
+
+.rsvp-dict-ts {
+    font-size: 14px;
+    color: var(--rsvp-muted);
+}
+
+.rsvp-dict-actions {
+    display: flex;
+    gap: 4px;
+    flex-shrink: 0;
+}
+
+.rsvp-dict-sec {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+.rsvp-dict-label {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--rsvp-muted);
+}
+
+.rsvp-dict-src {
+    font-weight: 400;
+    text-transform: none;
+    letter-spacing: 0;
+}
+
+.rsvp-dict-book {
+    padding: 10px 12px;
+    border-radius: 10px;
+    border-left: 3px solid var(--rsvp-accent);
+    background: var(--rsvp-btn);
+}
+
+.rsvp-dict-main {
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.rsvp-dict-group {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.rsvp-dict-pos {
+    font-size: 12px;
+    font-style: italic;
+    color: var(--rsvp-accent);
+}
+
+.rsvp-dict-list {
+    margin: 0;
+    padding-left: 20px;
+}
+
+.rsvp-dict-list li {
+    margin: 2px 0;
+}
+
+.rsvp-dict-mean {
+    color: var(--rsvp-muted);
+}
+
+.rsvp-dict-ex {
+    font-size: 12px;
+    color: var(--rsvp-muted);
+}
+
+.rsvp-dict-wp-title {
+    font-weight: 600;
+}
+
+.rsvp-dict-text {
+    color: var(--rsvp-text);
+}
+
+.rsvp-dict-context mark {
+    background: rgba(233, 196, 106, 0.35);
+    color: inherit;
+    border-radius: 3px;
+}
+
+.rsvp-dict-tr {
+    color: var(--rsvp-muted);
+}
+
+.rsvp-dict-link {
+    color: var(--rsvp-accent);
+    font-size: 13px;
+}
+
+.rsvp-dict-ai h4 {
+    margin: 10px 0 4px;
+    font-size: 13px;
+}
+
+.rsvp-dict-ai p {
+    margin: 0 0 6px;
+}
+
+.rsvp-dict-ai ul {
+    margin: 0 0 6px;
+    padding-left: 18px;
+}
+
 /* ── Телефон ───────────────────────────────────────────────────────────── */
 
 @media (max-width: 768px) {
@@ -1492,6 +1720,22 @@
 
     .rsvp-pacer-col {
         padding: 24vh 16px 45vh;
+    }
+
+    .rsvp-pacer-reading .rsvp-pacer-col {
+        padding-top: 16px;
+    }
+
+    /* Телефон: словарь — лист снизу, текст под ним виден. */
+    .rsvp-dict {
+        top: auto;
+        left: 0;
+        width: 100%;
+        height: 62%;
+        border-left: none;
+        border-top: 1px solid var(--rsvp-panel-border);
+        border-radius: 18px 18px 0 0;
+        box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.35);
     }
 }
 

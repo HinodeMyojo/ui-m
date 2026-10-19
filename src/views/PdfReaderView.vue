@@ -147,6 +147,7 @@
                 :startPage="speed.page" :startText="speed.text" :fileId="libraryFileId"
                 :fileName="fileName" :tocItems="tocItems" :darkMode="darkMode"
                 :recallKey="speed.recallKey" :deepl="apiKey ? deeplTranslate : null"
+                :askAi="aiReady ? askAi : null" :aiLabel="aiLabel"
                 @page="onSpeedPage" @activity="markReadingActivity" @close="onSpeedClose" />
 
             <!-- Toast -->
@@ -263,7 +264,7 @@ watch(goalDone, (done, was) => {
 const { apiKey, hoverMode, sourceLang, targetLang, isTranslating, translationError, lastTranslation,
         translate, checkApiKey, speakText, stopSpeech,
         analyzeText, analyzeResult, isAnalyzing, analyzeError,
-        analyzeProvider, analyzeKeys,
+        analyzeProvider, analyzeKeys, askAi, aiReady, aiLabel,
         LANGUAGES } = usePdfTranslation(fileName);
 
 const viewportEl = ref(null);

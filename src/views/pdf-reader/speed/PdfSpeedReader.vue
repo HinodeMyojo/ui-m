@@ -19,7 +19,7 @@
             </header>
 
             <!-- Сцена: слово, жесты, контекст на паузе -->
-            <main class="rsvp-stage" :class="[`rsvp-mode-${mode}`, { 'rsvp-side-wide': sideWide }]" ref="stageEl"
+            <main class="rsvp-stage" :class="[`rsvp-mode-${mode}`, { 'rsvp-side-wide': sideWide, 'rsvp-dict-docked': dictDocked }]" ref="stageEl"
                 @pointerdown="onPointerDown" @pointerup="onPointerUp" @pointercancel="gesture = null">
 
                 <div v-if="loading" class="rsvp-status">
@@ -38,10 +38,14 @@
                 </div>
 
                 <!-- Режим «Текстом»: колонка текста, по ней бежит подсветка -->
-                <PdfSpeedPacer v-else-if="mode === 'pacer'" :pdfDoc="pdfDoc" :tokens="tokens" :version="player.version.value"
-                    :index="index" :frame="frame" :playing="playing" :atEnd="!!player.source.value?.atEnd"
+                <PdfSpeedPacer v-else-if="mode === 'pacer' || mode === 'read'" :pdfDoc="pdfDoc" :tokens="tokens"
+                    :version="player.version.value" :index="index" :frame="frame" :playing="playing"
+                    :atEnd="!!player.source.value?.atEnd" :canPrev="player.canPrev.value" :reading="mode === 'read'"
+                    :markIndex="dictQuery ? dictQuery.i : -1"
                     :bionic="settings.bionic" :textSize="settings.textSize" :font="fontCss"
-                    @seek="(i) => { started = true; player.seek(i); }" @toggle="toggle" />
+                    @seek="(i) => { started = true; player.seek(i); }" @toggle="toggle"
+                    @lookup="({ i }) => lookupAt(i)" @select="onSelectLookup"
+                    @position="(i) => player.moveTo(i)" @need-more="player.loadMore()" @load-prev="player.ensureBehind()" />
 
                 <!-- Рисунок, таблица или листинг: чтение стоит, смотрим сам кусок страницы -->
                 <div v-else-if="frame && frame.block" class="rsvp-block" @pointerdown.stop @pointerup.stop>
@@ -110,6 +114,12 @@
                     </aside>
                 </template>
 
+                <!-- Словарь: перевод, значения, что это за понятие -->
+                <PdfSpeedDict v-if="dictShown" :class="{ 'rsvp-dict-sheet': !dictDocked }" :query="dictQuery"
+                    :bookTitle="fileName" :bookTerm="dictBookTerm" :deepl="deepl" :history="dictHistory"
+                    :explain="askAi ? explainTerm : null" :aiLabel="aiLabel" :closable="!dictDocked || !!dictQuery"
+                    @close="dictQuery = null" @pick="lookupText" />
+
                 <!-- Крупно: рисунок из боковой панели -->
                 <div v-if="zoomBlock" class="rsvp-zoom" @pointerdown.stop @pointerup.stop>
                     <div class="rsvp-block-label">стр. {{ zoomBlock.p }}</div>
@@ -136,7 +146,8 @@
                 <div class="rsvp-modes" role="tablist" aria-label="Режим чтения">
                     <button v-for="m in MODES" :key="m.code" class="rsvp-mode" :class="{ active: mode === m.code }"
                         role="tab" :aria-selected="mode === m.code" :title="m.hint + ' (M)'" @click="setMode(m.code)">
-                        <span class="rsvp-mode-icon">{{ m.icon }}</span>{{ m.label }}
+                        <span class="rsvp-mode-icon">{{ m.icon }}</span><span class="rsvp-mode-long">{{ m.label }}</span><span
+                            class="rsvp-mode-short">{{ m.short }}</span>
                     </button>
                 </div>
                 <div class="rsvp-bars">
@@ -157,7 +168,7 @@
                     </span>
                 </div>
 
-                <div class="rsvp-controls">
+                <div v-if="mode !== 'read'" class="rsvp-controls">
                     <button class="rsvp-ctl" title="Предложение назад (←)" aria-label="Предложение назад" @click="backSentence">⏮</button>
                     <button class="rsvp-ctl" title="Медленнее (↓)" aria-label="Медленнее" @click="changeWpm(-WPM_STEP)">−</button>
                     <button class="rsvp-ctl rsvp-play" :title="playing ? 'Пауза (пробел)' : 'Читать (пробел)'"
@@ -168,7 +179,7 @@
                     <button class="rsvp-ctl" title="Предложение вперёд (→)" aria-label="Предложение вперёд" @click="forwardSentence">⏭</button>
                 </div>
 
-                <div class="rsvp-speed">
+                <div v-if="mode !== 'read'" class="rsvp-speed">
                     <div class="rsvp-speed-row">
                         <span class="rsvp-wpm"><b>{{ settings.wpm }}</b> сл/мин</span>
                         <input class="rsvp-range" type="range" :min="WPM_MIN" :max="WPM_MAX" :step="WPM_STEP"
@@ -250,6 +261,8 @@ import PdfSpeedBlock from './PdfSpeedBlock.vue';
 import PdfSpeedOverview from './PdfSpeedOverview.vue';
 import PdfSpeedRecall from './PdfSpeedRecall.vue';
 import PdfSpeedPacer from './PdfSpeedPacer.vue';
+import PdfSpeedDict from './PdfSpeedDict.vue';
+import { cleanWord } from './lookup.js';
 import { translateTerm, addTermToVocab } from './terms.js';
 import './speed-reader.css';
 
@@ -270,6 +283,9 @@ const props = defineProps({
     recallKey: { type: String, default: '' },
     // Перевод фразы через DeepL читалки (text → Promise<string|null>).
     deepl: { type: Function, default: null },
+    // Вопрос к ИИ-провайдеру читалки (prompt → Promise<markdown>); null — ключа нет.
+    askAi: { type: Function, default: null },
+    aiLabel: { type: String, default: 'ИИ' },
 });
 
 const emit = defineEmits(['close', 'page', 'activity']);
@@ -493,6 +509,7 @@ watch(() => [settings.chunk, settings.smartPauses, settings.mode, settings.pacer
 
 function setMode(code) {
     if (settings.mode === code) return;
+    if (code === 'read') player.pause();
     settings.mode = code;
     zoomBlock.value = null;
     const m = MODES.find((x) => x.code === code);
@@ -502,6 +519,80 @@ function setMode(code) {
 function cycleMode() {
     const k = MODES.findIndex((m) => m.code === mode.value);
     setMode(MODES[(k + 1) % MODES.length].code);
+}
+
+// ── Словарь ───────────────────────────────────────────────────────────────
+// docs/pdf-library.md (back-m), «Словарь при чтении». В режиме «Читать» на
+// широком экране словарь стоит справа всегда; на телефоне и в «Текстом» —
+// выезжает, когда спросили слово.
+
+const dictQuery = ref(null);          // { text, sentence, page, i }
+const dictBookTerm = ref(null);
+const dictHistory = ref(readDictHistory());
+const dictDocked = computed(() => mode.value === 'read' && stageWidth.value >= 900);
+const dictShown = computed(() => (mode.value === 'read' || mode.value === 'pacer')
+    && (dictDocked.value || !!dictQuery.value));
+
+function readDictHistory() {
+    try { return JSON.parse(localStorage.getItem('rsvp-dict-history') || '[]'); } catch { return []; }
+}
+
+function sentenceAround(i) {
+    const list = tokens.value;
+    const from = sentenceStart(list, i);
+    const to = Math.min(list.length, nextSentence(list, i));
+    return list.slice(from, to).filter((t) => !t.k).map((t) => t.t).join(' ');
+}
+
+function lookupAt(i, text = null) {
+    const t = tokens.value[i];
+    if (!t || t.k) return;
+    lookupQuery({ text: text || cleanWord(t.t) || t.t, sentence: sentenceAround(i), page: t.p, i });
+}
+
+function onSelectLookup({ text, i }) {
+    player.pause();
+    const clean = text.replace(/\s+/g, ' ').trim().slice(0, 200);
+    if (i >= 0) lookupAt(i, clean);
+    else lookupQuery({ text: clean, sentence: '', page: currentPage.value, i: -1 });
+}
+
+// Из «недавних»: слово без своего места в тексте.
+function lookupText(text) {
+    lookupQuery({ text, sentence: '', page: currentPage.value, i: -1 });
+}
+
+async function lookupQuery(q) {
+    dictQuery.value = q;
+    dictBookTerm.value = null;
+    const key = q.text.toLowerCase();
+    dictHistory.value = [q.text, ...dictHistory.value.filter((h) => h.toLowerCase() !== key)].slice(0, 12);
+    try { localStorage.setItem('rsvp-dict-history', JSON.stringify(dictHistory.value)); } catch { /* без истории */ }
+    // Определение из врезок книги на соседних страницах — оно точнее любого словаря.
+    const src = player.source.value;
+    if (!src) return;
+    try {
+        const near = await src.chapterSummary(Math.max(1, q.page - 3), q.page + 3);
+        if (dictQuery.value !== q) return;
+        const w = cleanWord(q.text).toLowerCase();
+        dictBookTerm.value = near.terms.find((t) => {
+            const term = t.term.toLowerCase();
+            return term === w || term.includes(w) || (w.length > 4 && w.includes(term));
+        }) || null;
+    } catch { /* без книги — словари всё равно ответят */ }
+}
+
+function explainTerm(term, sentence) {
+    const book = props.fileName || 'техническая книга';
+    const prompt = `Я читаю книгу «${book}» (оригинал на английском) и встретил «${term}».\n`
+        + (sentence ? `Предложение из книги: «${sentence}»\n` : '')
+        + 'Объясни по-русски, что это значит именно здесь. Формат — markdown без таблиц:\n'
+        + '## Коротко\n1–2 предложения простым языком.\n'
+        + '## Подробнее\n3–5 пунктов: как устроено, кто участники, зачем нужно.\n'
+        + '## Пример\nОдин жизненный пример.\n'
+        + '## Как переводить\nВарианты перевода на русский в этом контексте и близкие термины.\n'
+        + '## Не путать\nС чем часто путают, если есть.';
+    return props.askAi(prompt);
 }
 
 // Рисунок для боковой панели: ближайший впереди или последний пройденный.
@@ -855,10 +946,13 @@ function onKeydown(e) {
         e.stopPropagation();
         if (panel.value) closePanel();
         else if (summary.value) close();
+        else if (dictQuery.value) dictQuery.value = null;
         else requestClose();
         return;
     }
     if (typing || panel.value || summary.value) return;
+    // «Читать»: стрелки и пробел листают текст сами, бегунка нет.
+    if (mode.value === 'read' && [' ', 'k', 'K', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', '1', '2', '3'].includes(e.key)) return;
     const handled = (() => {
         switch (e.key) {
             case ' ':

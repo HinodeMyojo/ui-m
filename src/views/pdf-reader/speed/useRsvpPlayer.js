@@ -333,6 +333,28 @@ export function useRsvpPlayer(settings) {
         if (i >= 0) await seek(i);
     }
 
+    // Режим «Читать»: место задаёт прокрутка, таймеров и счёта слов нет.
+    function moveTo(i) {
+        const src = source.value;
+        if (!src || !src.tokens.length) return;
+        index.value = Math.max(0, Math.min(src.tokens.length - 1, i));
+        if (!src.atEnd && src.tokens.length - index.value < LOOKAHEAD_WORDS) {
+            src.ensureAhead(index.value).then(bump);
+        }
+    }
+
+    async function loadMore() {
+        const src = source.value;
+        if (!src || src.atEnd) return;
+        await src.ensureAhead(index.value, LOOKAHEAD_WORDS * 2);
+        bump();
+    }
+
+    const canPrev = computed(() => {
+        version.value;
+        return (source.value?.firstPage ?? 1) > 1;
+    });
+
     function offsetInPage() {
         return source.value?.offsetInPage(index.value) ?? 0;
     }
@@ -342,7 +364,7 @@ export function useRsvpPlayer(settings) {
     return {
         source, tokens, version, index, frame, currentToken, currentPage,
         playing, waiting, finished, loading, noText, skippedPages, session, blockStops, boost,
-        open, play, pause, toggle, stop, seek, seekPage, seekPageOffset,
+        open, play, pause, toggle, stop, seek, seekPage, seekPageOffset, moveTo, loadMore, ensureBehind, canPrev,
         backSentence, forwardSentence, backWord, forwardWord, restartTimer,
         activeMsNow, offsetInPage,
     };

@@ -407,5 +407,17 @@ check("рисунок рядом: сначала ближайший вперед
   return behind?.i === 21 && !behind.ahead ? null : `позади ${JSON.stringify(behind)}`;
 });
 
+const lookupPure = await import("../src/views/pdf-reader/speed/lookupPure.mjs");
+check("словарь: аббревиатура ищется по первым буквам, слово — целым словом", () => {
+  const got = [
+    lookupPure.pickArticle(["NACHA", "Automated clearing house", "ACH Network"], "ACH"),
+    lookupPure.pickArticle(["Payment and settlement systems in India", "Settlement (finance)"], "settlement"),
+    lookupPure.pickArticle(["Agricultural value chain", "Value chain"], "value chain"),
+    lookupPure.isAcronym("ODFIs") && !lookupPure.isAcronym("Fedwire"),
+    lookupPure.cleanWord("“bank’s”"),
+  ].join(" | ");
+  return got === "Automated clearing house | Settlement (finance) | Value chain | true | bank" ? null : got;
+});
+
 console.log(`\nПроверок: ${checked}, провалено: ${failed}`);
 process.exit(failed ? 1 : 0);
