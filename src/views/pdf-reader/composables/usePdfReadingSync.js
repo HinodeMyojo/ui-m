@@ -192,5 +192,7 @@ export function usePdfReadingSync(fileId, pdfDoc, pageCount, currentPage, goToPa
         window.removeEventListener('touchstart', markActivity);
     });
 
-    return { details, sessionSeconds, flush, markFinished: () => flush({ finished: true }) };
+    // markActivity нужен скорочтению: там минутами никто не трогает ни мышь,
+    // ни экран, и без него время перестало бы идти через полторы минуты.
+    return { details, sessionSeconds, flush, markActivity, markFinished: () => flush({ finished: true }) };
 }

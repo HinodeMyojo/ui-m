@@ -4,6 +4,7 @@
             class="pdf-sel-color-btn" :class="color" :title="colorLabels[color]"
             @click="emit('highlight', color)"></button>
         <div class="pdf-tb-divider" style="height:18px;margin:0 2px;"></div>
+        <button class="pdf-tb-btn pdf-tb-sm" title="Скорочтение отсюда" @click="emit('speed-read')">⚡</button>
         <button class="pdf-tb-btn pdf-tb-sm" title="Перевести" @click="emit('translate')">🌐</button>
         <button class="pdf-tb-btn pdf-tb-sm" title="В словарь" @click="emit('add-to-vocab')">📖</button>
         <button class="pdf-tb-btn pdf-tb-sm" title="Заметка" @click="toggleNote">📝</button>
@@ -32,7 +33,7 @@ const props = defineProps({
     existingNote: { type: String, default: '' },
 });
 
-const emit = defineEmits(['highlight', 'note', 'copy', 'translate', 'add-to-vocab', 'dismiss', 'save-note']);
+const emit = defineEmits(['highlight', 'note', 'copy', 'translate', 'add-to-vocab', 'dismiss', 'save-note', 'speed-read']);
 
 const colors = ['yellow', 'green', 'blue', 'red'];
 const colorLabels = { yellow: 'Жёлтый', green: 'Зелёный', blue: 'Синий', red: 'Красный' };
@@ -51,7 +52,7 @@ function saveNote() {
 }
 
 // Keep toolbar inside viewport
-const TOOLBAR_W = 220;
+const TOOLBAR_W = 250;
 const TOOLBAR_H = 44;
 
 const safeX = computed(() => {

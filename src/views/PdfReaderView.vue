@@ -36,6 +36,7 @@
                 @open-goal="goalPanelOpen = true"
                 @toggle-hover-translate="hoverMode = !hoverMode"
                 @open-translate-settings="showTranslateSettings = true"
+                @open-speed="openSpeed()"
                 @go-home="$router.push('/')" />
 
             <PdfSearchBar v-if="searchOpen" :searchQuery="searchQuery" :matchCount="searchMatches.length"
@@ -85,6 +86,7 @@
                 @copy="onCopySelection"
                 @translate="onSelectionTranslate"
                 @add-to-vocab="onSelectionAddToVocab"
+                @speed-read="onSelectionSpeedRead"
                 @save-note="onSaveNote"
                 @dismiss="hideSelToolbar" />
 
@@ -140,6 +142,12 @@
                 <button class="pdf-tt-expand" @click="expandHoverToModal">↗</button>
             </div>
 
+            <!-- Скорочтение: слово за словом с красной буквой фокуса -->
+            <PdfSpeedReader v-if="speed.open" :pdfDoc="pdfDoc" :pageCount="pageCount"
+                :startPage="speed.page" :startText="speed.text" :fileId="libraryFileId"
+                :fileName="fileName" :tocItems="tocItems" :darkMode="darkMode"
+                @page="onSpeedPage" @activity="markReadingActivity" @close="onSpeedClose" />
+
             <!-- Toast -->
             <div v-if="toastMsg" class="pdf-toast">{{ toastMsg }}</div>
 
@@ -171,7 +179,7 @@
 </template>
 
 <script setup>
-import { ref, computed, reactive, watch, nextTick, onMounted, onBeforeUnmount } from 'vue';
+import { ref, computed, reactive, watch, nextTick, onMounted, onBeforeUnmount, defineAsyncComponent } from 'vue';
 import { usePdfLoader }         from './pdf-reader/composables/usePdfLoader.js';
 import { resetRenderQueue, setRenderPaused } from './pdf-reader/composables/usePdfRenderQueue.js';
 import { usePdfTheme }          from './pdf-reader/composables/usePdfTheme.js';
@@ -203,6 +211,9 @@ import PdfTranslationSettings   from './pdf-reader/components/PdfTranslationSett
 import PdfSessionGoal            from './pdf-reader/components/PdfSessionGoal.vue';
 import './pdf-reader/pdf-reader.css';
 
+// Скорочтение грузится, только когда его открыли: остальной читалке оно не нужно.
+const PdfSpeedReader = defineAsyncComponent(() => import('./pdf-reader/speed/PdfSpeedReader.vue'));
+
 // ── Core state ────────────────────────────────────────────────────────────
 const { pdfDoc, pageCount, isLoading, loadError, fileName, loadProgress, streaming, loadFromFile, loadFromUrl, closeDocument } = usePdfLoader();
 const { darkMode, nightMode, nightBrightness, isFullscreen, showSidebar, showThumbnails, toggleDark, toggleNight, setNightBrightness, toggleFullscreen, toggleSidebar, toggleThumbnails } = usePdfTheme();
@@ -220,7 +231,7 @@ const libraryFileId = ref(typeof route.query.file === 'string' ? route.query.fil
 
 const { annotations, annotationsForPage, addAnnotation, updateNote, removeAnnotation, exportAnnotations, importAnnotations } = usePdfAnnotations(fileName, libraryFileId);
 const { bookmarks, isCurrentPageBookmarked, toggleCurrentPage, removeBookmark, updateLabel } = usePdfBookmarks(fileName, currentPage, libraryFileId);
-const { details: libraryDetails, sessionSeconds, flush: flushReading } = usePdfReadingSync(
+const { details: libraryDetails, sessionSeconds, flush: flushReading, markActivity: markReadingActivity } = usePdfReadingSync(
     libraryFileId, pdfDoc, pageCount, currentPage, goToPage,
 );
 // Цель на сессию — docs/pdf-library.md. Ставится и в карточке книги, и здесь:
@@ -302,7 +313,8 @@ let pageObserver = null;
 let scrollFrame = 0;
 
 function requestPageRecalc() {
-    if (scrollFrame) return;
+    // Пока открыто скорочтение, страницу ведёт оно, а не прокрутка под ним.
+    if (scrollFrame || speed.open) return;
     scrollFrame = requestAnimationFrame(() => {
         scrollFrame = 0;
         onViewportScroll(viewportEl.value, activePages.value);
@@ -843,12 +855,12 @@ function updateSelectionToolbar() {
         pendingSelection = { selectedText, rects, pageNum };
 
         const topY = Math.min(...clientRects.map((r) => r.top));
-        const midX = (clientRects[0].left + clientRects[clientRects.length - 1].right) / 2 - 115;
+        const midX = (clientRects[0].left + clientRects[clientRects.length - 1].right) / 2 - 130;
 
         // Панель не должна вылезать за экран: на телефоне ширины ровно столько,
         // чтобы промахнуться мимо края. И если сверху места нет — показываем
         // под выделением, а не под шапкой браузера.
-        const TOOLBAR_W = 230;
+        const TOOLBAR_W = 260;
         const TOOLBAR_H = 52;
         const bottomY = Math.max(...clientRects.map((r) => r.bottom));
         selToolbar.x = Math.max(8, Math.min(window.innerWidth - TOOLBAR_W - 8, midX));
@@ -933,8 +945,48 @@ async function onModalAddToVocab(card) {
     }
 }
 
+// ── Скорочтение ───────────────────────────────────────────────────────────
+// docs/pdf-library.md (back-m), раздел «Скорочтение». Открывается с текущей
+// страницы или с выделенного места; страница и время чтения идут в библиотеку
+// так же, как при обычном чтении.
+const speed = reactive({ open: false, page: 1, text: '' });
+
+function openSpeed(page = currentPage.value, text = '') {
+    if (!pdfDoc.value) return;
+    hideSelToolbar();
+    hoverTooltip.visible = false;
+    speed.page = page;
+    speed.text = text;
+    speed.open = true;
+}
+
+function onSelectionSpeedRead() {
+    if (!pendingSelection) return;
+    const { pageNum, selectedText } = pendingSelection;
+    window.getSelection()?.removeAllRanges();
+    openSpeed(pageNum, selectedText);
+}
+
+function onSpeedPage(page) {
+    currentPage.value = page;
+}
+
+function onSpeedClose({ page }) {
+    speed.open = false;
+    currentPage.value = page;
+    flushReading();
+    // Без плавной прокрутки: пролёт через сотню страниц дёргал бы отрисовку
+    // каждой из них.
+    nextTick(() => {
+        pageRefs.value[page]?.scrollIntoView({ block: 'start' });
+        rootEl.value?.focus();
+    });
+}
+
 // ── Keyboard shortcuts ────────────────────────────────────────────────────
 function onKeydown(e) {
+    // Скорочтение слушает клавиатуру само; читалке под ним делать нечего.
+    if (speed.open) return;
     if (e.ctrlKey && e.key === 'f') { e.preventDefault(); openSearch(); return; }
     if (e.key === 'Escape') {
         if (transModal.visible) { transModal.visible = false; stopSpeech(); return; }
@@ -944,6 +996,11 @@ function onKeydown(e) {
     }
     if (!pdfDoc.value) return;
     if (e.key === 'b' || e.key === 'B') { e.preventDefault(); toggleCurrentPage(); return; }
+    if (!e.ctrlKey && !e.metaKey && (e.key === 'r' || e.key === 'R' || e.key === 'к' || e.key === 'К')) {
+        e.preventDefault();
+        openSpeed();
+        return;
+    }
     if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { e.preventDefault(); nextPage(); }
     else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { e.preventDefault(); prevPage(); }
 }

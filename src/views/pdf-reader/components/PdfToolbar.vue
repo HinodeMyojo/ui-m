@@ -26,6 +26,7 @@
             <button class="pdf-tb-btn pdf-tb-sm pdf-tb-secondary" @click="emit('fit-width')" title="По ширине">⇔</button>
             <button class="pdf-tb-btn pdf-tb-sm pdf-tb-secondary" @click="emit('fit-page')" title="По странице">⛶</button>
             <div class="pdf-tb-divider"></div>
+            <button class="pdf-tb-btn pdf-tb-speed" @click="emit('open-speed')" title="Скорочтение (R)">⚡</button>
             <button class="pdf-tb-btn" @click="emit('toggle-search')" :class="{ active: searchOpen }" title="Поиск (Ctrl+F)">🔍</button>
             <button class="pdf-tb-btn pdf-tb-secondary" @click="emit('toggle-sidebar')" :class="{ active: showSidebar }" title="Панель">☰</button>
             <button class="pdf-tb-btn pdf-tb-secondary" @click="emit('toggle-thumbnails')" :class="{ active: showThumbnails }" title="Миниатюры">⊞</button>
@@ -85,6 +86,6 @@ const emit = defineEmits([
     'toggle-dark', 'toggle-night', 'night-brightness-down', 'night-brightness-up',
     'toggle-fullscreen', 'toggle-sidebar', 'toggle-thumbnails',
     'toggle-search', 'close-doc', 'toggle-bookmark', 'open-goal',
-    'toggle-hover-translate', 'open-translate-settings', 'go-home',
+    'toggle-hover-translate', 'open-translate-settings', 'go-home', 'open-speed',
 ]);
 </script>

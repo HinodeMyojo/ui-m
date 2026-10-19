@@ -222,6 +222,27 @@ export function sendPdfProgressBeacon(id, body) {
   }
 }
 
+// --- Скорочтение ---
+// Заход шлётся целиком, с накопленным итогом: повтор после обрыва связи
+// ничего не задвоит. keepalive — чтобы последний итог долетел и при закрытии вкладки.
+
+export function saveSpeedSession(fileId, sessionId, body, { keepalive = false } = {}) {
+  return authorizedFetch(`${PDF}/${fileId}/speed-sessions/${encodeURIComponent(sessionId)}`, {
+    method: "PUT",
+    keepalive,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body ?? {}),
+  });
+}
+
+export function getSpeedStats({ fileId, date } = {}) {
+  const params = new URLSearchParams();
+  if (fileId) params.set("fileId", fileId);
+  if (date) params.set("date", date);
+  const qs = params.toString();
+  return authorizedFetch(qs ? `${PDF}/speed-stats?${qs}` : `${PDF}/speed-stats`);
+}
+
 // --- Категории ---
 
 export const getPdfCategories = () => authorizedFetch(`${PDF}/categories`);

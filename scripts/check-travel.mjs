@@ -230,5 +230,94 @@ check("service worker путешествий лежит на месте", () =>
     : "public/travel-sw.js пропал — офлайн раздела отвалится молча",
 );
 
+// --- Скорочтение ---
+//
+// Разбор текста PDF на слова живёт в чистом модуле, и ошибки в нём не видно ни
+// компилятору, ни глазом на десктопе: «програм- мирование», номер страницы
+// посреди фразы или кадр «точка. Новое» молча портят чтение на 500 сл/мин.
+
+section("Скорочтение");
+
+const rsvp = await import("../src/views/pdf-reader/speed/rsvpText.js");
+
+// Кусочек текста так, как его отдаёт pdf.js: строка на высоте y, шрифт 10.
+function item(str, x, y, { eol = true, width = str.length * 5 } = {}) {
+  return { str, transform: [10, 0, 0, 10, x, y], width, height: 10, hasEOL: eol };
+}
+
+check("перенос в конце строки склеивается в одно слово", () => {
+  const lines = rsvp.linesFromItems([
+    item("Это книга про програм-", 50, 700),
+    item("мирование и Нью-", 50, 688),
+    item("Йорк.", 50, 676),
+  ]);
+  const words = rsvp.tokensFromLines(lines, 1).map((t) => t.t);
+  const want = ["Это", "книга", "про", "программирование", "и", "Нью-Йорк."];
+  return JSON.stringify(words) === JSON.stringify(want) ? null : `получили ${JSON.stringify(words)}`;
+});
+
+check("номер страницы и колонтитул не попадают в текст", () => {
+  const page = (n, body) => rsvp.linesFromItems([
+    item(`${n}   Чистая архитектура`, 50, 760),
+    item(body, 50, 700),
+    item("Вторая строка текста.", 50, 688),
+    item(String(n), 300, 40),
+  ]);
+  const neighbors = [page(11, "Совсем другой текст"), page(13, "И ещё один")];
+  const kept = rsvp.stripRunningLines(page(12, "Первая строка"), neighbors).map((l) => l.text);
+  return kept.length === 2 && kept[0] === "Первая строка" ? null : `осталось ${JSON.stringify(kept)}`;
+});
+
+check("перенос через страницу склеивается", () => {
+  const prev = rsvp.tokensFromLines(rsvp.linesFromItems([item("это архитек-", 50, 100)]), 5);
+  const next = rsvp.tokensFromLines(rsvp.linesFromItems([item("тура системы.", 50, 700)]), 6);
+  rsvp.mergeAcrossPages(prev, next);
+  const all = [...prev, ...next].map((t) => t.t).join(" ");
+  return all === "это архитектура системы." ? null : `получили «${all}»`;
+});
+
+check("красная буква — чуть левее середины слова", () => {
+  const cases = { "и": "и", "мама": "а", "чтение": "е", "«Привет»,": "и", "архитектура": "и" };
+  const bad = Object.entries(cases)
+    .filter(([word, letter]) => rsvp.splitAtPivot(word).pivot !== letter)
+    .map(([word, letter]) => `${word}: ждали «${letter}», получили «${rsvp.splitAtPivot(word).pivot}»`);
+  return bad.length ? bad.join("\n") : null;
+});
+
+check("кадр из нескольких слов не перешагивает конец предложения", () => {
+  const tokens = rsvp.tokensFromLines(rsvp.linesFromItems([item("Он ушёл. Она осталась дома", 50, 700)]), 1);
+  const first = rsvp.frameAt(tokens, 0, 3);
+  return first.text === "Он ушёл." ? null : `первый кадр «${first.text}»`;
+});
+
+check("паузы: точка дольше запятой, запятая дольше обычного слова", () => {
+  const [plain, comma, dot] = rsvp.tokensFromLines(rsvp.linesFromItems([item("слово запятая, точка.", 50, 700)]), 1);
+  const w = (t) => rsvp.wordWeight(t);
+  return w(dot) > w(comma) && w(comma) > w(plain) ? null : `веса ${w(plain)}, ${w(comma)}, ${w(dot)}`;
+});
+
+check("«назад» уходит в начало предложения, повторно — в предыдущее", () => {
+  const tokens = rsvp.tokensFromLines(rsvp.linesFromItems([item("Раз два. Три четыре пять.", 50, 700)]), 1);
+  const a = rsvp.prevSentence(tokens, 4);  // «пять.» → «Три»
+  const b = rsvp.prevSentence(tokens, a);  // «Три» → «Раз»
+  return a === 2 && b === 0 ? null : `получили ${a} и ${b}`;
+});
+
+check("«читать отсюда» находит выделение, даже с середины слова", () => {
+  const tokens = rsvp.tokensFromLines(rsvp.linesFromItems([item("Глава первая. Мысль о главном пришла поздно.", 50, 700)]), 1);
+  const i = rsvp.findTextOffset(tokens, "ысль о главном");
+  return i === 2 ? null : `нашли ${i}`;
+});
+
+check("подсказка скорости: два хороших захода — быстрее, провал — медленнее", () => {
+  const good = { comprehension: 5, seconds: 600, wpm: 300, targetWpm: 300 };
+  const bad = { comprehension: 2, seconds: 600, wpm: 400, targetWpm: 400 };
+  const up = rsvp.suggestWpm([good, good], 300);
+  const down = rsvp.suggestWpm([bad, good], 400);
+  if (up?.wpm !== 350) return `вверх ждали 350, получили ${JSON.stringify(up)}`;
+  if (down?.wpm !== 350) return `вниз ждали 350, получили ${JSON.stringify(down)}`;
+  return null;
+});
+
 console.log(`\nПроверок: ${checked}, провалено: ${failed}`);
 process.exit(failed ? 1 : 0);

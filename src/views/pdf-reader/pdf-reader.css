@@ -1922,9 +1922,10 @@ body.pdf-dark .pdf-tm-pos {
         flex: 1;
     }
 
-    /* Selection toolbar: ensure it fits */
+    /* Selection toolbar: ensure it fits. С кнопкой скорочтения кнопок стало
+       шесть — в 220 точек они сжимались до неразличимых. */
     .pdf-selection-toolbar {
-        max-width: 220px;
+        max-width: calc(100vw - 16px);
     }
 
     /* Translation modal: nearly full width */
