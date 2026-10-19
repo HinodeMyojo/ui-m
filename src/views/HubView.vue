@@ -18,9 +18,16 @@ import { isMobile } from "@/composables/useIsMobile.js";
 // Зум — смысловой: масштабируются расстояния между планетами, а сами планеты
 // и подписи остаются своего размера. Раньше масштабировалось всё целиком, и на
 // телефоне, чтобы влезла дальняя орбита, название плана выходило в 5 пикселей.
+//
+// Планеты медленно ходят вокруг звезды. На сервере лежит место, куда планету
+// поставили, — на экране оно повёрнуто на угол, набежавший с открытия доски.
+// Поэтому после перезагрузки планета снова там, куда её утащили.
 
 const ORBIT_NEAR = 300;
 const ORBIT_FAR = 540;
+
+// Период обращения, мс: дальние ходят вдвое медленнее, как настоящие.
+const PERIOD = { near: 6 * 60 * 1000, far: 12 * 60 * 1000 };
 
 const router = useRouter();
 
@@ -34,8 +41,39 @@ const starCanvas = ref(null);
 const view = reactive({ x: 0, y: 0, scale: 1 });
 const size = reactive({ w: 0, h: 0 });
 
-// Пока тянем планету, её место живёт здесь, а не в модели.
+// Пока тянем планету, её место на экране живёт здесь, а не в модели.
 const localPos = ref({});
+
+// Время орбит: копится, только пока доску не трогают. Под курсором и под
+// пальцем система замирает — в ползущую планету труднее попасть.
+const orbitTime = ref(0);
+const hovering = ref(false);
+const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+let frame = 0;
+let lastTick = 0;
+
+function tick(ts) {
+  frame = requestAnimationFrame(tick);
+  if (!lastTick) lastTick = ts;
+  const dt = ts - lastTick;
+  // Хватает ~30 кадров в секунду: планета сдвигается на доли пикселя.
+  if (dt < 33) return;
+  lastTick = ts;
+  if (hovering.value || gesture) return;
+  orbitTime.value += Math.min(dt, 100);
+}
+
+// Против часовой стрелки — экранная ось y смотрит вниз, поэтому угол со знаком минус.
+function angleOf(plan) {
+  const period = PERIOD[plan.horizon] || PERIOD.near;
+  return (-2 * Math.PI * (orbitTime.value % period)) / period;
+}
+
+function rotate(p, a) {
+  const cos = Math.cos(a);
+  const sin = Math.sin(a);
+  return { x: p.x * cos - p.y * sin, y: p.x * sin + p.y * cos };
+}
 
 async function load() {
   loading.value = true;
@@ -52,12 +90,12 @@ async function load() {
 }
 
 function posOf(plan) {
-  return localPos.value[plan.id] || { x: plan.x, y: plan.y };
+  return localPos.value[plan.id] || rotate({ x: plan.x, y: plan.y }, angleOf(plan));
 }
 
 function planetSize(plan) {
-  if (isMobile.value) return plan.horizon === "far" ? 44 : 54;
-  return plan.horizon === "far" ? 74 : 96;
+  if (isMobile.value) return plan.horizon === "far" ? 30 : 38;
+  return plan.horizon === "far" ? 46 : 60;
 }
 
 const planets = computed(() =>
@@ -159,13 +197,28 @@ const orbitFar = computed(() => ORBIT_FAR * 2 * view.scale + "px");
 // Подпись у края экрана сдвигается внутрь: иначе у планеты на краю
 // название обрезалось. Ширина подписи оценивается по длине названия — точная
 // мерка потребовала бы второго прохода отрисовки ради пары пикселей.
+function labelHalf(plan) {
+  return Math.min(isMobile.value ? 75 : 110, plan.title.length * 3.9 + 6);
+}
+
 function labelShift(plan, pos) {
-  const half = Math.min(isMobile.value ? 75 : 110, plan.title.length * 3.9 + 6);
+  const half = labelHalf(plan);
   const x = size.w / 2 + view.x + pos.x * view.scale;
   const margin = 8;
   if (x - half < margin) return margin - (x - half);
   if (x + half > size.w - margin) return size.w - margin - (x + half);
   return 0;
+}
+
+// Подпись уходит наверх, только когда снизу она легла бы на солнце. Раньше
+// наверх шли все планеты верхней половины, но на орбите это значило бы, что
+// подпись перескакивает у каждой планеты на каждом обороте.
+function labelUp(p) {
+  const sunR = isMobile.value ? 27 : 42;
+  const x = p.pos.x * view.scale;
+  const top = p.pos.y * view.scale + p.d / 2 + 12;
+  const height = compact.value ? 22 : 64;
+  return Math.abs(x) < labelHalf(p.plan) + sunR && top < sunR && top + height > -sunR;
 }
 
 function openPlan(plan) {
@@ -269,15 +322,21 @@ async function onPointerUp(event) {
   }
   const pos = localPos.value[g.plan.id];
   if (!pos) return;
+  // Экранное место переводим обратно в «неповёрнутое» и отпускаем планету
+  // дальше по орбите сразу, не дожидаясь сервера.
+  const stored = rotate(pos, -angleOf(g.plan));
+  const prev = { x: g.plan.x, y: g.plan.y };
+  g.plan.x = Math.round(stored.x);
+  g.plan.y = Math.round(stored.y);
+  const next = { ...localPos.value };
+  delete next[g.plan.id];
+  localPos.value = next;
   try {
-    await saveHubPositions([{ id: g.plan.id, x: pos.x, y: pos.y }]);
-    g.plan.x = pos.x;
-    g.plan.y = pos.y;
+    await saveHubPositions([{ id: g.plan.id, x: g.plan.x, y: g.plan.y }]);
   } catch (e) {
     error.value = e.message;
-    const next = { ...localPos.value };
-    delete next[g.plan.id];
-    localPos.value = next;
+    g.plan.x = prev.x;
+    g.plan.y = prev.y;
   }
 }
 
@@ -303,9 +362,13 @@ onMounted(async () => {
   resizeObserver = new ResizeObserver(() => measure());
   if (space.value) resizeObserver.observe(space.value);
   load();
+  if (!reduceMotion) frame = requestAnimationFrame(tick);
 });
 
-onBeforeUnmount(() => resizeObserver?.disconnect());
+onBeforeUnmount(() => {
+  resizeObserver?.disconnect();
+  cancelAnimationFrame(frame);
+});
 </script>
 
 <template>
@@ -346,7 +409,7 @@ onBeforeUnmount(() => resizeObserver?.disconnect());
           class="hub-planet"
           :class="[
             p.plan.horizon,
-            { done: p.plan.status === 'done', paused: p.plan.status === 'paused', 'label-up': p.pos.y < -40 },
+            { done: p.plan.status === 'done', paused: p.plan.status === 'paused', 'label-up': labelUp(p) },
           ]"
           :style="{
             left: p.pos.x * view.scale + 'px',
@@ -356,6 +419,8 @@ onBeforeUnmount(() => resizeObserver?.disconnect());
             '--shift': labelShift(p.plan, p.pos) + 'px',
           }"
           @pointerdown="onPointerDown($event, p.plan)"
+          @pointerenter="hovering = true"
+          @pointerleave="hovering = false"
         >
           <svg class="hub-ring" :width="p.ring.size" :height="p.ring.size">
             <circle :cx="p.ring.size / 2" :cy="p.ring.size / 2" :r="p.ring.r" class="hub-ring-bg" />
@@ -624,16 +689,16 @@ onBeforeUnmount(() => resizeObserver?.disconnect());
     radial-gradient(circle at 70% 75%, rgba(0, 0, 0, 0.55), transparent 60%),
     radial-gradient(circle, color-mix(in srgb, var(--planet) 85%, #fff), var(--planet) 60%, color-mix(in srgb, var(--planet) 45%, #000));
   box-shadow:
-    0 0 26px 2px color-mix(in srgb, var(--planet) 45%, transparent),
-    inset -10px -12px 24px rgba(0, 0, 0, 0.45);
+    0 0 18px 1px color-mix(in srgb, var(--planet) 45%, transparent),
+    inset calc(var(--d) * -0.1) calc(var(--d) * -0.12) calc(var(--d) * 0.25) rgba(0, 0, 0, 0.45);
   transition: transform 0.2s, box-shadow 0.2s;
 }
 
 .hub-planet:hover .hub-planet-body {
   transform: scale(1.07);
   box-shadow:
-    0 0 40px 6px color-mix(in srgb, var(--planet) 60%, transparent),
-    inset -10px -12px 24px rgba(0, 0, 0, 0.45);
+    0 0 28px 4px color-mix(in srgb, var(--planet) 60%, transparent),
+    inset calc(var(--d) * -0.1) calc(var(--d) * -0.12) calc(var(--d) * 0.25) rgba(0, 0, 0, 0.45);
 }
 
 .hub-planet.far .hub-planet-body {
