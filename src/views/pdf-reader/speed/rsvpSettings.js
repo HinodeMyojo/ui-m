@@ -50,6 +50,13 @@ function defaults() {
         stopAtBlocks: true,    // вставать на рисунках, таблицах и коде
         chapterOverview: true, // обзор главы, когда входишь в новую
         chapterRecall: true,   // пересказ по памяти, когда глава кончилась
+        // Режим: rsvp — слово в точке; side — слово и рисунки рядом; pacer —
+        // текст колонкой с бегущей подсветкой.
+        mode: 'rsvp',
+        pacerUnit: 'phrase',   // pacer: подсвечивать фразу или слово
+        textSize: isMobile.value ? 18 : 21,
+        bionic: false,         // pacer: жирное начало слова
+        trainer: 'off',        // off | ladder | sprint
     };
 }
 
@@ -75,6 +82,18 @@ export function useRsvpSettings() {
     }, { deep: true });
     return shared;
 }
+
+export const MODES = [
+    { code: 'rsvp', icon: '◉', label: 'Слово', hint: 'по слову в одной точке' },
+    { code: 'side', icon: '◧', label: 'С рисунками', hint: 'слова и ближайшая схема рядом' },
+    { code: 'pacer', icon: '≣', label: 'Текстом', hint: 'текст с бегущей подсветкой' },
+];
+
+export const TRAINERS = [
+    { code: 'off', label: 'Выкл' },
+    { code: 'ladder', label: 'Ступеньки' },
+    { code: 'sprint', label: 'Спринты' },
+];
 
 export function clampWpm(v) {
     return Math.max(WPM_MIN, Math.min(WPM_MAX, Math.round(v / WPM_STEP) * WPM_STEP));

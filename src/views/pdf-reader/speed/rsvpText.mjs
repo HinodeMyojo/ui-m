@@ -799,3 +799,35 @@ export function reconcileChapters(fromToc, fromText) {
         return toc ? { ...c, title: toc.title.trim() } : c;
     });
 }
+
+// ── Жирное начало слова ──────────────────────────────────────────────────
+//
+// «Бионическое» чтение: первая половина слова жирная, глаз цепляется за неё
+// и достраивает остальное. Исследования прироста скорости почти не находят —
+// это вопрос удобства, поэтому только опция режима «Текстом».
+export function bionicSplit(text) {
+    const chars = Array.from(text);
+    const start = chars.findIndex(isWordChar);
+    if (start < 0) return { lead: text, head: '', tail: '' };
+    let end = start;
+    while (end < chars.length && isWordChar(chars[end])) end++;
+    const len = end - start;
+    const n = len <= 3 ? 1 : Math.ceil(len * 0.45);
+    return {
+        lead: chars.slice(0, start).join(''),
+        head: chars.slice(start, start + n).join(''),
+        tail: chars.slice(start + n).join(''),
+    };
+}
+
+// Рисунок рядом с местом чтения: ближайший впереди (текст обычно говорит
+// «illustrated below:» перед схемой), иначе — последний пройденный.
+export function nearbyBlock(tokens, i, ahead = 150, behind = 600) {
+    for (let j = i; j < Math.min(tokens.length, i + ahead); j++) {
+        if (tokens[j].k) return { token: tokens[j], i: j, ahead: j > i };
+    }
+    for (let j = i - 1; j >= Math.max(0, i - behind); j--) {
+        if (tokens[j].k) return { token: tokens[j], i: j, ahead: false };
+    }
+    return null;
+}

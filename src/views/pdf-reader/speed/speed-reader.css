@@ -1212,6 +1212,203 @@
     border-top: 1px solid var(--rsvp-panel-border);
 }
 
+/* ── Режимы чтения ─────────────────────────────────────────────────────── */
+
+.rsvp-wordarea {
+    position: absolute;
+    inset: 0;
+}
+
+.rsvp-side-wide .rsvp-wordarea {
+    right: 44%;
+}
+
+.rsvp-mode-side:not(.rsvp-side-wide) .rsvp-wordarea {
+    bottom: 58%;
+}
+
+.rsvp-side {
+    position: absolute;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px;
+    border-radius: 14px;
+    background: var(--rsvp-btn);
+    cursor: zoom-in;
+    box-sizing: border-box;
+}
+
+.rsvp-side-wide .rsvp-side {
+    top: 8px;
+    right: 12px;
+    bottom: 8px;
+    width: calc(44% - 16px);
+}
+
+.rsvp-mode-side:not(.rsvp-side-wide) .rsvp-side {
+    left: 10px;
+    right: 10px;
+    bottom: 4px;
+    height: calc(58% - 8px);
+}
+
+.rsvp-side-label {
+    font-size: 12px;
+    color: var(--rsvp-muted);
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.rsvp-side-body {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+}
+
+.rsvp-side-hint {
+    font-size: 11px;
+    color: var(--rsvp-faint);
+    text-align: center;
+}
+
+.rsvp-zoom {
+    position: absolute;
+    inset: 0;
+    z-index: 3;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    background: var(--rsvp-bg);
+    cursor: auto;
+}
+
+.rsvp-modes {
+    display: flex;
+    justify-content: center;
+    gap: 6px;
+}
+
+.rsvp-mode {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    min-height: 32px;
+    padding: 4px 12px;
+    border: 1px solid var(--rsvp-panel-border);
+    border-radius: 999px;
+    background: transparent;
+    font-size: 13px;
+    color: var(--rsvp-muted) !important;
+    white-space: nowrap;
+}
+
+.rsvp-mode.active {
+    background: var(--rsvp-btn-hover);
+    border-color: var(--rsvp-accent);
+    color: var(--rsvp-text) !important;
+}
+
+.rsvp-mode-icon {
+    font-size: 14px;
+}
+
+/* «Текстом»: колонка, по которой бежит подсветка фразы. */
+.rsvp-pacer {
+    position: absolute;
+    inset: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    touch-action: pan-y;
+    cursor: auto;
+    -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 40px, #000 calc(100% - 40px), transparent 100%);
+    mask-image: linear-gradient(to bottom, transparent 0, #000 40px, #000 calc(100% - 40px), transparent 100%);
+}
+
+.rsvp-pacer-col {
+    max-width: 680px;
+    margin: 0 auto;
+    padding: 28vh 20px 45vh;
+    line-height: 1.7;
+    font-weight: 400;
+}
+
+.rsvp-pacer-p {
+    margin: 0 0 0.9em;
+}
+
+.rsvp-pw {
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.12s ease;
+}
+
+.rsvp-pw b {
+    font-weight: 700;
+}
+
+.rsvp-pw-on {
+    background: rgba(143, 180, 255, 0.3);
+    background: color-mix(in srgb, var(--rsvp-accent) 32%, transparent);
+    box-shadow: 0 2px 0 var(--rsvp-accent);
+}
+
+.rsvp-pacer-fig {
+    margin: 1.2em 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+}
+
+.rsvp-pacer-fig figcaption {
+    font-size: 12px;
+    color: var(--rsvp-muted);
+}
+
+.rsvp-pacer-end {
+    text-align: center;
+}
+
+.rsvp-mode-pacer ~ .rsvp-mini-progress {
+    display: none;
+}
+
+/* «Текстом» во время чтения: спрятанные панели не держат место — текст на
+   весь экран. В режиме слова так нельзя: слово прыгнуло бы по вертикали. */
+/* Узкий экран «С рисунками»: под контекстом места нет — его заменяет схема. */
+.rsvp-mode-side:not(.rsvp-side-wide) .rsvp-context {
+    display: none;
+}
+
+.rsvp-root-pacer.rsvp-ui-hidden .rsvp-top,
+.rsvp-root-pacer.rsvp-ui-hidden .rsvp-bottom,
+.rsvp-side-narrow.rsvp-ui-hidden .rsvp-top,
+.rsvp-side-narrow.rsvp-ui-hidden .rsvp-bottom {
+    position: absolute;
+    left: 0;
+    right: 0;
+    z-index: 2;
+}
+
+.rsvp-root-pacer.rsvp-ui-hidden .rsvp-top,
+.rsvp-side-narrow.rsvp-ui-hidden .rsvp-top {
+    top: 0;
+}
+
+.rsvp-root-pacer.rsvp-ui-hidden .rsvp-bottom,
+.rsvp-side-narrow.rsvp-ui-hidden .rsvp-bottom {
+    bottom: 0;
+    margin: 0 auto;
+}
+
 /* ── Телефон ───────────────────────────────────────────────────────────── */
 
 @media (max-width: 768px) {
@@ -1286,6 +1483,15 @@
 
     .rsvp-block {
         inset: 4px 8px;
+    }
+
+    .rsvp-mode {
+        padding: 4px 10px;
+        font-size: 12px;
+    }
+
+    .rsvp-pacer-col {
+        padding: 24vh 16px 45vh;
     }
 }
 

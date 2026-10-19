@@ -1,6 +1,6 @@
 <template>
     <Teleport to="body">
-        <div class="rsvp" :class="[`rsvp-theme-${theme}`, { 'rsvp-playing': playing, 'rsvp-ui-hidden': uiHidden }]"
+        <div class="rsvp" :class="[`rsvp-theme-${theme}`, `rsvp-root-${mode}`, { 'rsvp-playing': playing, 'rsvp-ui-hidden': uiHidden, 'rsvp-side-narrow': mode === 'side' && !sideWide }]"
             :style="cssVars" @pointermove="onPointerMove" role="dialog" aria-label="Скорочтение">
 
             <!-- Шапка -->
@@ -19,7 +19,7 @@
             </header>
 
             <!-- Сцена: слово, жесты, контекст на паузе -->
-            <main class="rsvp-stage" ref="stageEl"
+            <main class="rsvp-stage" :class="[`rsvp-mode-${mode}`, { 'rsvp-side-wide': sideWide }]" ref="stageEl"
                 @pointerdown="onPointerDown" @pointerup="onPointerUp" @pointercancel="gesture = null">
 
                 <div v-if="loading" class="rsvp-status">
@@ -36,6 +36,12 @@
                     </div>
                     <button class="rsvp-btn" @click.stop="close">Вернуться к книге</button>
                 </div>
+
+                <!-- Режим «Текстом»: колонка текста, по ней бежит подсветка -->
+                <PdfSpeedPacer v-else-if="mode === 'pacer'" :pdfDoc="pdfDoc" :tokens="tokens" :version="player.version.value"
+                    :index="index" :frame="frame" :playing="playing" :atEnd="!!player.source.value?.atEnd"
+                    :bionic="settings.bionic" :textSize="settings.textSize" :font="fontCss"
+                    @seek="(i) => { started = true; player.seek(i); }" @toggle="toggle" />
 
                 <!-- Рисунок, таблица или листинг: чтение стоит, смотрим сам кусок страницы -->
                 <div v-else-if="frame && frame.block" class="rsvp-block" @pointerdown.stop @pointerup.stop>
@@ -54,6 +60,7 @@
                 </div>
 
                 <template v-else-if="layout">
+                    <div class="rsvp-wordarea">
                     <div class="rsvp-focus" :class="{ 'rsvp-guides': settings.guides }">
                         <div class="rsvp-word" :style="{ fontSize: layout.size + 'px' }" aria-live="off">
                             <span class="rsvp-before" :style="{ right: layout.beforeRight + 'px' }">{{ layout.before }}</span><span
@@ -84,7 +91,37 @@
                                 v-if="w.para" class="rsvp-cw-gap"></span>
                         </template>
                     </div>
+                    </div>
+
+                    <!-- Режим «С рисунками»: ближайшая схема рядом, слова не останавливаются -->
+                    <aside v-if="mode === 'side'" class="rsvp-side" @pointerdown.stop @pointerup.stop @click="openZoom">
+                        <div class="rsvp-side-label">
+                            <template v-if="sideFigure">
+                                {{ sideFigure.token.k === 'code' ? '💻 листинг' : '🖼 рисунок' }} · стр. {{ sideFigure.token.p }}
+                                · {{ sideFigure.ahead ? 'сейчас будет' : (sideFigure.i === index ? 'здесь' : 'был выше') }}
+                            </template>
+                            <template v-else>📄 стр. {{ currentPage }} · рисунков рядом нет</template>
+                        </div>
+                        <div class="rsvp-side-body">
+                            <PdfSpeedBlock :pdfDoc="pdfDoc" :page="sideFigure ? sideFigure.token.p : currentPage"
+                                :box="sideFigure ? sideFigure.token.box : null" :maxHeight="sideHeight" />
+                        </div>
+                        <div class="rsvp-side-hint">тап — крупно</div>
+                    </aside>
                 </template>
+
+                <!-- Крупно: рисунок из боковой панели -->
+                <div v-if="zoomBlock" class="rsvp-zoom" @pointerdown.stop @pointerup.stop>
+                    <div class="rsvp-block-label">стр. {{ zoomBlock.p }}</div>
+                    <div class="rsvp-block-scroll" :class="{ 'rsvp-block-scroll-wide': blockWide }">
+                        <PdfSpeedBlock :pdfDoc="pdfDoc" :page="zoomBlock.p" :box="zoomBlock.box"
+                            :maxHeight="blockMaxHeight" :wide="blockWide" />
+                    </div>
+                    <div class="rsvp-block-actions">
+                        <button class="rsvp-btn" @click="blockWide = !blockWide">{{ blockWide ? 'Уместить' : 'Крупнее' }}</button>
+                        <button class="rsvp-btn rsvp-btn-accent" @click="zoomBlock = null">Закрыть</button>
+                    </div>
+                </div>
 
                 <transition name="rsvp-fade">
                     <div v-if="flash" class="rsvp-flash">{{ flash }}</div>
@@ -96,6 +133,12 @@
 
             <!-- Низ: прогресс, время, кнопки, скорость -->
             <footer class="rsvp-bottom" @click.capture="releaseFocus">
+                <div class="rsvp-modes" role="tablist" aria-label="Режим чтения">
+                    <button v-for="m in MODES" :key="m.code" class="rsvp-mode" :class="{ active: mode === m.code }"
+                        role="tab" :aria-selected="mode === m.code" :title="m.hint + ' (M)'" @click="setMode(m.code)">
+                        <span class="rsvp-mode-icon">{{ m.icon }}</span>{{ m.label }}
+                    </button>
+                </div>
                 <div class="rsvp-bars">
                     <div v-if="chapter" class="rsvp-bar rsvp-bar-chapter" title="Глава">
                         <div :style="{ width: (chapterProgress * 100) + '%' }"></div>
@@ -107,6 +150,7 @@
                 <div class="rsvp-meta">
                     <span v-if="chapter">глава: ещё {{ formatMinutes(chapterMinutesLeft) }}</span>
                     <span>книга {{ Math.round(bookProgress * 100) }}% · ещё {{ formatMinutes(bookMinutesLeft) }}</span>
+                    <span v-if="trainerLabel" class="rsvp-meta-live">{{ trainerLabel }}</span>
                     <span v-if="sessionWords" class="rsvp-meta-live">
                         {{ sessionWords.toLocaleString('ru-RU') }} сл · {{ formatMinutes(sessionMinutes) }}<template
                             v-if="liveWpm"> · {{ liveWpm }} сл/мин</template>
@@ -117,7 +161,7 @@
                     <button class="rsvp-ctl" title="Предложение назад (←)" aria-label="Предложение назад" @click="backSentence">⏮</button>
                     <button class="rsvp-ctl" title="Медленнее (↓)" aria-label="Медленнее" @click="changeWpm(-WPM_STEP)">−</button>
                     <button class="rsvp-ctl rsvp-play" :title="playing ? 'Пауза (пробел)' : 'Читать (пробел)'"
-                        :aria-label="playing ? 'Пауза' : 'Читать'" :disabled="(!layout && !frame?.block) || finished" @click="toggle">
+                        :aria-label="playing ? 'Пауза' : 'Читать'" :disabled="(!frame) || finished" @click="toggle">
                         <span v-if="playing">❚❚</span><span v-else class="rsvp-play-icon">▶</span>
                     </button>
                     <button class="rsvp-ctl" title="Быстрее (↑)" aria-label="Быстрее" @click="changeWpm(WPM_STEP)">+</button>
@@ -192,11 +236,11 @@
 import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue';
 import {
     splitAtPivot, PARAGRAPH, suggestWpm, chaptersFromToc, chapterAt, sentenceStart, nextSentence,
-    chaptersFromHeadings, reconcileChapters,
+    chaptersFromHeadings, reconcileChapters, nearbyBlock,
 } from './rsvpText.mjs';
 import { useRsvpPlayer } from './useRsvpPlayer.js';
 import {
-    useRsvpSettings, clampWpm, WPM_MIN, WPM_MAX, WPM_STEP, WPM_PRESETS, FONTS, PIVOT_COLORS,
+    useRsvpSettings, clampWpm, WPM_MIN, WPM_MAX, WPM_STEP, WPM_PRESETS, FONTS, PIVOT_COLORS, MODES,
 } from './rsvpSettings.js';
 import { saveSpeedSession, getSpeedStats, getChapterNotes, pdfLogicalToday } from '@/api/pdfFiles.js';
 import { isMobile } from '@/composables/useIsMobile.js';
@@ -205,6 +249,7 @@ import PdfSpeedStats from './PdfSpeedStats.vue';
 import PdfSpeedBlock from './PdfSpeedBlock.vue';
 import PdfSpeedOverview from './PdfSpeedOverview.vue';
 import PdfSpeedRecall from './PdfSpeedRecall.vue';
+import PdfSpeedPacer from './PdfSpeedPacer.vue';
 import { translateTerm, addTermToVocab } from './terms.js';
 import './speed-reader.css';
 
@@ -256,7 +301,12 @@ const pivotCss = computed(() => (PIVOT_COLORS.find((c) => c.code === settings.pi
 const FOCUS_RATIO = 0.4;
 const stageEl = ref(null);
 const stageWidth = ref(0);
-const focusX = computed(() => Math.round(stageWidth.value * FOCUS_RATIO));
+// Режим «С рисунками» на широком экране отдаёт рисунку 44% справа — слово
+// живёт в оставшейся части, и точка фокуса считается от неё.
+const mode = computed(() => settings.mode || 'rsvp');
+const sideWide = computed(() => mode.value === 'side' && stageWidth.value >= 760);
+const wordWidth = computed(() => (sideWide.value ? Math.round(stageWidth.value * 0.56) : stageWidth.value));
+const focusX = computed(() => Math.round(wordWidth.value * FOCUS_RATIO));
 
 const cssVars = computed(() => ({
     '--rsvp-font': fontCss.value,
@@ -282,9 +332,9 @@ function measure(text, size) {
 
 const layout = computed(() => {
     const f = frame.value;
-    if (!f || !stageWidth.value) return null;
+    if (!f || f.block || !stageWidth.value) return null;
     const { before, pivot, after } = splitAtPivot(f.text);
-    const W = stageWidth.value;
+    const W = wordWidth.value;
     const fx = focusX.value;
     const pad = 14;
     let size = settings.fontSize;
@@ -437,7 +487,74 @@ function changeWpm(delta) {
 }
 
 // Скорость или паузы поменялись на ходу — следующий кадр уже по-новому.
-watch(() => [settings.chunk, settings.smartPauses], () => player.restartTimer());
+watch(() => [settings.chunk, settings.smartPauses, settings.mode, settings.pacerUnit], () => player.restartTimer());
+
+// ── Режимы ────────────────────────────────────────────────────────────────
+
+function setMode(code) {
+    if (settings.mode === code) return;
+    settings.mode = code;
+    zoomBlock.value = null;
+    const m = MODES.find((x) => x.code === code);
+    flashMessage(`${m.icon} ${m.label} — ${m.hint}`, 1600);
+}
+
+function cycleMode() {
+    const k = MODES.findIndex((m) => m.code === mode.value);
+    setMode(MODES[(k + 1) % MODES.length].code);
+}
+
+// Рисунок для боковой панели: ближайший впереди или последний пройденный.
+const sideFigure = computed(() => (mode.value === 'side' ? nearbyBlock(tokens.value, index.value) : null));
+const sideHeight = computed(() => Math.max(140, (sideWide.value ? stageHeight.value : stageHeight.value * 0.58) - 56));
+const zoomBlock = ref(null);
+
+function openZoom() {
+    // Рисунка рядом нет — крупно показываем всю текущую страницу.
+    const b = sideFigure.value?.token || { p: currentPage.value, box: null };
+    player.pause();
+    blockWide.value = false;
+    zoomBlock.value = b;
+}
+
+// ── Тренировка скорости ───────────────────────────────────────────────────
+// Ступеньки: каждые 2 минуты чистого чтения +25 сл/мин. Спринты: из каждых
+// двух минут первые 30 секунд — на 40% быстрее; после спринта обычный темп
+// кажется медленным, и глаз перестаёт цепляться за каждое слово.
+
+const LADDER_MS = 120000;
+const SPRINT_CYCLE_MS = 120000;
+const SPRINT_MS = 30000;
+let ladderFrom = 0;
+
+const trainerLabel = computed(() => {
+    tick.value;
+    if (settings.trainer === 'ladder') return '🪜 ступеньки';
+    if (settings.trainer === 'sprint') return player.boost.value > 1 ? '🏃 спринт ×1,4' : '🏃 спринты';
+    return '';
+});
+
+watch(tick, () => {
+    const ms = player.activeMsNow();
+    if (settings.trainer === 'ladder') {
+        if (!ladderFrom) ladderFrom = ms || 1;
+        if (playing.value && ms - ladderFrom >= LADDER_MS) {
+            ladderFrom = ms;
+            setWpm(settings.wpm + WPM_STEP);
+            flashMessage(`🪜 ступенька: ${settings.wpm} сл/мин`, 1600);
+        }
+    } else {
+        ladderFrom = 0;
+    }
+    const sprinting = settings.trainer === 'sprint' && playing.value && (ms % SPRINT_CYCLE_MS) < SPRINT_MS;
+    const want = sprinting ? 1.4 : 1;
+    if (player.boost.value !== want) {
+        player.boost.value = want;
+        if (settings.trainer === 'sprint' && playing.value) {
+            flashMessage(sprinting ? '🏃 спринт: ×1,4 на 30 секунд' : 'обычный темп', 1400);
+        }
+    }
+});
 
 // ── Панели и автоскрытие ──────────────────────────────────────────────────
 
@@ -697,6 +814,8 @@ async function addCurrentToVocab() {
 const gesture = ref(null);
 
 function onPointerDown(e) {
+    // В режиме «Текстом» сцену листают пальцем, тапы ловит сама колонка.
+    if (mode.value === 'pacer') return;
     if (e.button > 0 || !e.isPrimary || !layout.value) return;
     gesture.value = { x: e.clientX, y: e.clientY, t: Date.now() };
     if (settings.hold && !finished.value) play();
@@ -758,6 +877,8 @@ function onKeydown(e) {
                 settings.chunk = +e.key;
                 flashMessage(`${e.key} ${e.key === '1' ? 'слово' : 'слова'} в кадре`);
                 return true;
+            case 'm': case 'M': case 'ь': case 'Ь':
+                cycleMode(); return true;
             case 'o': case 'O': case 'щ': case 'Щ':
                 openOverview(); return true;
             case 's': case 'S': case 'ы': case 'Ы':

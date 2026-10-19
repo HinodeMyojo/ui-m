@@ -391,5 +391,21 @@ check("сдвинутое оглавление чинится по заголо�
     ? null : got;
 });
 
+check("жирное начало слова не трогает кавычки и короткие слова", () => {
+  const a = rsvp.bionicSplit("«Clearing»,");
+  const b = rsvp.bionicSplit("is");
+  const got = `${a.lead}|${a.head}|${a.tail} ${b.head}|${b.tail}`;
+  return got === "«|Clea|ring», i|s" ? null : got;
+});
+
+check("рисунок рядом: сначала ближайший впереди, потом пройденный", () => {
+  const t = (k) => (k ? { t: "", k: "fig", p: 1, f: 4 } : { t: "w", p: 1, f: 0 });
+  const tokens = [t(true), ...Array(20).fill(0).map(() => t()), t(true), ...Array(5).fill(0).map(() => t())];
+  const ahead = rsvp.nearbyBlock(tokens, 10);
+  const behind = rsvp.nearbyBlock(tokens, 24);
+  if (ahead?.i !== 21 || !ahead.ahead) return `впереди ${JSON.stringify(ahead)}`;
+  return behind?.i === 21 && !behind.ahead ? null : `позади ${JSON.stringify(behind)}`;
+});
+
 console.log(`\nПроверок: ${checked}, провалено: ${failed}`);
 process.exit(failed ? 1 : 0);

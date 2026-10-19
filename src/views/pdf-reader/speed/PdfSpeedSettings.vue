@@ -7,6 +7,50 @@
             </div>
 
             <div class="rsvp-field">
+                <div class="rsvp-label">Режим</div>
+                <div class="rsvp-seg rsvp-seg-wrap">
+                    <button v-for="m in MODES" :key="m.code" :class="{ active: (settings.mode || 'rsvp') === m.code }"
+                        @click="settings.mode = m.code">{{ m.icon }} {{ m.label }}</button>
+                </div>
+                <div class="rsvp-note">
+                    «Слово» — по слову в одной точке, на рисунках остановка. «С рисунками» — слова без
+                    остановок, ближайшая схема рядом. «Текстом» — обычный текст, по нему бежит подсветка
+                    на заданной скорости; можно скользнуть глазом назад. Переключение — клавиша M.
+                </div>
+            </div>
+
+            <template v-if="settings.mode === 'pacer'">
+                <div class="rsvp-field">
+                    <div class="rsvp-label">Подсветка</div>
+                    <div class="rsvp-seg">
+                        <button :class="{ active: settings.pacerUnit !== 'word' }" @click="settings.pacerUnit = 'phrase'">Фразой</button>
+                        <button :class="{ active: settings.pacerUnit === 'word' }" @click="settings.pacerUnit = 'word'">По слову</button>
+                    </div>
+                </div>
+                <div class="rsvp-field">
+                    <div class="rsvp-label">Размер текста <span class="rsvp-value">{{ settings.textSize }} px</span></div>
+                    <input class="rsvp-range" type="range" min="14" max="32" step="1" v-model.number="settings.textSize" />
+                </div>
+                <label class="rsvp-toggle">
+                    <input type="checkbox" v-model="settings.bionic" />
+                    <span><b>Жирное начало слова</b> Глаз цепляется за первую половину и достраивает слово.
+                        Прироста скорости исследования почти не находят — включайте, если так приятнее.</span>
+                </label>
+            </template>
+
+            <div class="rsvp-field">
+                <div class="rsvp-label">Тренировка скорости</div>
+                <div class="rsvp-seg">
+                    <button v-for="t in TRAINERS" :key="t.code" :class="{ active: (settings.trainer || 'off') === t.code }"
+                        @click="settings.trainer = t.code">{{ t.label }}</button>
+                </div>
+                <div class="rsvp-note">
+                    Ступеньки — каждые 2 минуты чтения +25 сл/мин. Спринты — из каждых двух минут
+                    30 секунд на 40% быстрее; после спринта обычный темп кажется лёгким.
+                </div>
+            </div>
+
+            <div class="rsvp-field">
                 <div class="rsvp-label">Слов в кадре</div>
                 <div class="rsvp-seg">
                     <button v-for="n in [1, 2, 3]" :key="n" :class="{ active: settings.chunk === n }"
@@ -104,6 +148,7 @@
                 <div><kbd>↑</kbd> <kbd>↓</kbd> скорость ±25</div>
                 <div><kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> слов в кадре</div>
                 <div><kbd>O</kbd> обзор главы</div>
+                <div><kbd>M</kbd> сменить режим</div>
                 <div><kbd>Esc</kbd> выйти</div>
             </div>
         </div>
@@ -111,7 +156,7 @@
 </template>
 
 <script setup>
-import { FONTS, THEMES, PIVOT_COLORS } from './rsvpSettings.js';
+import { FONTS, THEMES, PIVOT_COLORS, MODES, TRAINERS } from './rsvpSettings.js';
 
 defineProps({ settings: { type: Object, required: true } });
 const emit = defineEmits(['close']);

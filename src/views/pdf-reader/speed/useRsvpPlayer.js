@@ -43,7 +43,14 @@ export function useRsvpPlayer(settings) {
         return source.value?.tokens ?? [];
     });
 
-    const frame = computed(() => frameAt(tokens.value, index.value, settings.chunk));
+    // Режим «Текстом» подсвечивает фразу целиком (или слово), остальные —
+    // сколько слов в кадре выставлено в настройках.
+    const effectiveChunk = computed(() => (settings.mode === 'pacer'
+        ? (settings.pacerUnit === 'word' ? 1 : 3)
+        : settings.chunk));
+    const frame = computed(() => frameAt(tokens.value, index.value, effectiveChunk.value));
+    // Множитель скорости тренировки («спринт»): ползунок не трогает.
+    const boost = ref(1);
     const currentToken = computed(() => tokens.value[index.value] ?? null);
     const currentPage = computed(() => currentToken.value?.p ?? source.value?.firstPage ?? 1);
 
@@ -95,7 +102,7 @@ export function useRsvpPlayer(settings) {
 
     function baseMs() {
         const weight = settings.smartPauses ? (source.value?.weight || 1) : 1;
-        return 60000 / Math.max(50, settings.wpm) / weight;
+        return 60000 / Math.max(50, settings.wpm * boost.value) / weight;
     }
 
     function rampFactor() {
@@ -157,7 +164,9 @@ export function useRsvpPlayer(settings) {
         }
         index.value = nextIdx;
         if (frame.value?.block) {
-            if (settings.stopAtBlocks) {
+            // Встаём только в режиме «Слово»: в остальных рисунок и так перед
+            // глазами — сбоку или прямо в тексте.
+            if (settings.stopAtBlocks && (settings.mode || 'rsvp') === 'rsvp') {
                 // Схема или код — это содержание: встаём и показываем их.
                 pause();
                 blockStops.value++;
@@ -332,7 +341,7 @@ export function useRsvpPlayer(settings) {
 
     return {
         source, tokens, version, index, frame, currentToken, currentPage,
-        playing, waiting, finished, loading, noText, skippedPages, session, blockStops,
+        playing, waiting, finished, loading, noText, skippedPages, session, blockStops, boost,
         open, play, pause, toggle, stop, seek, seekPage, seekPageOffset,
         backSentence, forwardSentence, backWord, forwardWord, restartTimer,
         activeMsNow, offsetInPage,
