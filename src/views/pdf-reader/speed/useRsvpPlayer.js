@@ -23,6 +23,9 @@ export function useRsvpPlayer(settings) {
     const loading = ref(false);
     const noText = ref(false);
     const skippedPages = ref(0);
+    // Сколько раз встали на рисунке или коде — по нему экран понимает, что
+    // остановка не ручная, и не мешает её разглядывать.
+    const blockStops = ref(0);
 
     // Итог захода. Слово засчитывается один раз: перечитанное после отмотки
     // съедает время, но не добавляет слов — так скорость остаётся честной.
@@ -120,7 +123,10 @@ export function useRsvpPlayer(settings) {
         if (!src || !f) return;
         const nextIdx = f.start + f.count;
         if (nextIdx > countedUpTo) {
-            session.words += nextIdx - Math.max(f.start, countedUpTo);
+            // Рисунок и листинг — не слова: в скорость их не считаем.
+            for (let j = Math.max(f.start, countedUpTo); j < nextIdx; j++) {
+                if (!src.tokens[j]?.k) session.words++;
+            }
             countedUpTo = nextIdx;
         }
         shownSincePlay++;
@@ -150,7 +156,23 @@ export function useRsvpPlayer(settings) {
             nextDue = performance.now();
         }
         index.value = nextIdx;
+        if (frame.value?.block) {
+            if (settings.stopAtBlocks) {
+                // Схема или код — это содержание: встаём и показываем их.
+                pause();
+                blockStops.value++;
+                return;
+            }
+            skipBlocks();
+        }
         schedule();
+    }
+
+    function skipBlocks() {
+        const list = tokens.value;
+        let i = index.value;
+        while (i < list.length - 1 && list[i]?.k) i++;
+        index.value = i;
     }
 
     function play() {
@@ -160,6 +182,21 @@ export function useRsvpPlayer(settings) {
         if (settings.rewind && pausedAt && now - pausedAt > PAUSE_REWIND_MS) {
             index.value = resumeIndex(tokens.value, index.value);
         }
+        // Стоим на рисунке — «дальше» значит читать текст после него.
+        if (frame.value?.block) skipBlocks();
+        if (frame.value?.block) {
+            // Рисунок последний в загруженном куске — подтянем текст за ним.
+            const src = source.value;
+            if (src && !src.atEnd) {
+                src.ensureAhead(index.value).then(() => {
+                    bump();
+                    skipBlocks();
+                    if (!frame.value?.block) play();
+                });
+            }
+            return;
+        }
+        if (!frame.value) return;
         playing.value = true;
         playStartedAt = now;
         shownSincePlay = 0;
@@ -275,6 +312,18 @@ export function useRsvpPlayer(settings) {
         if (wasPlaying) play();
     }
 
+    // Переход к месту страницы — из обзора главы, к заголовку или рисунку.
+    async function seekPageOffset(page, offset = 0) {
+        const src = source.value;
+        if (!src) return;
+        let i = src.indexOfPageOffset(page, offset);
+        if (i < 0) {
+            await seekPage(page);
+            i = src.indexOfPageOffset(page, offset);
+        }
+        if (i >= 0) await seek(i);
+    }
+
     function offsetInPage() {
         return source.value?.offsetInPage(index.value) ?? 0;
     }
@@ -283,8 +332,8 @@ export function useRsvpPlayer(settings) {
 
     return {
         source, tokens, version, index, frame, currentToken, currentPage,
-        playing, waiting, finished, loading, noText, skippedPages, session,
-        open, play, pause, toggle, stop, seek, seekPage,
+        playing, waiting, finished, loading, noText, skippedPages, session, blockStops,
+        open, play, pause, toggle, stop, seek, seekPage, seekPageOffset,
         backSentence, forwardSentence, backWord, forwardWord, restartTimer,
         activeMsNow, offsetInPage,
     };

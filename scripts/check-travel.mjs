@@ -319,5 +319,77 @@ check("подсказка скорости: два хороших захода �
   return null;
 });
 
+check("рисунок встаёт в поток на своё место, подписи внутри него не читаются", () => {
+  const lines = rsvp.linesFromItems([
+    item("Текст над схемой.", 50, 700),
+    item("Rules", 120, 600),
+    item("Текст под схемой.", 50, 400),
+  ]);
+  const page = rsvp.analyzePage({ lines, images: [[40, 450, 500, 650]], page: 3 });
+  const seq = page.tokens.map((t) => (t.k ? "[" + t.k + "]" : t.t)).join(" ");
+  if (seq !== "Текст над схемой. [fig] Текст под схемой.") return `поток «${seq}»`;
+  return page.words === 6 ? null : `слов ${page.words}, ждали 6`;
+});
+
+check("жирный зачин строки — термин с определением, жирная строка — заголовок", () => {
+  const bold = { bold: true, italic: false, mono: false };
+  const plain = { bold: false, italic: false, mono: false };
+  const fontOf = (name) => (name === "B" ? bold : plain);
+  const it = (str, x, y, font, eol) => ({ ...item(str, x, y, { eol }), fontName: font });
+  const lines = rsvp.linesFromItems([
+    it("Core Systems", 50, 760, "B", true),
+    it("Float", 50, 700, "B", false),
+    it("is the value earned from money held. More text here.", 90, 700, "R", true),
+  ], fontOf);
+  const page = rsvp.analyzePage({ lines, page: 1 });
+  if (page.headings[0]?.text !== "Core Systems") return `заголовки ${JSON.stringify(page.headings)}`;
+  const term = page.terms[0];
+  return term?.term === "Float" && term.def === "is the value earned from money held."
+    ? null : `термин ${JSON.stringify(term)}`;
+});
+
+check("рамка картинки считается по матрицам save/transform/restore", () => {
+  const OPS = { save: 1, restore: 2, transform: 3, paintImageXObject: 4, paintFormXObjectBegin: 5, paintFormXObjectEnd: 6 };
+  const boxes = rsvp.imageBoxesFromOps(
+    [1, 3, 4, 2, 1, 3, 4, 2],
+    [null, [400, 0, 0, 300, 50, 100], null, null, null, [10, 0, 0, 10, 0, 0], null, null],
+    OPS,
+  );
+  return boxes.length === 1 && boxes[0].join() === "50,100,450,400" ? null : `рамки ${JSON.stringify(boxes)}`;
+});
+
+check("главы — верхний уровень оглавления, пункты на одной странице сливаются", () => {
+  const toc = [
+    { title: "About", pageNum: 3, level: 0 }, { title: "Thanks!", pageNum: 3, level: 0 },
+    { title: "chapter 4 ACH", pageNum: 32, level: 0 }, { title: "ACH Basics", pageNum: 33, level: 1 },
+    { title: "Chapter 5 Cards", pageNum: 49, level: 0 },
+  ];
+  const ch = rsvp.chaptersFromToc(toc, 149);
+  const got = ch.map((c) => `${c.key}:${c.start}-${c.end}`).join(" ");
+  if (got !== "p3:3-31 p32:32-48 p49:49-149") return got;
+  return rsvp.chapterAt(ch, 40)?.key === "p32" ? null : "chapterAt мимо";
+});
+
+check("план по дням: остаток книги ровными кусками, даты подряд", () => {
+  const plan = rsvp.readingPlan({ fromPage: 13, pageCount: 149, wordsPerPage: 350, wpm: 350, days: 3, today: "2026-10-31" });
+  const got = plan.map((d) => `${d.date}:${d.from}-${d.to}:${d.minutes}`).join(" ");
+  return got === "2026-10-31:13-58:46 2026-11-01:59-104:46 2026-11-02:105-149:45" ? null : got;
+});
+
+check("сдвинутое оглавление чинится по заголовкам в тексте", () => {
+  const head = (page, text, h = 27) => ({ page, height: 842, lines: [{ text, h, y: 738 }, { text: "body text", h: 14, y: 600 }, { text: "more", h: 14, y: 580 }] });
+  const pages = [head(2, "Payments Systems in the U.S.", 29), head(9, "Payments Systems Overview"), head(32, "Core Systems: Checking"), head(49, "Core Systems: ACH")];
+  const fromText = rsvp.chaptersFromHeadings(pages, 149);
+  // Как у calibre: ссылки оглавления сдвинуты на главу.
+  const toc = [
+    { key: "p7", title: "chapter 2 Payments Systems Overview", start: 7, end: 8 },
+    { key: "p9", title: "chapter 3 Core Systems: Checking", start: 9, end: 31 },
+    { key: "p32", title: "Chapter 4 Core Systems: ACH", start: 32, end: 149 },
+  ];
+  const got = rsvp.reconcileChapters(toc, fromText).map((c) => `${c.start}:${c.title}`).join(" | ");
+  return got === "9:chapter 2 Payments Systems Overview | 32:chapter 3 Core Systems: Checking | 49:Chapter 4 Core Systems: ACH"
+    ? null : got;
+});
+
 console.log(`\nПроверок: ${checked}, провалено: ${failed}`);
 process.exit(failed ? 1 : 0);

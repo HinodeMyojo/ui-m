@@ -46,6 +46,10 @@ function defaults() {
         rewind: true,
         hold: false,       // читать, пока палец на экране
         guides: true,      // рамка с засечками над и под точкой фокуса
+        // Техническая книга — docs/pdf-library.md, «Техническая книга».
+        stopAtBlocks: true,    // вставать на рисунках, таблицах и коде
+        chapterOverview: true, // обзор главы, когда входишь в новую
+        chapterRecall: true,   // пересказ по памяти, когда глава кончилась
     };
 }
 

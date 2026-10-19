@@ -9,9 +9,11 @@
                 <div class="rsvp-title">
                     <div class="rsvp-book">{{ fileName || 'Скорочтение' }}</div>
                     <div class="rsvp-chapter">
-                        <template v-if="chapter">{{ chapter.title }} · </template>стр. {{ currentPage }} из {{ pageCount }}
+                        <template v-if="topChapter">{{ topChapter.title }} · </template>стр. {{ currentPage }} из {{ pageCount }}<template
+                            v-if="chapterScan"> · {{ chapterScan }}</template>
                     </div>
                 </div>
+                <button v-if="tokens.length" class="rsvp-icon" title="Обзор главы (O)" aria-label="Обзор главы" @click="openOverview()">🗺</button>
                 <button v-if="fileId" class="rsvp-icon" title="Статистика" aria-label="Статистика" @click="openPanel('stats')">📈</button>
                 <button class="rsvp-icon" title="Настройки (S)" aria-label="Настройки" @click="openPanel('settings')">⚙</button>
             </header>
@@ -35,6 +37,22 @@
                     <button class="rsvp-btn" @click.stop="close">Вернуться к книге</button>
                 </div>
 
+                <!-- Рисунок, таблица или листинг: чтение стоит, смотрим сам кусок страницы -->
+                <div v-else-if="frame && frame.block" class="rsvp-block" @pointerdown.stop @pointerup.stop>
+                    <div class="rsvp-block-label">
+                        {{ frame.block.k === 'code' ? '💻 Листинг' : '🖼 Рисунок' }} · стр. {{ frame.block.p }}
+                    </div>
+                    <div class="rsvp-block-scroll" :class="{ 'rsvp-block-scroll-wide': blockWide }">
+                        <PdfSpeedBlock :pdfDoc="pdfDoc" :page="frame.block.p" :box="blockFull ? null : frame.block.box"
+                            :maxHeight="blockMaxHeight" :wide="blockWide" />
+                    </div>
+                    <div class="rsvp-block-actions">
+                        <button class="rsvp-btn" @click="blockWide = !blockWide">{{ blockWide ? 'Уместить' : 'Крупнее' }}</button>
+                        <button class="rsvp-btn" @click="blockFull = !blockFull">{{ blockFull ? 'Только рисунок' : 'Вся страница' }}</button>
+                        <button class="rsvp-btn rsvp-btn-accent" @click="play">Дальше ▶</button>
+                    </div>
+                </div>
+
                 <template v-else-if="layout">
                     <div class="rsvp-focus" :class="{ 'rsvp-guides': settings.guides }">
                         <div class="rsvp-word" :style="{ fontSize: layout.size + 'px' }" aria-live="off">
@@ -44,6 +62,15 @@
                         </div>
                     </div>
 
+                    <!-- Английский термин на паузе: перевод и карточка в словарь -->
+                    <div v-if="canTranslate" class="rsvp-tr" @pointerdown.stop @pointerup.stop>
+                        <button v-if="!wordTr" class="rsvp-chip rsvp-chip-wrap" @click="translateCurrent">🌐 перевод</button>
+                        <template v-else>
+                            <span class="rsvp-tr-text">{{ wordTr }}</span>
+                            <button v-if="wordTrOk" class="rsvp-chip rsvp-chip-wrap" :disabled="wordAdded" @click="addCurrentToVocab">
+                                {{ wordAdded ? '✓ в словаре' : '＋ в словарь' }}</button>
+                        </template>
+                    </div>
                     <div v-if="waiting" class="rsvp-hint">подгружаю следующую страницу…</div>
                     <div v-else-if="finished" class="rsvp-hint rsvp-hint-strong">Книга дочитана 🎉</div>
                     <div v-else-if="!started" class="rsvp-hint">{{ startHint }}</div>
@@ -90,7 +117,7 @@
                     <button class="rsvp-ctl" title="Предложение назад (←)" aria-label="Предложение назад" @click="backSentence">⏮</button>
                     <button class="rsvp-ctl" title="Медленнее (↓)" aria-label="Медленнее" @click="changeWpm(-WPM_STEP)">−</button>
                     <button class="rsvp-ctl rsvp-play" :title="playing ? 'Пауза (пробел)' : 'Читать (пробел)'"
-                        :aria-label="playing ? 'Пауза' : 'Читать'" :disabled="!layout || finished" @click="toggle">
+                        :aria-label="playing ? 'Пауза' : 'Читать'" :disabled="(!layout && !frame?.block) || finished" @click="toggle">
                         <span v-if="playing">❚❚</span><span v-else class="rsvp-play-icon">▶</span>
                     </button>
                     <button class="rsvp-ctl" title="Быстрее (↑)" aria-label="Быстрее" @click="changeWpm(WPM_STEP)">+</button>
@@ -116,6 +143,17 @@
             <!-- Статистика -->
             <PdfSpeedStats v-if="panel === 'stats'" :fileId="fileId" :currentWpm="settings.wpm"
                 @apply-wpm="setWpm" @close="closePanel" />
+
+            <!-- Обзор главы: план, рисунки, термины, вопросы, план по дням -->
+            <PdfSpeedOverview v-if="panel === 'overview' && player.source.value" :pdfDoc="pdfDoc" :source="player.source.value"
+                :chapter="overviewChapter" :currentPage="currentPage" :pageCount="pageCount" :wpm="settings.wpm"
+                :fileId="fileId" :bookTitle="fileName" :note="overviewChapter ? notes[overviewChapter.key] : null"
+                :deepl="deepl" @close="closePanel" @start="onOverviewStart" @jump="onJump" @note-saved="onNoteSaved" />
+
+            <!-- Пересказ главы по памяти -->
+            <PdfSpeedRecall v-if="panel === 'recall' && recallChapter" :source="player.source.value"
+                :chapter="recallChapter" :note="notes[recallChapter.key]" :fileId="fileId" :review="recallReview"
+                @close="closePanel" @saved="onRecallSaved" />
 
             <!-- Итог захода -->
             <div v-if="summary" class="rsvp-sheet-backdrop">
@@ -152,15 +190,22 @@
 
 <script setup>
 import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue';
-import { splitAtPivot, PARAGRAPH, suggestWpm } from './rsvpText.mjs';
+import {
+    splitAtPivot, PARAGRAPH, suggestWpm, chaptersFromToc, chapterAt, sentenceStart, nextSentence,
+    chaptersFromHeadings, reconcileChapters,
+} from './rsvpText.mjs';
 import { useRsvpPlayer } from './useRsvpPlayer.js';
 import {
     useRsvpSettings, clampWpm, WPM_MIN, WPM_MAX, WPM_STEP, WPM_PRESETS, FONTS, PIVOT_COLORS,
 } from './rsvpSettings.js';
-import { saveSpeedSession, getSpeedStats, pdfLogicalToday } from '@/api/pdfFiles.js';
+import { saveSpeedSession, getSpeedStats, getChapterNotes, pdfLogicalToday } from '@/api/pdfFiles.js';
 import { isMobile } from '@/composables/useIsMobile.js';
 import PdfSpeedSettings from './PdfSpeedSettings.vue';
 import PdfSpeedStats from './PdfSpeedStats.vue';
+import PdfSpeedBlock from './PdfSpeedBlock.vue';
+import PdfSpeedOverview from './PdfSpeedOverview.vue';
+import PdfSpeedRecall from './PdfSpeedRecall.vue';
+import { translateTerm, addTermToVocab } from './terms.js';
 import './speed-reader.css';
 
 // Скорочтение — docs/pdf-library.md (back-m), раздел «Скорочтение».
@@ -176,6 +221,10 @@ const props = defineProps({
     fileName: { type: String, default: '' },
     tocItems: { type: Array, default: () => [] },
     darkMode: Boolean,
+    // Открыт карточкой повтора из «Сегодня»: сразу пересказ этой главы.
+    recallKey: { type: String, default: '' },
+    // Перевод фразы через DeepL читалки (text → Promise<string|null>).
+    deepl: { type: Function, default: null },
 });
 
 const emit = defineEmits(['close', 'page', 'activity']);
@@ -257,21 +306,11 @@ let resizeObserver = null;
 
 // ── Глава и прогресс ──────────────────────────────────────────────────────
 
+// Глава — из сверенного списка (оглавление бывает сдвинуто, см. detectChapters);
+// end здесь не включительно: страница, с которой начинается следующая.
 const chapterBounds = computed(() => {
-    const list = (props.tocItems || []).filter((t) => t.pageNum);
-    if (!list.length) return null;
-    const page = currentPage.value;
-    let cur = null;
-    let next = null;
-    for (const item of list) {
-        if (item.pageNum <= page) {
-            if (!cur || item.pageNum >= cur.pageNum) cur = item;
-        } else if (!next || item.pageNum < next.pageNum) {
-            next = item;
-        }
-    }
-    if (!cur) return null;
-    return { title: cur.title, start: cur.pageNum, end: next ? next.pageNum : props.pageCount + 1 };
+    const c = topChapter.value;
+    return c ? { title: c.title, start: c.start, end: c.end + 1 } : null;
 });
 const chapter = computed(() => chapterBounds.value);
 
@@ -439,6 +478,214 @@ function openPanel(name) {
 
 function closePanel() {
     panel.value = '';
+    nextInQueue();
+}
+
+// ── Техническая книга: главы, обзор, пересказ ─────────────────────────────
+// docs/pdf-library.md (back-m), «Техническая книга». Вошёл в новую главу —
+// сначала пересказ прошлой по памяти, потом карта новой. Обе вещи
+// выключаются в настройках.
+
+// Главы: оглавление, сверенное с текстом. Пока сверка идёт — оглавление как есть.
+const chapterList = ref(null);
+const chapters = computed(() => chapterList.value || chaptersFromToc(props.tocItems, props.pageCount));
+const chapterScan = ref('');        // «сверяю главы 40/149» — пока идёт полный проход
+
+function chaptersKey() {
+    return `rsvp-chapters:${props.fileId || props.fileName}:${props.pageCount}`;
+}
+
+function normTitle(s) {
+    return (s || '').toLowerCase().replace(/^\s*(chapter|глава|часть|part)\s+[\divxlc]+\.?\s*/i, '')
+        .replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+}
+
+// Сначала дёшево: совпадают ли заголовки на страницах, куда ведёт оглавление.
+// Совпали — верим. Нет (или оглавления нет вовсе) — проходим книгу целиком и
+// находим главы по крупным заголовкам. Итог помним для книги.
+async function detectChapters() {
+    try {
+        const cached = JSON.parse(localStorage.getItem(chaptersKey()) || 'null');
+        if (Array.isArray(cached)) {
+            chapterList.value = cached;
+            return false;
+        }
+    } catch { /* сломанный кэш — посчитаем заново */ }
+    const src = player.source.value;
+    if (!src) return false;
+    const toc = chaptersFromToc(props.tocItems, props.pageCount);
+    if (toc.length) {
+        const sample = toc.filter((c) => c.title.length > 3).slice(1, 6);
+        let hits = 0;
+        for (const c of sample) {
+            const head = normTitle(await src.topHeadline(c.start));
+            const want = normTitle(c.title);
+            if (head && want && (head.includes(want) || want.includes(head))) hits++;
+        }
+        if (sample.length && hits / sample.length >= 0.6) {
+            remember(toc);
+            return false;
+        }
+    }
+    return true;   // нужен полный проход
+}
+
+async function scanChapters() {
+    const src = player.source.value;
+    if (!src) return;
+    chapterScan.value = 'сверяю главы…';
+    const pages = await src.scanHeadlines((done, total) => { chapterScan.value = `сверяю главы ${done}/${total}`; });
+    const toc = chaptersFromToc(props.tocItems, props.pageCount);
+    const list = reconcileChapters(toc, chaptersFromHeadings(pages, props.pageCount));
+    chapterScan.value = '';
+    remember(list);
+}
+
+function remember(list) {
+    chapterList.value = list;
+    try { localStorage.setItem(chaptersKey(), JSON.stringify(list)); } catch { /* без кэша — сверим в следующий раз */ }
+}
+const topChapter = computed(() => chapterAt(chapters.value, currentPage.value));
+const notes = ref({});              // ключ главы → вопросы, пересказ, повторы
+const overviewChapter = ref(null);
+const recallChapter = ref(null);
+const recallReview = ref(false);
+const panelQueue = [];
+// Сколько слов прочитано в каждой главе за этот заход: пересказ спрашиваем,
+// только если главу действительно читали, а не проскочили переходом.
+const chapterWords = {};
+let lastWordCount = 0;
+
+watch(() => session.words, (n) => {
+    const key = topChapter.value?.key;
+    if (key && n > lastWordCount) chapterWords[key] = (chapterWords[key] || 0) + (n - lastWordCount);
+    lastWordCount = n;
+});
+
+function openOverview(ch = topChapter.value) {
+    player.pause();
+    overviewChapter.value = ch || null;
+    panel.value = 'overview';
+}
+
+function openRecall(ch, review = false) {
+    player.pause();
+    recallChapter.value = ch;
+    recallReview.value = review;
+    panel.value = 'recall';
+}
+
+function nextInQueue() {
+    const item = panelQueue.shift();
+    if (!item) {
+        if (finished.value && props.fileId && session.words && !summary.value) summary.value = buildSummary();
+        return;
+    }
+    if (item.type === 'recall') openRecall(item.chapter);
+    else openOverview(item.chapter);
+}
+
+function recallDue(ch) {
+    if (!ch || !props.fileId || !settings.chapterRecall) return false;
+    return (chapterWords[ch.key] || 0) >= 400 || (notes.value[ch.key]?.questions || []).length > 0;
+}
+
+watch(() => topChapter.value?.key, (key, old) => {
+    // Только когда главу сменило само чтение, а не переход из обзора.
+    if (!key || !old || key === old || !playing.value || chapterScan.value) return;
+    const prev = chapters.value.find((c) => c.key === old);
+    player.pause();
+    if (recallDue(prev)) panelQueue.push({ type: 'recall', chapter: prev });
+    if (settings.chapterOverview) panelQueue.push({ type: 'overview', chapter: topChapter.value });
+    nextInQueue();
+});
+
+function onOverviewStart() {
+    const ch = overviewChapter.value;
+    panel.value = '';
+    started.value = true;
+    if (ch && (currentPage.value < ch.start || currentPage.value > ch.end)) {
+        player.seekPageOffset(ch.start, 0);
+        return;
+    }
+    play();
+}
+
+async function onJump({ page, offset }) {
+    panel.value = '';
+    panelQueue.length = 0;
+    started.value = true;
+    await player.seekPageOffset(page, offset);
+}
+
+function onNoteSaved(note) {
+    notes.value = { ...notes.value, [note.key]: note };
+}
+
+function onRecallSaved(note) {
+    onNoteSaved(note);
+    flashMessage(note.nextReviewAt
+        ? `повтор ${note.nextReviewAt.slice(8, 10)}.${note.nextReviewAt.slice(5, 7)} — карточка в «Сегодня»`
+        : 'глава закреплена 💪', 2600);
+    closePanel();
+}
+
+async function loadNotes() {
+    if (!props.fileId) return;
+    try {
+        const list = await getChapterNotes(props.fileId);
+        notes.value = Object.fromEntries((list || []).map((n) => [n.key, n]));
+    } catch { /* без заметок обзор и пересказ всё равно работают */ }
+}
+
+// ── Рисунок на экране ─────────────────────────────────────────────────────
+
+const blockWide = ref(false);
+const blockFull = ref(false);
+const stageHeight = ref(0);
+const blockMaxHeight = computed(() => Math.max(160, stageHeight.value - 130));
+
+watch(() => frame.value?.block, () => {
+    blockWide.value = false;
+    blockFull.value = false;
+});
+
+// ── Перевод слова на паузе ────────────────────────────────────────────────
+
+const wordTr = ref('');
+const wordTrOk = ref(false);
+const wordAdded = ref(false);
+const canTranslate = computed(() => !playing.value && started.value && !frame.value?.block
+    && /[A-Za-z]{2,}/.test(frame.value?.text || ''));
+
+watch(index, () => {
+    wordTr.value = '';
+    wordTrOk.value = false;
+    wordAdded.value = false;
+});
+
+function currentEnglish() {
+    return (frame.value?.text || '').replace(/[^A-Za-z'’\s-]/g, '').trim();
+}
+
+async function translateCurrent() {
+    wordTr.value = '…';
+    const r = await translateTerm(currentEnglish(), props.deepl);
+    wordTrOk.value = !!r.text;
+    wordTr.value = r.text || r.error;
+}
+
+async function addCurrentToVocab() {
+    const list = tokens.value;
+    const from = sentenceStart(list, index.value);
+    const to = nextSentence(list, index.value);
+    const sentence = list.slice(from, to).filter((t) => !t.k).map((t) => t.t).join(' ');
+    try {
+        await addTermToVocab(currentEnglish(), wordTr.value, sentence);
+        wordAdded.value = true;
+    } catch (e) {
+        wordTr.value = `не добавилось: ${e.message}`;
+    }
 }
 
 // ── Жесты ─────────────────────────────────────────────────────────────────
@@ -511,6 +758,8 @@ function onKeydown(e) {
                 settings.chunk = +e.key;
                 flashMessage(`${e.key} ${e.key === '1' ? 'слово' : 'слова'} в кадре`);
                 return true;
+            case 'o': case 'O': case 'щ': case 'Щ':
+                openOverview(); return true;
             case 's': case 'S': case 'ы': case 'Ы':
                 openPanel('settings'); return true;
             default: return false;
@@ -664,9 +913,15 @@ function close() {
 }
 
 watch(finished, (done) => {
-    if (done && props.fileId && session.words) {
-        summary.value = buildSummary();
+    if (!done || !props.fileId || !session.words) return;
+    // Дочитал книгу — сначала пересказ последней главы, потом итог захода.
+    const last = topChapter.value;
+    if (recallDue(last)) {
+        panelQueue.push({ type: 'recall', chapter: last });
+        nextInQueue();
+        return;
     }
+    summary.value = buildSummary();
 });
 
 // ── Связь с читалкой ──────────────────────────────────────────────────────
@@ -699,11 +954,14 @@ onMounted(async () => {
     window.addEventListener('pagehide', onPageHide);
     resizeObserver = new ResizeObserver(([entry]) => {
         stageWidth.value = entry.contentRect.width;
+        stageHeight.value = entry.contentRect.height;
     });
     if (stageEl.value) {
         resizeObserver.observe(stageEl.value);
         stageWidth.value = stageEl.value.clientWidth;
+        stageHeight.value = stageEl.value.clientHeight;
     }
+    loadNotes();
     tickTimer = setInterval(() => { tick.value++; }, 1000);
     flushTimer = setInterval(() => flushSession(), 30000);
 
@@ -729,7 +987,36 @@ onMounted(async () => {
     if (result?.ok && result.skipped > 0) {
         flashMessage(`стр. ${props.startPage}–${result.page - 1} без текста — начинаю со стр. ${result.page}`, 2600);
     }
+    if (!result?.ok) return;
+
+    // Главы сверяем до всего остального: и обзор, и пересказ должны знать
+    // настоящие границы глав, а не сдвинутые оглавлением.
+    const needScan = await detectChapters();
+
+    // Пришли по карточке повтора — сразу пересказ этой главы.
+    if (props.recallKey) {
+        if (needScan) await scanChapters();
+        const ch = chapters.value.find((c) => c.key === props.recallKey)
+            || { key: props.recallKey, title: notes.value[props.recallKey]?.title || 'глава', start: props.startPage, end: props.startPage };
+        openRecall(ch, true);
+        return;
+    }
+    // Обзор — только по сверенным главам: по сдвинутому оглавлению он
+    // показал бы не ту главу.
+    if (needScan) await scanChapters();
+    maybeStartOverview();
 });
+
+// Начинаем главу с начала — сперва её карта.
+let startOverviewShown = false;
+function maybeStartOverview() {
+    if (startOverviewShown || started.value || panel.value || summary.value) return;
+    const ch = topChapter.value;
+    if (settings.chapterOverview && ch && currentPage.value === ch.start && player.offsetInPage() < 80) {
+        startOverviewShown = true;
+        openOverview(ch);
+    }
+}
 
 function onPageHide() {
     saveLocalPos();

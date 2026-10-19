@@ -243,6 +243,15 @@ export function getSpeedStats({ fileId, date } = {}) {
   return authorizedFetch(qs ? `${PDF}/speed-stats?${qs}` : `${PDF}/speed-stats`);
 }
 
+// --- Техническая книга: главы, пересказ по памяти, план по дням ---
+
+export const getChapterNotes = (fileId) => authorizedFetch(`${PDF}/${fileId}/chapters`);
+export const saveChapterQuestions = (fileId, key, body) =>
+  jsonRequest(`${PDF}/${fileId}/chapters/${encodeURIComponent(key)}`, "PUT", body);
+export const saveChapterRecall = (fileId, key, body) =>
+  jsonRequest(`${PDF}/${fileId}/chapters/${encodeURIComponent(key)}/recall`, "POST", body);
+export const planReadingToToday = (fileId, cards) => jsonRequest(`${PDF}/${fileId}/plan`, "POST", { cards });
+
 // --- Категории ---
 
 export const getPdfCategories = () => authorizedFetch(`${PDF}/categories`);

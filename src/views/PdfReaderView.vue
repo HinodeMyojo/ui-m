@@ -146,6 +146,7 @@
             <PdfSpeedReader v-if="speed.open" :pdfDoc="pdfDoc" :pageCount="pageCount"
                 :startPage="speed.page" :startText="speed.text" :fileId="libraryFileId"
                 :fileName="fileName" :tocItems="tocItems" :darkMode="darkMode"
+                :recallKey="speed.recallKey" :deepl="apiKey ? deeplTranslate : null"
                 @page="onSpeedPage" @activity="markReadingActivity" @close="onSpeedClose" />
 
             <!-- Toast -->
@@ -949,16 +950,35 @@ async function onModalAddToVocab(card) {
 // docs/pdf-library.md (back-m), раздел «Скорочтение». Открывается с текущей
 // страницы или с выделенного места; страница и время чтения идут в библиотеку
 // так же, как при обычном чтении.
-const speed = reactive({ open: false, page: 1, text: '' });
+const speed = reactive({ open: false, page: 1, text: '', recallKey: '' });
 
-function openSpeed(page = currentPage.value, text = '') {
+function openSpeed(page = currentPage.value, text = '', recallKey = '') {
     if (!pdfDoc.value) return;
     hideSelToolbar();
     hoverTooltip.visible = false;
     speed.page = page;
     speed.text = text;
+    speed.recallKey = recallKey;
     speed.open = true;
 }
+
+// Перевод фразы для скорочтения — тем же DeepL, что и выделение в читалке.
+async function deeplTranslate(text) {
+    const r = await translate(text, sourceLang.value, targetLang.value);
+    return r?.translated || null;
+}
+
+// Карточка повтора из «Сегодня» ведёт сюда с ?recall=p<страница главы>:
+// книга открывается, и сразу — пересказ этой главы по памяти. Ждём, пока
+// читалка вернётся на сохранённую страницу, чтобы повтор не сдвинул позицию.
+watch(pdfDoc, (doc) => {
+    const key = typeof route.query.recall === 'string' ? route.query.recall : '';
+    if (!doc || !key) return;
+    setTimeout(() => {
+        if (pdfDoc.value === doc) openSpeed(currentPage.value, '', key);
+        router.replace({ path: '/pdfReader', query: { file: route.query.file } });
+    }, 900);
+});
 
 function onSelectionSpeedRead() {
     if (!pendingSelection) return;

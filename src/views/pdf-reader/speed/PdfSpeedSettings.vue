@@ -72,6 +72,26 @@
                 <span><b>Чтение удержанием</b> Читаем, пока палец или кнопка мыши на экране; отпустили — пауза.</span>
             </label>
 
+            <div class="rsvp-label">Техническая книга</div>
+
+            <label class="rsvp-toggle">
+                <input type="checkbox" v-model="settings.stopAtBlocks" />
+                <span><b>Вставать на рисунках и коде</b> Схема, таблица или листинг показываются куском
+                    страницы; «Дальше» — читать текст после них. Выключено — рисунки пропускаются.</span>
+            </label>
+
+            <label class="rsvp-toggle">
+                <input type="checkbox" v-model="settings.chapterOverview" />
+                <span><b>Обзор перед главой</b> Карта главы: разделы, рисунки, термины, вопросы к ней.
+                    Открывается и вручную — 🗺 или клавиша O.</span>
+            </label>
+
+            <label class="rsvp-toggle">
+                <input type="checkbox" v-model="settings.chapterRecall" />
+                <span><b>Пересказ после главы</b> Вспомнить по памяти и свериться; повторы через день,
+                    неделю и месяц ложатся карточками в «Сегодня».</span>
+            </label>
+
             <label class="rsvp-toggle">
                 <input type="checkbox" v-model="settings.guides" />
                 <span><b>Рамка фокуса</b> Линии с засечками над и под красной буквой.</span>
@@ -83,6 +103,7 @@
                 <div><kbd>Shift</kbd>+<kbd>←</kbd> <kbd>→</kbd> по слову</div>
                 <div><kbd>↑</kbd> <kbd>↓</kbd> скорость ±25</div>
                 <div><kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> слов в кадре</div>
+                <div><kbd>O</kbd> обзор главы</div>
                 <div><kbd>Esc</kbd> выйти</div>
             </div>
         </div>
