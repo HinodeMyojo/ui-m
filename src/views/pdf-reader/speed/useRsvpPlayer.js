@@ -1,7 +1,7 @@
 import { ref, shallowRef, computed, reactive, onBeforeUnmount } from 'vue';
 import {
     frameAt, frameWeight, prevSentence, nextSentence, resumeIndex, sentenceStart, findTextOffset,
-} from './rsvpText.js';
+} from './rsvpText.mjs';
 import { createRsvpSource, LOOKAHEAD_WORDS } from './rsvpSource.js';
 
 // Движок показа — docs/pdf-library.md (back-m), раздел «Скорочтение».

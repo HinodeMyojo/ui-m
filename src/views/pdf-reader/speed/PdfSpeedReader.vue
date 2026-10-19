@@ -152,7 +152,7 @@
 
 <script setup>
 import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue';
-import { splitAtPivot, PARAGRAPH, suggestWpm } from './rsvpText.js';
+import { splitAtPivot, PARAGRAPH, suggestWpm } from './rsvpText.mjs';
 import { useRsvpPlayer } from './useRsvpPlayer.js';
 import {
     useRsvpSettings, clampWpm, WPM_MIN, WPM_MAX, WPM_STEP, WPM_PRESETS, FONTS, PIVOT_COLORS,

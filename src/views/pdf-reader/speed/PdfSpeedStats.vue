@@ -76,7 +76,7 @@
 <script setup>
 import { ref, computed, watch } from 'vue';
 import { getSpeedStats, pdfLogicalToday } from '@/api/pdfFiles.js';
-import { suggestWpm } from './rsvpText.js';
+import { suggestWpm } from './rsvpText.mjs';
 
 const props = defineProps({
     fileId: { type: String, default: '' },

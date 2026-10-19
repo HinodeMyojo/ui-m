@@ -1,5 +1,5 @@
 import { toRaw } from 'vue';
-import { linesFromItems, stripRunningLines, tokensFromLines, mergeAcrossPages, averageWeight } from './rsvpText.js';
+import { linesFromItems, stripRunningLines, tokensFromLines, mergeAcrossPages, averageWeight } from './rsvpText.mjs';
 
 // Поток слов книги для скорочтения — docs/pdf-library.md (back-m).
 //

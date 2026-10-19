@@ -238,7 +238,7 @@ check("service worker путешествий лежит на месте", () =>
 
 section("Скорочтение");
 
-const rsvp = await import("../src/views/pdf-reader/speed/rsvpText.js");
+const rsvp = await import("../src/views/pdf-reader/speed/rsvpText.mjs");
 
 // Кусочек текста так, как его отдаёт pdf.js: строка на высоте y, шрифт 10.
 function item(str, x, y, { eol = true, width = str.length * 5 } = {}) {
