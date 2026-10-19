@@ -368,9 +368,7 @@ onBeforeUnmount(() => resizeObserver?.disconnect());
               :transform="`rotate(-90 ${p.ring.size / 2} ${p.ring.size / 2})`"
             />
           </svg>
-          <div class="hub-planet-body">
-            <span class="hub-planet-emoji">{{ p.plan.emoji || "🪐" }}</span>
-          </div>
+          <div class="hub-planet-body" />
           <div class="hub-planet-label">
             <div class="hub-planet-title">{{ p.plan.title }}</div>
             <div class="hub-planet-meta">
@@ -425,7 +423,7 @@ onBeforeUnmount(() => resizeObserver?.disconnect());
         :style="{ '--planet': p.color }"
         @click="openPlan(p.plan)"
       >
-        <span class="hub-dock-orb">{{ p.plan.emoji || "🪐" }}</span>
+        <span class="hub-dock-orb" />
         <span class="hub-dock-text">
           <span class="hub-dock-title">{{ p.plan.title }}</span>
           <span class="hub-dock-meta">
@@ -644,11 +642,6 @@ onBeforeUnmount(() => resizeObserver?.disconnect());
 
 .hub-planet.paused {
   opacity: 0.55;
-}
-
-.hub-planet-emoji {
-  font-size: calc(var(--d) * 0.42);
-  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5));
 }
 
 .hub-planet-label {
