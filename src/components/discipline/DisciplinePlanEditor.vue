@@ -92,6 +92,11 @@ const availableSkills = computed(() =>
 );
 const addSkillId = ref(null);
 
+// Активность без навыка хранится с нулевым id навыка. Сервер отдаёт такие
+// активности отдельной группой (general), только когда они есть.
+const NO_SKILL = "00000000-0000-0000-0000-000000000000";
+const hasGeneralGroup = computed(() => month.value?.skills?.some((s) => s.general));
+
 // --- Квоты ---
 
 const quotaForm = ref({ medTarget: 15, maxTarget: 8, restLimit: 3, trackStartDay: 1 });
@@ -430,6 +435,7 @@ async function removeActivity() {
     <div v-for="s in month.skills" v-show="planView === 'skills'" :key="s.planSkillId" class="dpe-skill">
       <div class="dpe-skill-head">
         <b :style="{ color: s.color || '#8ab4ff' }">{{ s.icon }} {{ s.title }}</b>
+        <template v-if="!s.general">
         <button class="dpe-btn" :class="{ 'dpe-btn-hidden-on': s.hidden }"
           :title="s.hidden ? 'Скрытый: на главной свёрнут, в статус дня идёт. Нажми, чтобы показать' : 'Спрятать на главной под «Скрытые» — в статус дня всё равно идёт'"
           @click="toggleSkillHidden(s)">
@@ -442,6 +448,7 @@ async function removeActivity() {
         <button class="dpe-btn" @click="moveSkill(s, -1)">▲</button>
         <button class="dpe-btn" @click="moveSkill(s, 1)">▼</button>
         <button class="dpe-btn dpe-btn-danger" @click="removeSkillFromPlan(s)">✕</button>
+        </template>
       </div>
       <div class="dpe-activities">
         <!-- Плашка открывает карточку активности. Уровни подписаны прямо на
@@ -464,6 +471,11 @@ async function removeActivity() {
         <button class="dpe-chip dpe-chip-add" @click="openActivityModal(s.learningSkillId, null)">+ активность</button>
       </div>
     </div>
+
+    <button v-if="!hasGeneralGroup" v-show="planView === 'skills'" class="dpe-chip dpe-chip-add dpe-add-general"
+      @click="openActivityModal(NO_SKILL, null)">
+      + активность без навыка
+    </button>
 
     <div class="dpe-add-skill" v-if="availableSkills.length">
       <select v-model="addSkillId" class="dpe-input">
@@ -811,6 +823,10 @@ async function removeActivity() {
 .dpe-chip-add {
   border-style: dashed;
   color: #7a7f8e;
+}
+
+.dpe-add-general {
+  align-self: flex-start;
 }
 
 .dpe-add-skill {

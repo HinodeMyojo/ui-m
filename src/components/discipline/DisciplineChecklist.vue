@@ -458,7 +458,7 @@ function saveNote() {
           <span v-if="row.maxed" class="dsc-star" title="Макс по навыку">⭐</span>
         </span>
         <span v-if="row.skill.streak > 1" class="dsc-skill-streak" title="Стрик навыка">🔥{{ row.skill.streak }}</span>
-        <button v-if="row.active" class="dsc-rest-btn" :class="{ 'dsc-rest-on': row.rested }"
+        <button v-if="row.active && !row.skill.general" class="dsc-rest-btn" :class="{ 'dsc-rest-on': row.rested }"
           :title="row.rested ? 'Отменить отдых' : 'Взять отдых для навыка'" @click="toggleRest(row)">
           🌴
         </button>
