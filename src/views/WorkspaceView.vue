@@ -22,6 +22,7 @@ import {
   saveWorkDay,
   createWorkItem,
   setWorkItemStatus,
+  setWorkItemDeadline,
   placeWorkItem,
   reorderWorkItems,
   exchangeGoogleCode,
@@ -228,15 +229,22 @@ function applyBoardOrder(order) {
 
 // Перенос карточки в общем виде: статус берётся из колонки, место в дне — из
 // точки, куда её бросили.
-async function moveItem({ id, status, order }) {
+// deadline приходит, когда карточку положили в другую плашку «до …»: плашка —
+// это срок (ISO-строка или null — «без срока»).
+async function moveItem({ id, status, order, deadline }) {
   const item = day.value?.items?.find((i) => i.id === id);
   if (!item) return;
   const previous = item.status;
   item.status = status;
+  if (deadline !== undefined) {
+    item.deadline = deadline;
+    item.deadlineHasTime = !!deadline;
+  }
   applyBoardOrder(order);
 
   try {
     if (previous !== status) await setWorkItemStatus(id, { status, closeTasks: false });
+    if (deadline !== undefined) await setWorkItemDeadline(id, deadline);
     await reorderWorkItems(date.value, order);
     await load();
   } catch (e) {
@@ -659,6 +667,7 @@ function humanMinutes(minutes) {
       :task-statuses="day?.taskStatuses || []"
       :tomorrow="day?.tomorrow || []"
       :board-order="day?.boardOrder || []"
+      :slots="day?.slots"
       @open="openItem"
       @open-sub="openSub"
       @add="addItem"

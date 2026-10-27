@@ -8,7 +8,10 @@ import {
   checkTask,
   collapseWorkItemTask,
   createWorkItem,
+  resetWorkSlots,
   setTaskLogStatus,
+  setWorkItemDeadline,
+  setWorkSlots,
   setWorkItemCarry,
   setWorkMode,
   updateTaskAPI,
@@ -31,6 +34,8 @@ const props = defineProps({
   tomorrow: { type: Array, default: () => [] },
   // Порядок доски дня: id карточек и подзадач вперемешку.
   boardOrder: { type: Array, default: () => [] },
+  // Плашки «до …» колонки «В работе»: { minutes, scope, defined }.
+  slots: { type: Object, default: null },
 });
 const emit = defineEmits([
   "open",
@@ -381,6 +386,240 @@ async function deferSub(sub) {
     emit("refresh");
   } catch (e) {
     subError.value = e.message || "не удалось перенести подзадачу";
+  }
+}
+
+// --- Плашки «до …» в колонке «В работе» ---
+
+// Плашка — это срок: карточка в «до 14» сдаётся сегодня к 14:00. Поэтому
+// своей связи «карточка — плашка» нет, карточка стоит в той плашке, куда
+// упирается её дедлайн. Перетащил в другую — сменился срок. Время плашки
+// прошло — плашка сгорает, и всё незакрытое из неё уезжает в ближайшую живую.
+const SLOT_NONE = "none";
+const slotMinutes = computed(() => props.slots?.minutes || []);
+
+// Минуты срока от начала этого дня; срок не на этот день — null.
+// «До 24:00» — это полночь следующих суток.
+function minutesOnDay(deadline) {
+  if (!deadline) return null;
+  const d = new Date(deadline);
+  if (Number.isNaN(d.getTime())) return null;
+  const day = localDay(d);
+  const min = d.getHours() * 60 + d.getMinutes();
+  if (day === props.date) return min;
+  if (day === nextDate.value && min === 0) return 24 * 60;
+  return null;
+}
+
+// Первая плашка, до которой срок успевает; срок позже последней — в последней.
+function slotOfMinutes(min) {
+  const list = slotMinutes.value;
+  if (min === null || !list.length) return SLOT_NONE;
+  return list.find((m) => m >= min) ?? list[list.length - 1];
+}
+
+function cardSlot(card) {
+  if (card.sub) return slotOfMinutes(minutesOnDay(card.sub.deadline));
+  if (!card.item.deadlineHasTime) return SLOT_NONE;
+  return slotOfMinutes(minutesOnDay(card.item.deadline));
+}
+
+function slotDeadline(slot) {
+  if (slot === SLOT_NONE) return null;
+  const d = new Date(props.date + "T00:00:00");
+  d.setHours(0, slot, 0, 0); // 1440 минут — полночь следующих суток
+  return d.toISOString();
+}
+
+function slotTitle(min) {
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  return m ? `до ${h}:${String(m).padStart(2, "0")}` : `до ${h}`;
+}
+
+// Состояние плашки видно только сегодня: сгорела, идёт сейчас или впереди.
+function slotState(min) {
+  if (!props.isToday) return { state: "", label: "" };
+  const now = nowMin.value;
+  if (min <= now) return { state: "burnt", label: "сгорела" };
+  const current = slotMinutes.value.find((m) => m > now);
+  if (min === current) return { state: "current", label: `осталось ${humanMinutes(min - now)}` };
+  return { state: "", label: "" };
+}
+
+const doingSections = computed(() => {
+  const doing = groups.value.find((g) => g.key === "doing");
+  const sections = [
+    { key: SLOT_NONE, title: "Без срока", state: "", label: "", cards: [] },
+    ...slotMinutes.value.map((m) => ({ key: m, title: slotTitle(m), ...slotState(m), cards: [] })),
+  ];
+  const byKey = new Map(sections.map((s) => [s.key, s]));
+  for (const card of doing?.cards || []) byKey.get(cardSlot(card)).cards.push(card);
+  return sections;
+});
+
+// Колонка без плашек — одна секция без заголовка.
+function sectionsOf(g) {
+  if (g.key === "doing" && slotMinutes.value.length) return doingSections.value;
+  return [{ key: null, title: "", state: "", label: "", cards: g.cards }];
+}
+
+// Подзадача с главной живёт в дне своим сроком: в плашку её кладут, двигая
+// дедлайн на главной. Снять срок нельзя — она тогда исчезнет из дня.
+async function setSubSlot(sub, slot) {
+  if (slot === SLOT_NONE) {
+    subError.value = "у подзадачи с главной срок обязателен — положите её в плашку";
+    return false;
+  }
+  const end = slotDeadline(slot);
+  sub.deadline = end;
+  try {
+    await updateTaskAPI(sub.id, {
+      title: sub.title,
+      start: sub.start || null,
+      end,
+      color: sub.color || "",
+    });
+    return true;
+  } catch (e) {
+    subError.value = e.message || "не удалось сменить срок подзадачи";
+    return false;
+  }
+}
+
+// Сгорание: время плашки прошло — всё незакрытое из неё и из прошлых плашек
+// едет в ближайшую живую. Если сгорели все, переносить некуда: дальше это
+// дело колонки «Завтра». Неудачный перенос второй раз не пробуем, иначе
+// каждый тик часов долбил бы сервер той же ошибкой.
+const burning = new Set();
+const burnFailed = new Set();
+
+async function burnSlots() {
+  if (!props.isToday || !slotMinutes.value.length) return;
+  const now = nowMin.value;
+  const target = slotMinutes.value.find((m) => m > now);
+  if (target === undefined) return;
+
+  const doing = groups.value.find((g) => g.key === "doing");
+  const due = (doing?.cards || []).filter((card) => {
+    const slot = cardSlot(card);
+    if (slot === SLOT_NONE || slot > now) return false;
+    if (card.sub?.done) return false;
+    return !burning.has(card.id) && !burnFailed.has(card.id);
+  });
+  if (!due.length) return;
+
+  const end = slotDeadline(target);
+  await Promise.all(
+    due.map(async (card) => {
+      burning.add(card.id);
+      try {
+        if (card.sub) {
+          if (!(await setSubSlot(card.sub, target))) burnFailed.add(card.id);
+        } else {
+          await setWorkItemDeadline(card.item.id, end);
+          card.item.deadline = end;
+          card.item.deadlineHasTime = true;
+        }
+      } catch (e) {
+        burnFailed.add(card.id);
+        subError.value = e.message || "плашка сгорела, но перенести задачу не удалось";
+      } finally {
+        burning.delete(card.id);
+      }
+    }),
+  );
+  emit("refresh");
+}
+
+// --- Настройка плашек ---
+
+const WEEKDAY_EVERY = [
+  "",
+  "каждый понедельник",
+  "каждый вторник",
+  "каждую среду",
+  "каждый четверг",
+  "каждую пятницу",
+  "каждую субботу",
+  "каждое воскресенье",
+];
+const DEFAULT_SLOTS = [600, 840, 1080, 1380];
+
+const slotScopes = computed(() => {
+  const wd = new Date(props.date + "T12:00:00").getDay() || 7;
+  return [
+    { key: "day", label: `только ${dateWords(props.date)}` },
+    { key: "week", label: "каждый день этой недели" },
+    { key: "weekday", label: WEEKDAY_EVERY[wd] },
+    { key: "always", label: "всегда — до победного" },
+  ];
+});
+
+const SCOPE_SOURCE = {
+  day: "на этот день",
+  week: "на эту неделю",
+  weekday: "по этому дню недели",
+  always: "общий набор",
+  default: "стандартный набор",
+};
+
+const slotEditor = ref(null);
+
+function openSlotEditor() {
+  const scope = props.slots?.scope;
+  slotEditor.value = {
+    minutes: [...slotMinutes.value],
+    scope: !scope || scope === "default" ? "always" : scope,
+    time: "",
+    busy: false,
+    error: "",
+  };
+}
+
+function addSlotTime() {
+  const ed = slotEditor.value;
+  const match = /^(\d{1,2}):(\d{2})$/.exec(ed.time || "");
+  if (!match) return;
+  const min = Number(match[1]) * 60 + Number(match[2]);
+  if (min < 1) {
+    ed.error = "плашка «до 00:00» ничего не значит";
+    return;
+  }
+  ed.error = "";
+  ed.minutes = [...new Set([...ed.minutes, min])].sort((a, b) => a - b);
+  ed.time = "";
+}
+
+function removeSlotTime(min) {
+  slotEditor.value.minutes = slotEditor.value.minutes.filter((m) => m !== min);
+}
+
+async function saveSlots() {
+  const ed = slotEditor.value;
+  ed.busy = true;
+  ed.error = "";
+  try {
+    await setWorkSlots({ date: props.date, scope: ed.scope, minutes: ed.minutes });
+    slotEditor.value = null;
+    emit("refresh");
+  } catch (e) {
+    ed.error = e.message;
+    ed.busy = false;
+  }
+}
+
+async function resetSlotScope(scope) {
+  const ed = slotEditor.value;
+  ed.busy = true;
+  ed.error = "";
+  try {
+    await resetWorkSlots(props.date, scope);
+    slotEditor.value = null;
+    emit("refresh");
+  } catch (e) {
+    ed.error = e.message;
+    ed.busy = false;
   }
 }
 
@@ -810,6 +1049,7 @@ function beginDrag(x, y) {
     from: sub ? item.column : item.status,
     over: null,
     beforeId: null,
+    slot: undefined, // плашка «до …» под курсором, если колонка с плашками
     x,
     y,
   };
@@ -880,18 +1120,39 @@ function updateTarget(x, y) {
     return;
   }
   drag.value.over = column.dataset.status;
-  const cards = Array.from(column.querySelectorAll("[data-card-id]")).filter(
-    (c) => c.dataset.cardId !== drag.value.id,
-  );
-  let before = null;
+  const notDragged = (c) => c.dataset.cardId !== drag.value.id;
+
+  // В колонке с плашками цель — плашка: последняя, чей верх выше курсора.
+  // Место внутри неё ищем только среди её карточек; бросили ниже всех —
+  // встаёт перед первой карточкой следующих плашек, чтобы порядок не прыгал.
+  const sections = Array.from(column.querySelectorAll("[data-slot]"));
+  let scope = column;
+  drag.value.slot = undefined;
+  if (sections.length) {
+    let index = 0;
+    sections.forEach((s, i) => {
+      if (y >= s.getBoundingClientRect().top) index = i;
+    });
+    const raw = sections[index].dataset.slot;
+    drag.value.slot = raw === SLOT_NONE ? SLOT_NONE : Number(raw);
+    scope = sections[index];
+    const after = sections
+      .slice(index + 1)
+      .flatMap((s) => Array.from(s.querySelectorAll("[data-card-id]")))
+      .find(notDragged);
+    drag.value.beforeId = after ? after.dataset.cardId : null;
+  } else {
+    drag.value.beforeId = null;
+  }
+
+  const cards = Array.from(scope.querySelectorAll("[data-card-id]")).filter(notDragged);
   for (const card of cards) {
     const rect = card.getBoundingClientRect();
     if (y < rect.top + rect.height / 2) {
-      before = card.dataset.cardId;
+      drag.value.beforeId = card.dataset.cardId;
       break;
     }
   }
-  drag.value.beforeId = before;
 }
 
 function edgeScroll(x) {
@@ -928,13 +1189,23 @@ function pointerUp(event) {
     else deferItem(state.id);
     return;
   }
+  // Бросили в другую плашку — сменился срок.
+  const toSlot =
+    state.slot !== undefined &&
+    state.slot !== cardSlot(state.kind === "sub" ? { sub: started.item } : { item: started.item });
+
   if (state.kind === "sub") {
+    if (toSlot && state.slot === SLOT_NONE) {
+      subError.value = "у подзадачи с главной срок обязателен — положите её в плашку";
+      return;
+    }
     if (state.over !== state.from) {
       moveSub(started.item, state.over, started?.card);
       // В колонку без статуса на главной («Отменено») moveSub подзадачу не
       // пустит — тогда и порядок не трогаем, она остаётся на своём месте.
       if (state.over === "dropped" || !statusForColumn(state.over)) return;
     }
+    if (toSlot) setSubSlot(started.item, state.slot).then((ok) => ok && emit("refresh"));
     emit("reorder", { order: orderAfterDrop(state.id, state.over, state.beforeId) });
     return;
   }
@@ -943,6 +1214,7 @@ function pointerUp(event) {
     id: state.id,
     status: state.over,
     order: orderAfterDrop(state.id, state.over, state.beforeId),
+    ...(toSlot ? { deadline: slotDeadline(state.slot) } : {}),
   });
 }
 
@@ -952,6 +1224,13 @@ onMounted(() => {
     nowTs.value = Date.now();
   }, 30000);
 });
+
+// Плашки проверяем при открытии, с каждым тиком часов и после перезагрузки дня.
+watch(
+  [nowMin, () => props.items, () => props.mainSubtasks, slotMinutes, () => props.isToday],
+  burnSlots,
+  { immediate: true },
+);
 
 onBeforeUnmount(() => {
   clearInterval(clock);
@@ -1043,10 +1322,18 @@ onBeforeUnmount(() => {
           <span class="ovw-col-dot"></span>
           {{ g.title }}
           <span class="ovw-col-count">{{ g.cards.length }}</span>
+          <button
+            v-if="g.key === 'doing'"
+            class="ovw-tslot-gear"
+            title="Плашки «до …»: сколько их и до какого часа"
+            @click="openSlotEditor"
+          >
+            ⏱
+          </button>
         </div>
 
         <div
-          v-if="!g.cards.length && drag?.over !== g.key"
+          v-if="!g.cards.length && drag?.over !== g.key && sectionsOf(g)[0].key === null"
           class="ovw-col-empty"
         >
           {{ EMPTY_HINT[g.key] || "пусто" }}
@@ -1056,9 +1343,43 @@ onBeforeUnmount(() => {
              дня. Подзадача — не карточка дня (её срок просто упирается в этот
              день), поэтому она выделена, но двигается так же: куда поставил,
              там и стоит. -->
-        <template v-for="card in g.cards" :key="(card.sub ? 'sub-' : '') + card.id">
+        <!-- В «В работе» карточки разложены по плашкам «до …»: плашка — это
+             срок. Остальные колонки — одна секция без заголовка. -->
+        <div
+          v-for="sec in sectionsOf(g)"
+          :key="g.key + '-' + sec.key"
+          class="ovw-tslot"
+          :class="[
+            sec.key === null ? 'plain' : sec.state,
+            { hot: drag?.over === g.key && drag.slot === sec.key, none: sec.key === SLOT_NONE },
+          ]"
+          :data-slot="sec.key === null ? undefined : sec.key"
+        >
+          <div v-if="sec.title" class="ovw-tslot-head">
+            <span class="ovw-tslot-title">{{ sec.state === "burnt" ? "🔥 " : "" }}{{ sec.title }}</span>
+            <span v-if="sec.label" class="ovw-tslot-label">{{ sec.label }}</span>
+            <span class="ovw-tslot-count">{{ sec.cards.length || "" }}</span>
+          </div>
           <div
-            v-if="drag && drag.over === g.key && drag.beforeId === card.id"
+            v-if="sec.title && !sec.cards.length"
+            class="ovw-tslot-empty"
+          >
+            {{
+              sec.state === "burnt"
+                ? "сгорела — всё уехало дальше"
+                : sec.key === SLOT_NONE
+                  ? "без срока — сюда, чтобы снять срок"
+                  : "перетащите сюда"
+            }}
+          </div>
+        <template v-for="card in sec.cards" :key="(card.sub ? 'sub-' : '') + card.id">
+          <div
+            v-if="
+              drag &&
+              drag.over === g.key &&
+              drag.beforeId === card.id &&
+              (drag.slot === undefined || drag.slot === sec.key)
+            "
             class="ovw-slot"
           ></div>
 
@@ -1351,9 +1672,19 @@ onBeforeUnmount(() => {
             </div>
           </article>
         </template>
+          <div
+            v-if="
+              sec.key !== null &&
+              drag?.over === g.key &&
+              drag.slot === sec.key &&
+              !sec.cards.some((c) => c.id === drag.beforeId)
+            "
+            class="ovw-slot"
+          ></div>
+        </div>
 
         <div
-          v-if="drag && drag.over === g.key && drag.beforeId === null"
+          v-if="drag && drag.over === g.key && drag.beforeId === null && drag.slot === undefined"
           class="ovw-slot"
         ></div>
 
@@ -1416,6 +1747,64 @@ onBeforeUnmount(() => {
     <div v-if="!items.length" class="ovw-empty">
       <p>Карточек на этот день пока нет.</p>
       <button class="ovw-add" @click="emit('add')">+ Создать задачу</button>
+    </div>
+
+    <!-- Настройка плашек: набор времён и на что он действует. Правило поуже
+         бьёт правило пошире: «только сегодня» → «эта неделя» → «каждый
+         четверг» → «всегда». -->
+    <div v-if="slotEditor" class="ovw-tse-overlay" @click.self="slotEditor = null">
+      <div class="ovw-tse">
+        <div class="ovw-tse-head">
+          <b>⏱ Плашки «до …»</b>
+          <button class="ovw-tse-x" @click="slotEditor = null">✕</button>
+        </div>
+        <p class="ovw-tse-hint">
+          Сейчас на этот день — {{ SCOPE_SOURCE[slots?.scope || "default"] }}.
+          Карточка в плашке — это срок. Время плашки прошло — она сгорает, а всё
+          незакрытое уезжает в следующую.
+        </p>
+
+        <div class="ovw-tse-times">
+          <span v-for="m in slotEditor.minutes" :key="m" class="ovw-tse-chip">
+            {{ slotTitle(m) }}
+            <button title="Убрать" @click="removeSlotTime(m)">✕</button>
+          </span>
+          <span v-if="!slotEditor.minutes.length" class="ovw-tse-none">
+            без плашек — «В работе» станет одним списком
+          </span>
+        </div>
+
+        <div class="ovw-tse-add">
+          <input v-model="slotEditor.time" type="time" class="ovw-tse-input" @keydown.enter="addSlotTime" />
+          <button class="ovw-tool" @click="addSlotTime">＋ плашка</button>
+          <button class="ovw-tool" title="До 10, 14, 18, 23" @click="slotEditor.minutes = [...DEFAULT_SLOTS]">
+            стандартные
+          </button>
+        </div>
+
+        <div class="ovw-tse-scopes">
+          <label v-for="s in slotScopes" :key="s.key" class="ovw-tse-scope">
+            <input v-model="slotEditor.scope" type="radio" :value="s.key" />
+            {{ s.label }}
+            <button
+              v-if="slots?.defined?.includes(s.key)"
+              class="ovw-tse-reset"
+              :disabled="slotEditor.busy"
+              title="Убрать это правило — будет действовать более общее"
+              @click.prevent="resetSlotScope(s.key)"
+            >
+              сбросить
+            </button>
+          </label>
+        </div>
+
+        <div v-if="slotEditor.error" class="ovw-alert">{{ slotEditor.error }}</div>
+
+        <div class="ovw-tse-actions">
+          <button class="ovw-tool" @click="slotEditor = null">Отмена</button>
+          <button class="ovw-tool primary" :disabled="slotEditor.busy" @click="saveSlots">Сохранить</button>
+        </div>
+      </div>
     </div>
 
     <div
@@ -1787,6 +2176,250 @@ onBeforeUnmount(() => {
   padding: 18px 0;
   border: 1px dashed #262a36;
   border-radius: 12px;
+}
+
+/* --- Плашки «до …» в колонке «В работе» --- */
+
+.ovw-tslot {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 6px;
+  border: 1px solid #262a36;
+  border-radius: 12px;
+  background: #17181e;
+  transition: background 0.15s, box-shadow 0.15s;
+}
+
+/* Колонка без плашек: секция не должна менять раскладку. */
+.ovw-tslot.plain {
+  display: contents;
+}
+
+.ovw-tslot.none {
+  border-style: dashed;
+  background: transparent;
+}
+
+.ovw-tslot.current {
+  border-color: rgba(255, 214, 102, 0.55);
+  box-shadow: inset 0 0 0 1px rgba(255, 214, 102, 0.18);
+}
+
+.ovw-tslot.burnt {
+  opacity: 0.55;
+}
+
+.ovw-tslot.hot {
+  background: rgba(224, 123, 57, 0.1);
+  box-shadow: inset 0 0 0 1px rgba(224, 123, 57, 0.5);
+  opacity: 1;
+}
+
+/* Место вставки в плашке — линия, а не пустая карточка: пустая карточка
+   раздвигала плашки под курсором, и бросок в начало «до 12» попадал в ту,
+   что выше. Отрицательные поля съедают зазор колонки — раскладка не дрожит. */
+.ovw-tslot .ovw-slot {
+  height: 2px;
+  margin: -6px 0;
+  border: none;
+  border-radius: 2px;
+  background: #e07b39;
+}
+
+.ovw-tslot-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 0 4px;
+  font-size: 12.5px;
+}
+
+.ovw-tslot-title {
+  color: #ffd666;
+  font-weight: 700;
+}
+
+.ovw-tslot.none .ovw-tslot-title,
+.ovw-tslot.burnt .ovw-tslot-title {
+  color: #8f95a6;
+}
+
+.ovw-tslot-label {
+  color: #8f95a6;
+  font-size: 11.5px;
+}
+
+.ovw-tslot.current .ovw-tslot-label {
+  color: #ffd666;
+}
+
+.ovw-tslot-count {
+  margin-left: auto;
+  color: #6e7382;
+  font-size: 11.5px;
+}
+
+.ovw-tslot-empty {
+  color: #4f5461;
+  font-size: 11.5px;
+  text-align: center;
+  padding: 6px 0;
+}
+
+.ovw-tslot-gear {
+  background: none;
+  border: none;
+  color: #8f95a6;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 0 2px;
+  line-height: 1;
+}
+
+.ovw-tslot-gear:hover {
+  color: #ffd666;
+}
+
+.ovw-tse-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1300;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.ovw-tse {
+  width: min(440px, 100%);
+  max-height: 90dvh;
+  overflow-y: auto;
+  background: #191b21;
+  border: 1px solid #2a2d38;
+  border-radius: 14px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  color: #e8eaf2;
+}
+
+.ovw-tse-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.ovw-tse-x {
+  background: none;
+  border: none;
+  color: #8f95a6;
+  cursor: pointer;
+  font-size: 15px;
+}
+
+.ovw-tse-hint {
+  margin: 0;
+  color: #8f95a6;
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.ovw-tse-times {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.ovw-tse-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255, 214, 102, 0.1);
+  border: 1px solid rgba(255, 214, 102, 0.4);
+  color: #ffd666;
+  border-radius: 999px;
+  padding: 4px 6px 4px 11px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.ovw-tse-chip button {
+  background: none;
+  border: none;
+  color: #b7a067;
+  cursor: pointer;
+  font-size: 11px;
+  min-width: 22px;
+  min-height: 22px;
+}
+
+.ovw-tse-none {
+  color: #6e7382;
+  font-size: 12.5px;
+}
+
+.ovw-tse-add {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ovw-tse-input {
+  background: #242731;
+  border: 1px solid #333748;
+  border-radius: 9px;
+  color: #e8eaf2;
+  padding: 6px 9px;
+  font-size: 14px;
+  min-height: 34px;
+  color-scheme: dark;
+}
+
+.ovw-tse-scopes {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ovw-tse-scope {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13.5px;
+  color: #cfd3e0;
+  min-height: 32px;
+  cursor: pointer;
+}
+
+.ovw-tse-reset {
+  margin-left: auto;
+  background: none;
+  border: 1px solid #3a3f4f;
+  border-radius: 7px;
+  color: #8f95a6;
+  font-size: 11.5px;
+  padding: 3px 8px;
+  cursor: pointer;
+}
+
+.ovw-tse-reset:hover {
+  border-color: #e5484d;
+  color: #ff8a8d;
+}
+
+.ovw-tse-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.ovw-tool.primary {
+  background: linear-gradient(135deg, #1767fd, #6e4aff);
+  border: none;
+  color: #fff;
 }
 
 .ovw-slot {

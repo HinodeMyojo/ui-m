@@ -977,6 +977,37 @@ export async function setWorkItemSpan(id, from, to) {
   }
 }
 
+// Срок карточки с доски: её положили в плашку «до …» или плашка сгорела.
+// deadline — ISO-строка или null (снять срок).
+export async function setWorkItemDeadline(id, deadline) {
+  const response = await authorizedFetch(`${W}/items/${id}/deadline`, {
+    method: "POST",
+    body: JSON.stringify({ deadline, deadlineHasTime: !!deadline }),
+  });
+  if (!response.ok) {
+    throw new Error((await response.json().catch(() => ({}))).error || "не удалось сменить срок");
+  }
+}
+
+// Плашки «до …» колонки «В работе». scope: day — только этот день, week — вся
+// его неделя, weekday — каждый такой день недели, always — до победного.
+// minutes — минуты от начала суток.
+export async function setWorkSlots(data) {
+  const response = await authorizedFetch(`${W}/slots`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+  return workJson(response, "не удалось сохранить плашки");
+}
+
+// Сбросить правило области: на день снова действует более широкое.
+export async function resetWorkSlots(date, scope) {
+  const response = await authorizedFetch(`${W}/slots?date=${date}&scope=${scope}`, {
+    method: "DELETE",
+  });
+  return workJson(response, "не удалось сбросить плашки");
+}
+
 export async function unplaceWorkItem(id, date) {
   await authorizedFetch(`${W}/items/${id}/place?date=${date}`, { method: "DELETE" });
 }
