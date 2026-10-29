@@ -312,7 +312,6 @@ const doneCount = computed(() => (board.value?.levels || []).filter((l) => l.sta
   border-radius: 10px;
   overflow: hidden;
   border: 1px solid #262833;
-  min-height: 160px;
 }
 
 .me-hero-rank {

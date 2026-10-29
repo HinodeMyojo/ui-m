@@ -17,8 +17,8 @@ const emit = defineEmits(["select"]);
 
 const COL_W = 196;
 const NODE_W = 172;
-const NODE_H = 66;
-const ROW_H = 80;
+const NODE_H = 78;
+const ROW_H = 92;
 const LABEL_W = 210;
 const PAD = 14;
 
@@ -325,7 +325,7 @@ const STATUS_ICONS = { done: "✓", active: "★", paused: "⏸", maintain: "♾
 .gg-node {
   position: absolute;
   width: 172px;
-  height: 66px;
+  height: 78px;
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
@@ -370,7 +370,9 @@ const STATUS_ICONS = { done: "✓", active: "★", paused: "⏸", maintain: "♾
 
 .gg-title {
   font-size: 12px;
-  line-height: 1.2;
+  line-height: 1.25;
+  min-height: 2.5em;
+  flex: none;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
