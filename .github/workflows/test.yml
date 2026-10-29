@@ -1,0 +1,58 @@
+name: Test version
+
+# Тестовая версия сайта: пуш в ветку `test` выкатывает интерфейс в
+# /home/hinode/planner/test/ui. Версию не поднимаем — номер ведёт main.
+on:
+  push:
+    branches:
+      - test
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: "18"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check
+        run: npm run check
+
+      - name: Build
+        run: npm run build
+
+      - name: Copy to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.DEV_SERVER_HOST }}
+          username: ${{ secrets.DEV_SERVER_USER }}
+          key: ${{ secrets.DEV_SSH_PRIVATE_KEY }}
+          # Тот же закрытый список, что в deploy-dev.yml, плюс свой compose.
+          source: "dist/*,docker-compose.test.yaml,Dockerfile,nginx.conf,proxy-server.mjs,package.json,package-lock.json,src/*,public/*,index.html,tg/*,vite.config.mjs,vite-plugin-mdi.mjs,scripts/*,tailwind.config.js,jsconfig.json"
+          target: "/home/hinode/planner/test/ui"
+          strip_components: 0
+
+      - name: Build and start
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEV_SERVER_HOST }}
+          username: ${{ secrets.DEV_SERVER_USER }}
+          key: ${{ secrets.DEV_SSH_PRIVATE_KEY }}
+          command_timeout: 40m
+          script: |
+            set -e
+            cd /home/hinode/planner/test/ui
+            sudo docker compose -p test-ui -f docker-compose.test.yaml build --build-arg UPSTREAM_PROXY=${{ secrets.UPSTREAM_PROXY }}
+            sudo docker compose -p test-ui -f docker-compose.test.yaml up -d --remove-orphans
+            sudo docker builder prune -f >/dev/null
+            df -h /

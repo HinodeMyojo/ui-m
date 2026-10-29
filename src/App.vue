@@ -62,6 +62,11 @@ const FULLSCREEN = ["/login", "/pdfReader"];
 const OWN_SCENERY = ["/arabic", "/arabic/today"];
 const hasOwnScenery = computed(() => OWN_SCENERY.includes(route.path));
 
+// Тестовая версия открывается по адресу с приставкой test. — и выглядит как
+// прод на тех же данных. Без метки отметка, сделанная «для проверки», легко
+// принимается за настоящую, и наоборот.
+const isTestVersion = window.location.hostname.startsWith("test.");
+
 const showTabBar = computed(() => {
   if (!isMobile.value) return false;
   if (sessionFocus.value) return false;
@@ -77,6 +82,7 @@ const showTabBar = computed(() => {
     <RouterView />
   </div>
   <MobileTabBar v-if="showTabBar" />
+  <div v-if="isTestVersion" class="test-version-badge">ТЕСТ</div>
   <!-- Печать резюме — экран без вайба: листья попадут в PDF. Учебная сессия —
        тоже: листья летали по кнопкам ответа. -->
   <template v-if="!route.path.endsWith('/print')">
@@ -132,6 +138,22 @@ body {
   box-sizing: border-box;
   padding-bottom: var(--tabbar-h);
   background: #14151b;
+}
+
+/* Не ловит клики: метка не должна закрывать кнопки под собой. */
+.test-version-badge {
+  position: fixed;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 3000;
+  padding: 2px 14px;
+  border-radius: 0 0 8px 8px;
+  background: #ff9f1c;
+  color: #18191f;
+  font: 700 12px/18px system-ui, sans-serif;
+  letter-spacing: 0.12em;
+  pointer-events: none;
 }
 
 .modal-overlay {

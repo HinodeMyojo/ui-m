@@ -1,0 +1,12 @@
+# Тестовая версия интерфейса — рядом с продом (см. back-m/docker-compose.test.yml).
+# Наружу не публикуется: Caddy прода ведёт test.82-202-136-167.sslip.io сюда
+# по имени ui-m-test. Выкат — пуш в ветку `test`.
+services:
+  ui-m-test:
+    build: .
+    networks:
+      - month_tracker
+
+networks:
+  month_tracker:
+    external: true
