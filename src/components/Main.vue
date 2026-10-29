@@ -25,10 +25,24 @@ import TimeStatsModal from "@/components/elements/TimeStatsModal.vue";
 
 import SkillsMiniWidget from "./elements/SkillsMiniWidget.vue";
 import DisciplineTracker from "./discipline/DisciplineTracker.vue";
-import RoadmapStatusBar from "./roadmap/RoadmapStatusBar.vue";
-import DayHoursBar from "./elements/DayHoursBar.vue";
 import VentureDraftsBar from "./venture/VentureDraftsBar.vue";
-import AgeCounter from "./elements/AgeCounter.vue";
+// «Я» и «Развитие»: панель героя слева, уровни месяца над задачами, панель
+// «Я» поверх. Возраст переехал в панель героя. docs/me-module.md (back-m)
+import HeroPanel from "./growth/HeroPanel.vue";
+import GrowthLevelsBar from "./growth/GrowthLevelsBar.vue";
+import MePanel from "./growth/MePanel.vue";
+import { growth } from "@/composables/useGrowth.js";
+
+// Уровни для привязки новой задачи: сначала взятые в месяц, потом прочие
+// незавершённые.
+const growthLevelsForTask = computed(() => {
+  const picked = new Set(growth.value?.month?.levelIds || []);
+  const levels = (growth.value?.levels || []).filter((l) => l.status !== "done");
+  return {
+    picked: levels.filter((l) => picked.has(l.id)),
+    rest: levels.filter((l) => !picked.has(l.id) && l.status !== "empty"),
+  };
+});
 
 const DEFAULT_TASK_COLOR = "#25636A";
 const CONFETTI_DELAY_MS = 200;
@@ -90,6 +104,7 @@ const createEmptyTaskForm = () => ({
   isGlobal: false,
   learningSkillId: null,
   learningGradeId: null,
+  growthLevelId: null,
 });
 
 function openMdToPdfPage() {
@@ -566,7 +581,7 @@ function closeAddModal() {
 }
 
 function addTask() {
-  const { title, start, end, color, subtasks, isGlobal, learningSkillId, learningGradeId } = newTask.value;
+  const { title, start, end, color, subtasks, isGlobal, learningSkillId, learningGradeId, growthLevelId } = newTask.value;
   if (!title || !end) return;
 
   const startDate = start
@@ -584,6 +599,7 @@ function addTask() {
     isGlobal,
     learningSkillId: learningSkillId || null,
     learningGradeId: learningGradeId || null,
+    growthLevelId: growthLevelId || null,
   };
 
   addTaskAPI(taskToAdd).then(() => {
@@ -814,9 +830,6 @@ function closeTimeStats() {
           <SalaryViewer />
         </div>
       </div>
-      <div class="header-age">
-        <AgeCounter />
-      </div>
       <div class="header-center">
         <button class="month-nav-icon" aria-label="Предыдущий месяц" @click="handlePrevMonth">‹</button>
         <div class="month-block">
@@ -827,7 +840,6 @@ function closeTimeStats() {
       </div>
       <div class="header-right">
         <button v-if="isOn('module.today')" class="add-task-btn" @click="router.push('/today')">Сегодня</button>
-        <button v-if="isOn('module.learning_skills')" class="add-task-btn" @click="router.push('/learning-skills')">Навыки</button>
         <button class="add-task-btn" @click="openNyamaModal">Вкусняхи</button>
         <button class="add-task-btn" @click="openAddModal">
           + Добавить задачу
@@ -845,11 +857,10 @@ function closeTimeStats() {
     <!-- Дисциплина — правая колонка сразу под шапкой: полосы плана дня и
          roadmap'а живут слева вместе с календарём, справа не пустеет. -->
     <div class="body-wrap">
+    <HeroPanel />
     <div class="body-main">
-    <!-- План дня по часам: работать, код руками, читать -->
-    <DayHoursBar />
-    <!-- Отставание по roadmap'у — сразу под шапкой, docs/roadmap-module.md -->
-    <RoadmapStatusBar />
+    <!-- Уровни месяца: название, прогресс, неделя -->
+    <GrowthLevelsBar />
     <!-- Черновики этапов дорожной карты: планируя месяц, видно, что этап уже
          обещал сделать. docs/venture-module.md -->
     <VentureDraftsBar @taken="reloadTasksForCurrentDate" />
@@ -977,6 +988,7 @@ function closeTimeStats() {
     <DisciplineTracker />
     </div>
   </div>
+  <MePanel />
   <!-- <transition name="modal-fade">
     <div v-if="openedTask" class="modal-overlay" @click.self="closeTaskDetails">
       <div class="modal-card">
@@ -1073,6 +1085,20 @@ function closeTimeStats() {
               <select v-model="newTask.learningGradeId" class="skill-select">
                 <option :value="null">Не указан</option>
                 <option v-for="g in selectedNewTaskSkill.grades" :key="g.id" :value="g.id">{{ g.title }}</option>
+              </select>
+            </label>
+
+            <!-- Уровень развития: задача двигает его процент -->
+            <label v-if="growthLevelsForTask.picked.length || growthLevelsForTask.rest.length">
+              Уровень развития
+              <select v-model="newTask.growthLevelId" class="skill-select">
+                <option :value="null">Не привязана</option>
+                <optgroup v-if="growthLevelsForTask.picked.length" label="Взяты в этом месяце">
+                  <option v-for="l in growthLevelsForTask.picked" :key="l.id" :value="l.id">{{ l.emoji }} {{ l.title }}</option>
+                </optgroup>
+                <optgroup label="Остальные">
+                  <option v-for="l in growthLevelsForTask.rest" :key="l.id" :value="l.id">{{ l.emoji }} {{ l.title }}</option>
+                </optgroup>
               </select>
             </label>
 

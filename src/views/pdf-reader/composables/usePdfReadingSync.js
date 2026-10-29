@@ -194,5 +194,22 @@ export function usePdfReadingSync(fileId, pdfDoc, pageCount, currentPage, goToPa
 
     // markActivity нужен скорочтению: там минутами никто не трогает ни мышь,
     // ни экран, и без него время перестало бы идти через полторы минуты.
-    return { details, sessionSeconds, flush, markActivity, markFinished: () => flush({ finished: true }) };
+    // «Я сейчас здесь»: переставить позицию без чтения — перелистал вперёд,
+    // читал бумажную книгу. Страницы до неё в прочитанное за день не идут
+    // (строка «чтение» в дисциплине, docs/me-module.md).
+    async function jumpTo(page) {
+        if (!fileId.value || !page) return;
+        const target = Math.max(1, Math.min(page, pageCount.value || page));
+        lastSentPage = target;
+        goToPage(target);
+        await setPdfProgress(fileId.value, {
+            currentPage: target,
+            pageCount: pageCount.value,
+            seconds: 0,
+            date: pdfLogicalToday(),
+            jump: true,
+        });
+    }
+
+    return { details, sessionSeconds, flush, markActivity, jumpTo, markFinished: () => flush({ finished: true }) };
 }

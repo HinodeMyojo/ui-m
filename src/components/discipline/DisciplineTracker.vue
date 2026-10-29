@@ -1,9 +1,10 @@
 <script setup>
-import { ref, computed, onMounted, watch } from "vue";
+import { ref, computed, onBeforeUnmount, onMounted, watch } from "vue";
 import confetti from "@/composables/useConfetti.js";
 import { useRouter } from "vue-router";
 import { fetchDisciplineMonth, disciplineLogicalToday } from "../api.js";
 import DisciplineChecklist from "./DisciplineChecklist.vue";
+import { growth, openMe } from "@/composables/useGrowth.js";
 import {
   STATUS_COLORS,
   STATUS_LABELS,
@@ -39,7 +40,16 @@ async function load() {
   }
 }
 
-onMounted(load);
+onMounted(() => {
+  load();
+  // Выбор уровней на месяц перестраивает план — перечитываем.
+  window.addEventListener("discipline:reload", load);
+});
+onBeforeUnmount(() => window.removeEventListener("discipline:reload", load));
+
+// Уровни на месяц не выбраны — дисциплина ждёт: чек-листа нет, есть кнопка.
+// Пока каркас развития не залит, ничего не блокируем.
+const waitsForPick = computed(() => !!(growth.value?.seeded && growth.value?.month?.needPick));
 
 const todayDay = computed(() => (month.value?.days || []).find((d) => d.date === today.value));
 const summary = computed(() => month.value?.summary || null);
@@ -179,7 +189,12 @@ function weekdayName(dateStr) {
         </div>
 
         <div class="dsc-today-label">Сегодня, {{ parseInt(today.slice(8)) }} число · {{ weekdayName(today) }}</div>
-        <DisciplineChecklist :month="month" :date="today" @changed="load" />
+        <div v-if="waitsForPick" class="dsc-wait">
+          <b>Дисциплина ждёт выбора</b>
+          <span>Выбери {{ growth.month.min }}–{{ growth.month.max }} уровня на месяц — из них соберутся строки мин/сред/макс.</span>
+          <button class="dsc-wait-btn" @click="openMe(null, 'month')">Выбрать навыки</button>
+        </div>
+        <DisciplineChecklist v-else :month="month" :date="today" @changed="load" />
 
         <!-- Виджет roadmap'а переехал в полосу под шапкой (RoadmapStatusBar):
              отставание должно быть видно сразу, а не в конце правой колонки. -->
@@ -275,6 +290,31 @@ function weekdayName(dateStr) {
   cursor: pointer;
   font-size: 14px;
   padding: 6px;
+}
+
+.dsc-wait {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px dashed #ffd66688;
+  background: #ffd6660f;
+  color: #e8eaf0;
+  font-size: 13px;
+}
+
+.dsc-wait span {
+  color: #b9bfd0;
+}
+
+.dsc-wait-btn {
+  border: 0;
+  border-radius: 8px;
+  padding: 8px;
+  background: #6e4aff;
+  color: #fff;
+  cursor: pointer;
 }
 
 .dsc-mini-status {

@@ -363,6 +363,8 @@ export async function addTaskAPI(task) {
     isGlobal: task.isGlobal || false,
     learningSkillId: task.learningSkillId || null,
     learningGradeId: task.learningGradeId || null,
+    // Уровень «Развития», который двигает задача — docs/me-module.md
+    growthLevelId: task.growthLevelId || null,
     subtasks: (task.subtasks || []).map((subtask) => ({
       title: subtask.title,
       description: subtask.description ?? "",

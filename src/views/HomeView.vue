@@ -27,8 +27,11 @@ const showMobile = computed(() => isMobile.value && route.query.desktop !== "1")
 </template>
 
 <style scoped>
+/* Шире, чем было (80%): слева встала панель героя. По бокам остаются поля —
+   во всю ширину пользователь не хочет. */
 main {
-  width: 80%;
+  width: calc(100% - 48px);
+  max-width: 2400px;
   min-height: 100vh;
   display: flex;
   justify-content: center;
