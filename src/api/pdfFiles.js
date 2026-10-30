@@ -143,14 +143,15 @@ export function pdfSaveName(file) {
   return /\.pdf$/i.test(safe) ? safe : `${safe}.pdf`;
 }
 
-// Скачать книгу себе. Ручка закрыта токеном, поэтому обычной ссылкой не
-// обойтись — забираем тело сами и отдаём браузеру готовый blob.
+// Файл книги целиком, блобом. Ручка закрыта токеном, поэтому обычной ссылкой
+// не обойтись — забираем тело сами. Нужен скачиванию и PDF-редактору: тому
+// для сохранения правок нужны все байты, а не страницы по Range.
 //
 // onProgress зовут долей 0..1, пока сервер сообщил размер: сорокамегабайтная
 // книга на мобильном интернете едет минуту, и кнопка без цифры выглядит
 // зависшей. Если браузер не умеет читать тело потоком (Safari до 14.1), просто
-// ждём blob целиком — прогресса не будет, скачивание будет.
-export async function savePdfFile(file, onProgress) {
+// ждём blob целиком — прогресса не будет, файл будет.
+export async function fetchPdfBlob(file, onProgress) {
   const token = localStorage.getItem("token");
   const response = await fetch(getPdfDownloadUrl(file.id), {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
@@ -160,7 +161,6 @@ export async function savePdfFile(file, onProgress) {
   // Content-Length разрешён к чтению из другого источника без отдельного
   // Access-Control-Expose-Headers — он в списке безопасных.
   const total = Number(response.headers.get("content-length")) || file.size || 0;
-  let blob;
   if (response.body?.getReader && total > 0 && typeof onProgress === "function") {
     const reader = response.body.getReader();
     const chunks = [];
@@ -172,11 +172,14 @@ export async function savePdfFile(file, onProgress) {
       loaded += value.length;
       onProgress(Math.min(1, loaded / total));
     }
-    blob = new Blob(chunks, { type: "application/pdf" });
-  } else {
-    blob = await response.blob();
+    return new Blob(chunks, { type: "application/pdf" });
   }
+  return response.blob();
+}
 
+// Скачать книгу себе — тот же блоб, отданный браузеру ссылкой.
+export async function savePdfFile(file, onProgress) {
+  const blob = await fetchPdfBlob(file, onProgress);
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;

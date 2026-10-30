@@ -390,6 +390,7 @@ onMounted(load);
       @close="selected = null"
       @saved="onSaved"
       @read="readBook(selected)"
+      @edit="router.push({ path: '/pdf-editor', query: { file: selected.id } })"
     />
   </div>
 </template>

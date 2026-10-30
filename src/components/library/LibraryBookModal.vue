@@ -30,7 +30,7 @@ const props = defineProps({
   // а средняя по всем книгам всё же ближе к правде, чем оценка из воздуха.
   library: { type: Array, default: () => [] },
 });
-const emit = defineEmits(["close", "saved", "read"]);
+const emit = defineEmits(["close", "saved", "read", "edit"]);
 
 const form = ref({
   title: props.file.title || "",
@@ -407,6 +407,7 @@ onMounted(loadRoadmapItems);
         <button class="lb-btn is-primary" :disabled="busy" @click="save">Сохранить</button>
         <button class="lb-btn" :disabled="busy" @click="resetResult">Читать заново</button>
         <button v-if="!file.fileMissing" class="lb-btn" @click="emit('read')">📖 Читать</button>
+        <button v-if="!file.fileMissing" class="lb-btn" @click="emit('edit')">🖍️ Редактировать</button>
         <button v-if="!file.fileMissing" class="lb-btn" :disabled="downloading" @click="download">
           {{ downloadLabel }}
         </button>

@@ -53,6 +53,12 @@ const router = createRouter({
       component: () => import("@/views/PdfReaderView.vue"),
     },
     {
+      path: "/pdf-editor",
+      name: "pdfEditor",
+      component: () => import("@/views/PdfEditorView.vue"),
+      meta: { calm: true, noWeather: true },
+    },
+    {
       path: "/vocabulary",
       name: "Vocabulary",
       component: () => import("@/views/VocabularyView.vue"),
