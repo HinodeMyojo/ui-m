@@ -1,0 +1,19 @@
+services:
+  ui-m:
+    build: .
+    ports:
+      - "5173:8080"
+    # Логи без потолка растут, пока не кончится диск сервера. Три файла по
+    # 10 МБ хватает разобрать любой сбой.
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - month_tracker
+
+networks:
+  month_tracker:
+    driver: bridge
+    external: true

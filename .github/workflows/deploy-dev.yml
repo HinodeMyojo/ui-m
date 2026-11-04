@@ -88,9 +88,9 @@ jobs:
             sudo docker compose build --build-arg UPSTREAM_PROXY=${{ secrets.UPSTREAM_PROXY }}
             sudo docker compose up -d --remove-orphans
             # После выката: старые образы (прошлая версия после пересборки остаётся
-            # без тега) и кэш сборки старше трёх суток. Свежий кэш не трогаем — иначе
-            # следующая сборка на 0.2 ядра пойдёт с нуля. || true: чистка не должна
-            # красить удачный выкат.
+            # без тега) и весь кэш сборки. Следующая сборка идёт дольше, зато диск
+            # не копит гигабайты между деплоями (05.11.2026 кэш снова дорос до
+            # 2,4 ГБ). || true: чистка не должна красить удачный выкат.
             sudo docker image prune -f >/dev/null || true
-            sudo docker builder prune -f --filter until=72h >/dev/null || true
+            sudo docker builder prune -af >/dev/null || true
             df -h / | tail -1
