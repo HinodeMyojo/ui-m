@@ -387,6 +387,10 @@ async function removeTask(t) {
   }
 }
 
+// Приветствие по-абазински: «Мыш бзи» — «добрый день» (мыш — день, бзи —
+// хороший). Подсказка при наведении — перевод. Поменять — здесь.
+const GREETING = "Мыш бзи";
+const GREETING_RU = "Добрый день (по-абазински)";
 const greetingName = computed(() => (isMentor.value ? mentorName.value : studentName.value));
 // Имена не склоняем — ставим их только в именительном: «для Егор» режет глаз.
 const studentLabel = computed(() => studentName.value || "Ученик");
@@ -403,7 +407,7 @@ const studentLabel = computed(() => studentName.value || "Ученик");
 
     <template v-else-if="data">
       <header class="way-head">
-        <div class="way-greet">Ассаляму алейкум{{ greetingName ? `, ${greetingName}` : "" }}</div>
+        <div class="way-greet" :title="GREETING_RU">{{ GREETING }}{{ greetingName ? `, ${greetingName}` : "" }}</div>
         <div class="way-sub">
           <template v-if="isMentor">Ваши рекомендации · {{ studentLabel }}</template>
           <template v-else>Сегодня, {{ humanDate(today) }}</template>
