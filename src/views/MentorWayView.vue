@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import {
   createWayTask,
@@ -22,6 +22,7 @@ import {
   todayYmd,
   weekday,
 } from "@/components/mentorDates.mjs";
+import WayDatePicker from "@/components/WayDatePicker.vue";
 
 // Страница «N» по секретной ссылке, без входа. Одна страница на двоих:
 // по ссылке наставника назначают рекомендации, по ссылке ученика отмечают
@@ -159,7 +160,20 @@ function goalText(x) {
   if (x.mode === "week") return `хотя бы ${x.goal} ${unit(x.kind, x.goal)} в неделю`;
   if (x.mode === "term") return `хотя бы ${x.goal} ${unit(x.kind, x.goal)} за весь срок`;
   if (x.kind === "pork") return "";
+  if (x.kind === "custom") {
+    // Своё дело — «хотя бы»: позвонил три раза при норме два — норма есть.
+    return x.perDay > 1 ? `хотя бы ${x.perDay} ${plural(x.perDay, "раз", "раза", "раз")} в день` : "каждый день";
+  }
   return `${x.perDay} ${plural(x.perDay, "раз", "раза", "раз")} в день`;
+}
+
+// «с 5 по 11 ноября» / «с 28 ноября по 4 декабря».
+function spanText(from, to) {
+  if (!from || !to) return "";
+  if (from === to) return `только ${humanDate(from)}`;
+  const [, fm, fd] = from.split("-").map(Number);
+  const sameMonth = from.slice(0, 7) === to.slice(0, 7);
+  return `с ${sameMonth ? fd : humanDate(from)} по ${humanDate(to)}`;
 }
 
 function taskHeading(x) {
@@ -281,8 +295,11 @@ function summaryText(t) {
     return `За весь срок: ${b.sum} из ${b.goal}${b.done ? " ✓" : ""}`;
   }
   const s = summary(t);
-  if (!s.passed) return "";
-  const parts = [`${s.full} из ${s.passed} ${plural(s.passed, "дня", "дней", "дней")} — ${t.kind === "pork" ? "держался" : "выполнено"}`];
+  // Сегодня, пока не отмечено, в счёт не идёт: «0 из 1 дня» в первый же день
+  // читалось как провал.
+  const counted = s.full + s.part + s.miss + s.none;
+  if (!counted) return "";
+  const parts = [`${s.full} из ${counted} ${plural(counted, "дня", "дней", "дней")} — ${t.kind === "pork" ? "держался" : "выполнено"}`];
   if (s.part) parts.push(`частично: ${s.part}`);
   if (s.miss) parts.push(`${t.kind === "pork" ? "сорвался" : "не вышло"}: ${s.miss}`);
   if (s.none) parts.push(`не отмечено: ${s.none}`);
@@ -364,6 +381,14 @@ async function mark(t, count) {
   }
 }
 
+// Сколько кнопок «раз» показать у цели за период: больше цели за день
+// набирать незачем (намаз «хотя бы раз в неделю» — это «сделал / нет»).
+// Уже стоящая отметка видна всегда, даже если цель потом уменьшили.
+function periodTop(t) {
+  const marked = t.marks[selectedDay.value] || 0;
+  return Math.min(t.perDay, Math.max(1, t.goal || 1, marked));
+}
+
 function markOptions(t) {
   if (isPeriod(t)) {
     if (t.kind === "pork") {
@@ -372,8 +397,15 @@ function markOptions(t) {
         { count: 0, label: "Ел", tone: "rest" },
       ];
     }
+    const top = periodTop(t);
+    if (top === 1) {
+      return [
+        { count: 1, label: "Сделал ✓", tone: "ok" },
+        { count: 0, label: "Не делал", tone: "rest" },
+      ];
+    }
     const out = [];
-    for (let n = 0; n <= t.perDay; n++) out.push({ count: n, label: String(n), tone: n ? "ok" : "rest" });
+    for (let n = 0; n <= top; n++) out.push({ count: n, label: String(n), tone: n ? "ok" : "rest" });
     return out;
   }
   if (t.perDay === 1) {
@@ -388,7 +420,11 @@ function markOptions(t) {
         ];
   }
   const out = [];
-  for (let n = 0; n <= t.perDay; n++) out.push({ count: n, label: String(n), tone: n === t.perDay ? "ok" : n === 0 ? "bad" : "part" });
+  for (let n = 0; n <= t.perDay; n++) {
+    // «Хотя бы 2 раза» у своего дела: позвонил три — жмёт «2+».
+    const label = n === t.perDay && t.kind === "custom" ? `${n}+` : String(n);
+    out.push({ count: n, label, tone: n === t.perDay ? "ok" : n === 0 ? "bad" : "part" });
+  }
   return out;
 }
 
@@ -461,14 +497,67 @@ const KINDS = [
   { kind: "namaz", label: "Намаз" },
   { kind: "custom", label: "Другое" },
 ];
-const DAY_CHIPS = [1, 3, 7, 14, 30, 40];
 
-// { id?, draftId?, kind, title, perDay, days, start, note }. У новой — draftId:
+// Как часто — двумя большими вариантами с пояснением под каждым: по одному
+// слову «за неделю» было непонятно, что недели идут подряд до конца срока.
+// «За весь срок» из формы убран по просьбе пользователя; старые такие
+// рекомендации показываются как были, а при правке режим остаётся в списке.
+const MODES = computed(() => {
+  const pork = form.value?.kind === "pork";
+  const list = [
+    {
+      mode: "daily",
+      label: "Каждый день",
+      hint: pork ? "ни одного дня со свининой" : "каждый день, сколько раз — ниже",
+    },
+    {
+      mode: "week",
+      label: pork ? "Сколько-то дней в неделю" : "Сколько-то раз в неделю",
+      hint: "в любые дни — главное набрать за неделю",
+    },
+  ];
+  if (form.value?.mode === "term") list.push({ mode: "term", label: "За весь срок", hint: "сколько-то раз за всё время" });
+  return list;
+});
+
+// Срок — готовые длины и «другой день». У «в неделю» длины кратны неделе:
+// неполная последняя неделя только сбивает с толку.
+const SPANS = computed(() =>
+  form.value?.mode === "week"
+    ? [
+        { days: 7, label: "1 неделя" },
+        { days: 14, label: "2 недели" },
+        { days: 28, label: "4 недели" },
+        { days: 56, label: "8 недель" },
+      ]
+    : [
+        { days: 7, label: "1 неделя" },
+        { days: 14, label: "2 недели" },
+        { days: 30, label: "Месяц" },
+        { days: 40, label: "40 дней" },
+      ],
+);
+
+// Окно дня начала — как на сервере (mentorStartBack / mentorStartAhead).
+const START_BACK = 30;
+const START_AHEAD = 120;
+const MAX_DAYS = 365;
+
+// { id?, draftId?, kind, title, mode, goal, perDay, days, start, note }.
+// start — «today», «tomorrow» или ГГГГ-ММ-ДД из календаря. У новой — draftId:
 // она с первой секунды пишется черновиком на сервер.
 const form = ref(null);
 const formError = ref("");
 const saving = ref(false);
 const confirmDelete = ref(null);
+// Какой календарь в форме раскрыт: «start», «end» или никакой.
+const picker = ref(null);
+// Цель за неделю больше семи — редкость, поэтому шаговик прячется за «Больше».
+const goalMore = ref(false);
+const formEl = ref(null);
+// Последний день держится, когда двигают начало, только если его выбрали в
+// календаре: «до 30 ноября» — это дата. «1 неделя» — это длина, она едет.
+let endPicked = false;
 
 function newId() {
   if (window.crypto?.randomUUID) return window.crypto.randomUUID();
@@ -480,10 +569,25 @@ function newId() {
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
 }
 
-function openCreate() {
+function resolveStart(start) {
+  if (start === "tomorrow") return addDays(today.value, 1);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(start || "")) return start;
+  return today.value;
+}
+
+function openForm(f) {
   confirmDelete.value = null;
   formError.value = "";
-  form.value = {
+  picker.value = null;
+  endPicked = false;
+  goalMore.value = f.mode !== "daily" && f.goal > 7;
+  form.value = f;
+  // Форма стоит под календарём — без прокрутки её на телефоне не видно.
+  nextTick(() => formEl.value?.scrollIntoView({ behavior: "smooth", block: "start" }));
+}
+
+function openCreate() {
+  openForm({
     draftId: newId(),
     kind: "pork",
     title: "",
@@ -493,13 +597,11 @@ function openCreate() {
     days: 7,
     start: "today",
     note: "",
-  };
+  });
 }
 
 function openDraft(d) {
-  confirmDelete.value = null;
-  formError.value = "";
-  form.value = {
+  openForm({
     draftId: d.id,
     kind: d.kind,
     title: d.title,
@@ -509,7 +611,7 @@ function openDraft(d) {
     days: d.days || 7,
     start: d.start || "today",
     note: d.note,
-  };
+  });
 }
 
 // Черновик уходит через паузу в наборе, запросы — цепочкой, по одному: иначе
@@ -593,10 +695,9 @@ function draftHeading(d) {
 }
 
 function draftDetails(d) {
-  const parts = [];
-  if (d.days >= 1) parts.push(`${d.days} ${plural(d.days, "день", "дня", "дней")}`);
-  parts.push(d.start === "tomorrow" ? "с завтра" : "с сегодня");
-  return parts.join(", ");
+  const start = resolveStart(d.start);
+  if (!(d.days >= 1)) return `с ${humanDate(start)}`;
+  return `${spanText(start, addDays(start, d.days - 1))}, ${d.days} ${plural(d.days, "день", "дня", "дней")}`;
 }
 
 // «Пишет сейчас» — черновик трогали последние две минуты; старше — просто
@@ -606,10 +707,9 @@ function draftLive(d) {
 }
 
 async function publishDraft(d) {
-  if (d.mode === "week") d = { ...d, days: WEEK_DAYS };
   if (!(d.days >= 1) || (d.kind === "custom" && !(d.title || "").trim())) {
     openDraft(d);
-    formError.value = d.days >= 1 ? "Напишите, что нужно делать" : "Сколько дней — от 1 до 365";
+    formError.value = d.days >= 1 ? "Напишите, что нужно делать" : "Выберите, до какого дня";
     return;
   }
   await closeDraft(d.id);
@@ -623,7 +723,7 @@ async function publishDraft(d) {
       perDay: d.perDay || 1,
       days: d.days,
       note: d.note,
-      startDate: d.start === "tomorrow" ? addDays(today.value, 1) : today.value,
+      startDate: resolveStart(d.start),
       draftId: d.id,
     });
     flash("Рекомендация добавлена");
@@ -644,9 +744,7 @@ async function removeDraft(d) {
 }
 
 function openEdit(t) {
-  confirmDelete.value = null;
-  formError.value = "";
-  form.value = {
+  openForm({
     id: t.id,
     kind: t.kind,
     title: t.title,
@@ -655,22 +753,10 @@ function openEdit(t) {
     // В режиме «за период» perDay — потолок отметок, а не норма.
     perDay: isPeriod(t) ? 1 : t.perDay,
     days: t.days,
+    start: t.startDate,
     note: t.note,
-  };
+  });
 }
-
-// «За весь срок» из формы убран по просьбе пользователя; старые такие
-// рекомендации показываются как были, а при правке режим остаётся в списке.
-// «За неделю» — ровно одна неделя: 7 дней от начала, срок не спрашивается.
-const WEEK_DAYS = 7;
-const MODES = computed(() => {
-  const list = [
-    { mode: "daily", label: "Каждый день" },
-    { mode: "week", label: "За неделю" },
-  ];
-  if (form.value?.mode === "term") list.push({ mode: "term", label: "За весь срок" });
-  return list;
-});
 
 // Сколько раз в день можно сделать — потолок цели за период.
 function dayCap(kind) {
@@ -693,11 +779,23 @@ function setKind(kind) {
   if (kind === "pork") form.value.perDay = 1;
   if (kind === "namaz" && form.value.perDay > 5) form.value.perDay = 5;
   clampGoal();
+  if (form.value.goal <= 7) goalMore.value = false;
 }
 
 function setMode(mode) {
   form.value.mode = mode;
-  if (mode === "week") form.value.days = WEEK_DAYS;
+  // Перешли на «в неделю» — срок до целых недель вверх: так последняя неделя
+  // не обрезана.
+  if (mode === "week") {
+    const days = Number(form.value.days) || 7;
+    form.value.days = Math.min(MAX_DAYS, Math.ceil(days / 7) * 7);
+    endPicked = false;
+  }
+  clampGoal();
+}
+
+function setGoal(n) {
+  form.value.goal = n;
   clampGoal();
 }
 
@@ -706,6 +804,114 @@ function stepGoal(delta) {
   clampGoal();
 }
 
+// Числа для выбора: раз в день у намаза 1–5, у своего 1–10; в неделю 1–7.
+const perDayChoices = computed(() => {
+  const n = form.value?.kind === "namaz" ? 5 : 10;
+  return Array.from({ length: n }, (_, i) => i + 1);
+});
+// Ровные ряды: до семи — в один, десять — двумя по пять.
+function numCols(count) {
+  return { gridTemplateColumns: `repeat(${count <= 7 ? count : 5}, 1fr)` };
+}
+const goalChoices = computed(() => Array.from({ length: Math.min(7, goalMax.value) }, (_, i) => i + 1));
+
+// --- Срок: день начала и последний день ---
+
+const formStart = computed(() => (form.value ? resolveStart(form.value.start) : ""));
+const formEnd = computed(() => {
+  const days = Number(form.value?.days) || 0;
+  return formStart.value && days >= 1 ? addDays(formStart.value, days - 1) : "";
+});
+const tomorrow = computed(() => addDays(today.value, 1));
+const startMin = computed(() => addDays(today.value, -START_BACK));
+const startMax = computed(() => addDays(today.value, START_AHEAD));
+const endMax = computed(() => (formStart.value ? addDays(formStart.value, MAX_DAYS - 1) : ""));
+
+// Какой из вариантов начала горит: сегодня, завтра или свой день.
+const startChoice = computed(() =>
+  formStart.value === today.value ? "today" : formStart.value === tomorrow.value ? "tomorrow" : "other",
+);
+const spanChoice = computed(() => {
+  const days = Number(form.value?.days) || 0;
+  return SPANS.value.some((s) => s.days === days) ? days : "other";
+});
+
+function shortDay(ymd) {
+  return `${weekday(ymd)}, ${humanDate(ymd)}`;
+}
+
+function setStart(value) {
+  const end = formEnd.value;
+  form.value.start = value;
+  if (endPicked && end) {
+    const days = daysBetween(formStart.value, end) + 1;
+    if (days >= 1 && days <= MAX_DAYS) form.value.days = days;
+    else endPicked = false;
+  }
+}
+
+function pickStart(ymd) {
+  setStart(ymd === today.value ? "today" : ymd === tomorrow.value ? "tomorrow" : ymd);
+  picker.value = null;
+}
+
+function setSpan(days) {
+  endPicked = false;
+  form.value.days = days;
+  picker.value = null;
+}
+
+function pickEnd(ymd) {
+  endPicked = true;
+  form.value.days = daysBetween(formStart.value, ymd) + 1;
+  clampGoal();
+  picker.value = null;
+}
+
+function togglePicker(which) {
+  picker.value = picker.value === which ? null : which;
+}
+
+// «5–11 ноября» / «26 ноября – 2 декабря».
+function dashSpan(from, to) {
+  if (from === to) return humanDate(from);
+  if (from.slice(0, 7) === to.slice(0, 7)) return `${Number(from.slice(8))}–${humanDate(to)}`;
+  return `${humanDate(from)} – ${humanDate(to)}`;
+}
+
+// Недели «в неделю» идут от дня начала, а не с понедельника — показываем
+// их, когда недель больше одной. Неполную последнюю называем отдельно.
+const formWeeks = computed(() => {
+  const f = form.value;
+  if (!f || f.mode !== "week" || !formEnd.value) return "";
+  const weeks = [];
+  for (let from = formStart.value; from <= formEnd.value; from = addDays(from, 7)) {
+    const weekEnd = addDays(from, 6);
+    weeks.push({ from, to: weekEnd < formEnd.value ? weekEnd : formEnd.value });
+  }
+  if (weeks.length < 2) return "";
+  const last = weeks[weeks.length - 1];
+  const short = daysBetween(last.from, last.to) + 1 < 7;
+  const shown = weeks.length <= 4 ? weeks : [weeks[0], weeks[1]];
+  let text = shown.map((w) => dashSpan(w.from, w.to)).join(", ");
+  if (shown.length < weeks.length) text += ` … всего ${weeks.length} ${plural(weeks.length, "неделя", "недели", "недель")}`;
+  if (short) {
+    const n = daysBetween(last.from, last.to) + 1;
+    text += `. Последняя неделя короче — ${n} ${plural(n, "день", "дня", "дней")}`;
+  }
+  return text;
+});
+
+// Правка сдвигает даты — сколько уже стоящих отметок окажутся за сроком.
+// Они не стираются: вернуть даты — вернутся и отметки.
+const hiddenMarks = computed(() => {
+  const f = form.value;
+  if (!f?.id || !formEnd.value) return 0;
+  const t = tasks.value.find((x) => x.id === f.id);
+  if (!t) return 0;
+  return Object.keys(t.marks).filter((d) => d < formStart.value || d > formEnd.value).length;
+});
+
 // Итог формы простыми словами — что именно получит ученик.
 const formSummary = computed(() => {
   const f = form.value;
@@ -713,40 +919,19 @@ const formSummary = computed(() => {
   const what =
     f.kind === "pork" ? "не есть свинину" : f.kind === "namaz" ? "делать намаз" : `«${(f.title || "").trim() || "…"}»`;
   let how;
-  if (f.mode === "week") how = `хотя бы ${f.goal} ${unit(f.kind, f.goal)} за неделю`;
+  if (f.mode === "week") how = `хотя бы ${f.goal} ${unit(f.kind, f.goal)} в неделю`;
   else if (f.mode === "term") how = `хотя бы ${f.goal} ${unit(f.kind, f.goal)} за весь срок`;
-  else how = f.kind === "pork" ? "каждый день" : `${f.perDay} ${plural(f.perDay, "раз", "раза", "раз")} в день`;
+  else how = goalText({ kind: f.kind, mode: "daily", perDay: f.perDay }) || "каждый день";
   const days = Number(f.days) || 0;
-  const span = days && f.mode !== "week" ? `, ${days} ${plural(days, "день", "дня", "дней")}` : "";
-  const end = formEnd.value ? ` (до ${humanDate(formEnd.value)})` : "";
-  return `${studentLabel.value}: ${what} ${how}${span}${end}`;
-});
-
-function stepDays(delta) {
-  form.value.days = Math.min(365, Math.max(1, (Number(form.value.days) || 0) + delta));
-}
-
-function stepPerDay(delta) {
-  const max = form.value.kind === "namaz" ? 5 : 10;
-  form.value.perDay = Math.min(max, Math.max(1, form.value.perDay + delta));
-}
-
-const formEnd = computed(() => {
-  if (!form.value) return "";
-  const start = form.value.id
-    ? tasks.value.find((t) => t.id === form.value.id)?.startDate
-    : form.value.start === "tomorrow"
-      ? addDays(today.value, 1)
-      : today.value;
-  const days = Number(form.value.days) || 0;
-  return start && days >= 1 ? addDays(start, days - 1) : "";
+  const span = formEnd.value ? ` — ${spanText(formStart.value, formEnd.value)}, ${days} ${plural(days, "день", "дня", "дней")}` : "";
+  return `${studentLabel.value}: ${what} ${how}${span}`;
 });
 
 async function saveForm() {
   const f = form.value;
-  const days = f.mode === "week" ? WEEK_DAYS : Math.round(Number(f.days));
-  if (!days || days < 1 || days > 365) {
-    formError.value = "Сколько дней — от 1 до 365";
+  const days = Math.round(Number(f.days));
+  if (!days || days < 1 || days > MAX_DAYS) {
+    formError.value = "Выберите, до какого дня";
     return;
   }
   if (f.kind === "custom" && !f.title.trim()) {
@@ -762,7 +947,9 @@ async function saveForm() {
     perDay: f.perDay,
     days,
     note: f.note,
-    startDate: f.start === "tomorrow" ? addDays(today.value, 1) : today.value,
+    startDate: formStart.value,
+    // При правке начало двигается только по явному флагу — см. сервер.
+    moveStart: Boolean(f.id),
     draftId: f.draftId || null,
   };
   saving.value = true;
@@ -968,7 +1155,7 @@ const studentLabel = computed(() => studentName.value || "Ученик");
         <section v-if="upcomingTasks.length" class="way-more">
           <h2 class="way-h">Скоро</h2>
           <div v-for="t in upcomingTasks" :key="t.id" class="way-line">
-            {{ taskHeading(t) }} — с {{ humanDate(t.startDate) }}, {{ t.days }} {{ plural(t.days, "день", "дня", "дней") }}
+            {{ taskHeading(t) }} — {{ spanText(t.startDate, t.endDate) }}
           </div>
         </section>
       </template>
@@ -994,46 +1181,99 @@ const studentLabel = computed(() => studentName.value || "Ученик");
 
         <button v-if="!form" class="way-btn is-big" @click="openCreate">＋ Новая рекомендация</button>
 
-        <section v-if="form" class="way-card way-form">
-          <h2 class="way-h">{{ form.id ? "Изменить рекомендацию" : "Новая рекомендация" }}</h2>
+        <section v-if="form" ref="formEl" class="way-card way-form">
+          <h2 class="way-h way-h-in">{{ form.id ? `Изменить: ${itemTitle(form)}` : "Новая рекомендация" }}</h2>
 
-          <div v-if="!form.id" class="way-kinds">
-            <button
-              v-for="k in KINDS"
-              :key="k.kind"
-              class="way-kind"
-              :class="{ 'is-on': form.kind === k.kind }"
-              @click="setKind(k.kind)"
-            >
-              {{ k.label }}
-            </button>
+          <!-- 1. Что -->
+          <div v-if="!form.id" class="way-field">
+            <span class="way-q"><i>1</i>Что делать</span>
+            <div class="way-kinds">
+              <button
+                v-for="k in KINDS"
+                :key="k.kind"
+                class="way-kind"
+                :class="{ 'is-on': form.kind === k.kind }"
+                :aria-pressed="form.kind === k.kind"
+                @click="setKind(k.kind)"
+              >
+                {{ k.label }}
+              </button>
+            </div>
           </div>
-
           <label v-if="form.kind === 'custom'" class="way-field">
-            <span>Что делать</span>
+            <span>{{ form.id ? "Что делать" : "Напишите, что именно" }}</span>
             <input v-model="form.title" maxlength="120" />
           </label>
 
+          <!-- 2. Как часто -->
           <div class="way-field">
-            <span>Как часто</span>
-            <div class="way-chips">
+            <span class="way-q"><i>{{ form.id ? 1 : 2 }}</i>Как часто</span>
+            <div class="way-modes" role="radiogroup">
               <button
                 v-for="m in MODES"
                 :key="m.mode"
-                class="way-chip is-wide"
+                class="way-mode"
+                role="radio"
                 :class="{ 'is-on': form.mode === m.mode }"
+                :aria-checked="form.mode === m.mode"
                 @click="setMode(m.mode)"
               >
-                {{ m.label }}
+                <i class="way-radio"></i>
+                <span>
+                  <b>{{ m.label }}</b>
+                  <small>{{ m.hint }}</small>
+                </span>
               </button>
             </div>
           </div>
 
-          <div v-if="form.mode !== 'daily'" class="way-field">
-            <span>
-              Хотя бы сколько {{ form.kind === "pork" ? "дней" : "раз" }}
-              {{ form.mode === "week" ? "за неделю" : "за весь срок" }}
-            </span>
+          <div v-if="form.mode === 'daily' && form.kind !== 'pork'" class="way-field">
+            <span>{{ form.kind === "custom" ? "Хотя бы сколько раз в день" : "Сколько раз в день" }}</span>
+            <div class="way-nums" :style="numCols(perDayChoices.length)">
+              <button
+                v-for="n in perDayChoices"
+                :key="n"
+                class="way-chip"
+                :class="{ 'is-on': form.perDay === n }"
+                :aria-pressed="form.perDay === n"
+                @click="form.perDay = n"
+              >
+                {{ n }}
+              </button>
+            </div>
+          </div>
+
+          <div v-if="form.mode === 'week'" class="way-field">
+            <span>{{ form.kind === "pork" ? "Хотя бы сколько дней в неделю" : "Хотя бы сколько раз в неделю" }}</span>
+            <div class="way-nums" :style="numCols(goalChoices.length)">
+              <button
+                v-for="n in goalChoices"
+                :key="n"
+                class="way-chip"
+                :class="{ 'is-on': form.goal === n && !goalMore }"
+                :aria-pressed="form.goal === n && !goalMore"
+                @click="goalMore = false; setGoal(n)"
+              >
+                {{ n }}
+              </button>
+            </div>
+            <button
+              v-if="goalMax > 7 && !goalMore"
+              class="way-link way-more-link"
+              @click="goalMore = true; setGoal(Math.max(8, form.goal))"
+            >
+              Нужно больше 7 раз
+            </button>
+            <div v-if="goalMore" class="way-stepper">
+              <button class="way-step" :disabled="form.goal <= 1" @click="stepGoal(-1)">−</button>
+              <b>{{ form.goal }}</b>
+              <button class="way-step" :disabled="form.goal >= goalMax" @click="stepGoal(1)">＋</button>
+              <span class="way-dates">раз в неделю</span>
+            </div>
+          </div>
+
+          <div v-if="form.mode === 'term'" class="way-field">
+            <span>Хотя бы сколько {{ form.kind === "pork" ? "дней" : "раз" }} за весь срок</span>
             <div class="way-stepper">
               <button class="way-step" :disabled="form.goal <= 1" @click="stepGoal(-1)">−</button>
               <b>{{ form.goal }}</b>
@@ -1041,53 +1281,96 @@ const studentLabel = computed(() => studentName.value || "Ученик");
             </div>
           </div>
 
-          <div v-if="form.mode === 'daily' && form.kind !== 'pork'" class="way-field">
-            <span>Сколько раз в день</span>
-            <div class="way-stepper">
-              <button class="way-step" :disabled="form.perDay <= 1" @click="stepPerDay(-1)">−</button>
-              <b>{{ form.perDay }}</b>
-              <button class="way-step" :disabled="form.perDay >= (form.kind === 'namaz' ? 5 : 10)" @click="stepPerDay(1)">
-                ＋
+          <!-- 3. С какого дня -->
+          <div class="way-field">
+            <span class="way-q"><i>{{ form.id ? 2 : 3 }}</i>С какого дня</span>
+            <div class="way-days3">
+              <button
+                class="way-daychip"
+                :class="{ 'is-on': startChoice === 'today' }"
+                :aria-pressed="startChoice === 'today'"
+                @click="setStart('today'); picker = null"
+              >
+                <b>Сегодня</b><small>{{ shortDay(today) }}</small>
               </button>
+              <button
+                class="way-daychip"
+                :class="{ 'is-on': startChoice === 'tomorrow' }"
+                :aria-pressed="startChoice === 'tomorrow'"
+                @click="setStart('tomorrow'); picker = null"
+              >
+                <b>Завтра</b><small>{{ shortDay(tomorrow) }}</small>
+              </button>
+              <button
+                class="way-daychip"
+                :class="{ 'is-on': startChoice === 'other', 'is-open': picker === 'start' }"
+                :aria-expanded="picker === 'start'"
+                @click="togglePicker('start')"
+              >
+                <template v-if="startChoice === 'other'"><b>{{ humanDate(formStart) }}</b><small>{{ weekday(formStart) }} · сменить</small></template>
+                <template v-else><b>Другой день</b><small>в календаре</small></template>
+              </button>
+            </div>
+            <WayDatePicker
+              v-if="picker === 'start'"
+              :model-value="formStart"
+              :today="today"
+              :min="startMin"
+              :max="startMax"
+              :range-from="formStart"
+              :range-to="formEnd"
+              caption="Нажмите первый день"
+              @update:model-value="pickStart"
+            />
+          </div>
+
+          <!-- 4. До какого дня -->
+          <div class="way-field">
+            <span class="way-q"><i>{{ form.id ? 3 : 4 }}</i>До какого дня</span>
+            <div class="way-chips">
+              <button
+                v-for="sp in SPANS"
+                :key="sp.days"
+                class="way-chip is-text"
+                :class="{ 'is-on': spanChoice === sp.days }"
+                :aria-pressed="spanChoice === sp.days"
+                @click="setSpan(sp.days)"
+              >
+                {{ sp.label }}
+              </button>
+              <button
+                class="way-chip is-text"
+                :class="{ 'is-on': spanChoice === 'other', 'is-open': picker === 'end' }"
+                :aria-expanded="picker === 'end'"
+                @click="togglePicker('end')"
+              >
+                {{ spanChoice === "other" ? `до ${humanDate(formEnd)}` : "Выбрать дату" }}
+              </button>
+            </div>
+            <WayDatePicker
+              v-if="picker === 'end'"
+              :model-value="formEnd"
+              :today="today"
+              :min="formStart"
+              :max="endMax"
+              :range-from="formStart"
+              :range-to="formEnd"
+              caption="Нажмите последний день"
+              @update:model-value="pickEnd"
+            />
+            <div v-if="formEnd" class="way-dates">
+              Последний день — <b>{{ shortDay(formEnd) }}</b> включительно
             </div>
           </div>
 
-          <div v-if="form.mode !== 'week'" class="way-field">
-            <span>Сколько дней</span>
-            <div class="way-chips">
-              <button
-                v-for="n in DAY_CHIPS"
-                :key="n"
-                class="way-chip"
-                :class="{ 'is-on': Number(form.days) === n }"
-                @click="form.days = n"
-              >
-                {{ n }}
-              </button>
-            </div>
-            <div class="way-stepper">
-              <button class="way-step" @click="stepDays(-1)">−</button>
-              <input v-model="form.days" class="way-num" type="number" inputmode="numeric" min="1" max="365" />
-              <button class="way-step" @click="stepDays(1)">＋</button>
-            </div>
+          <!-- Итог -->
+          <div class="way-summary">
+            {{ formSummary }}
+            <div v-if="formWeeks" class="way-summary-sub">Неделя считается от первого дня: {{ formWeeks }}</div>
           </div>
-
-          <div v-if="!form.id" class="way-field">
-            <span>С какого дня</span>
-            <div class="way-chips">
-              <button class="way-chip is-wide" :class="{ 'is-on': form.start === 'today' }" @click="form.start = 'today'">
-                С сегодня
-              </button>
-              <button
-                class="way-chip is-wide"
-                :class="{ 'is-on': form.start === 'tomorrow' }"
-                @click="form.start = 'tomorrow'"
-              >
-                С завтра
-              </button>
-            </div>
+          <div v-if="hiddenMarks" class="way-warn">
+            Отметок вне новых дат: {{ hiddenMarks }}. Отметки не удаляются — вернёте даты, вернутся и они.
           </div>
-          <div class="way-summary">{{ formSummary }}</div>
 
           <label class="way-field">
             <span>Пояснение <span class="way-opt">(необязательно)</span></span>
@@ -1096,14 +1379,14 @@ const studentLabel = computed(() => studentName.value || "Ученик");
 
           <div v-if="formError" class="way-error">{{ formError }}</div>
           <div class="way-actions">
-            <button class="way-btn is-primary" :disabled="saving" @click="saveForm">
-              {{ saving ? "Сохраняю…" : "Сохранить" }}
+            <button class="way-btn is-primary is-grow" :disabled="saving" @click="saveForm">
+              {{ saving ? "Сохраняю…" : form.id ? "Сохранить" : "Назначить" }}
             </button>
             <button class="way-btn" :disabled="saving" @click="cancelForm">Отмена</button>
           </div>
         </section>
 
-        <p v-if="!tasks.length && !form" class="way-empty">
+<p v-if="!tasks.length && !form" class="way-empty">
           Здесь вы назначаете, сколько дней не есть свинину, сколько раз в день делать намаз
           или что-то своё. {{ studentName || "Ученик" }} будет отмечать каждый день, а вы увидите, как получается.
         </p>
@@ -1114,7 +1397,7 @@ const studentLabel = computed(() => studentName.value || "Ученик");
             <h3>{{ taskHeading(t) }}</h3>
             <span class="way-count">день {{ dayNumber(t) }} из {{ t.days }}</span>
           </div>
-          <div class="way-dates">до {{ humanDate(t.endDate) }} включительно</div>
+          <div class="way-dates">{{ spanText(t.startDate, t.endDate) }} включительно</div>
           <p v-if="t.note" class="way-note">«{{ t.note }}»</p>
           <div v-if="isPeriod(t)" class="way-goal" :class="{ 'is-done': periodBlock(t, today).done }">
             <div class="way-goal-line">
@@ -1158,7 +1441,7 @@ const studentLabel = computed(() => studentName.value || "Ученик");
             <div class="way-card-top">
               <h3>{{ taskHeading(t) }}</h3>
             </div>
-            <div class="way-dates">с {{ humanDate(t.startDate) }}, {{ t.days }} {{ plural(t.days, "день", "дня", "дней") }}</div>
+            <div class="way-dates">{{ spanText(t.startDate, t.endDate) }}, {{ t.days }} {{ plural(t.days, "день", "дня", "дней") }}</div>
             <div v-if="confirmDelete === t.id" class="way-confirm">
               <span>Удалить рекомендацию?</span>
               <div class="way-actions">
@@ -1754,6 +2037,138 @@ input:focus {
   font-size: 20px;
 }
 
+/* Форма: шаги, «как часто», дни */
+.way-q {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.way-q i {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--green);
+  color: #fff;
+  font-size: 13px;
+  font-style: normal;
+}
+.way-modes {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.way-mode {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 60px;
+  padding: 10px 14px;
+  border-radius: 14px;
+  border: 2px solid var(--line);
+  background: #fff;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.way-mode span {
+  display: flex;
+  flex-direction: column;
+}
+.way-mode small {
+  font-size: 14px;
+  color: var(--dim);
+}
+.way-radio {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid var(--line);
+  background: #fff;
+}
+.way-mode.is-on {
+  border-color: var(--green);
+  background: var(--green-soft);
+}
+.way-mode.is-on b {
+  color: var(--green);
+}
+.way-mode.is-on .way-radio {
+  border: 7px solid var(--green);
+}
+.way-nums {
+  display: grid;
+  gap: 6px;
+}
+.way-nums .way-chip {
+  min-width: 0;
+  padding: 0;
+  min-height: 48px;
+  font-size: 18px;
+  font-weight: 600;
+}
+.way-chip.is-text {
+  font-size: 15px;
+}
+.way-more-link {
+  align-self: flex-start;
+  padding: 2px 0;
+}
+.way-chip.is-open,
+.way-daychip.is-open {
+  border-color: var(--green);
+}
+.way-days3 {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 6px;
+}
+.way-daychip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-height: 60px;
+  padding: 6px 4px;
+  border-radius: 14px;
+  border: 2px solid var(--line);
+  background: #fff;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+.way-daychip b {
+  font-size: 15px;
+}
+.way-daychip small {
+  font-size: 13px;
+  color: var(--dim);
+}
+.way-daychip.is-on {
+  border-color: var(--green);
+  background: var(--green);
+  color: #fff;
+}
+.way-daychip.is-on small {
+  color: #e3efe7;
+}
+.way-summary-sub {
+  margin-top: 6px;
+  font-size: 14px;
+  font-weight: 400;
+}
+.way-warn {
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--gold-soft);
+  color: #5a4a2a;
+  font-size: 14px;
+}
+
 /* Кнопки */
 .way-actions {
   display: flex;
@@ -1781,6 +2196,9 @@ input:focus {
   background: var(--green);
   border-color: var(--green);
   color: #fff;
+}
+.way-btn.is-grow {
+  flex: 1;
 }
 .way-btn.is-big {
   min-height: 58px;
