@@ -33,6 +33,16 @@ const props = defineProps({
 const emit = defineEmits(["close", "toggle-draft", "select", "edit-skill"]);
 
 const skill = computed(() => skillsById.value.get(props.level.skillId));
+
+// Сколько месяцев уровень уже держит. Текущий месяц засчитывается сразу, как
+// только уровень взят, поэтому «прошло 1» в первый же день читалось как
+// «месяц уже прошёл» — теперь «идёт 1-й месяц из 1».
+const termText = computed(() => {
+  const { months, monthsUsed: used, status } = props.level;
+  if (status === "active") return `идёт ${used}-й месяц из ${months}`;
+  if (used > 0) return `${status === "done" ? "занял" : "взят"} ${used} мес из ${months}`;
+  return `срок ${months} мес`;
+});
 const color = computed(() => levelColor(props.level));
 const pct = (v) => `${Math.round((v || 0) * 100)}%`;
 const notice = ref("");
@@ -338,7 +348,7 @@ const skillOf = (l) => skillsById.value.get(l.skillId);
     <div class="glc-chips">
       <span class="glc-chip" :class="`st-${level.status}`">{{ STATUS_TITLES[level.status] }}</span>
       <span v-if="!level.maintenance" class="glc-chip">
-        срок {{ level.months }} мес · прошло {{ level.monthsUsed }}
+        {{ termText }}
         <b v-if="level.monthsLeft < 0" class="glc-over">просрочен</b>
       </span>
       <span class="glc-chip">{{ pct(level.progress) }}</span>
