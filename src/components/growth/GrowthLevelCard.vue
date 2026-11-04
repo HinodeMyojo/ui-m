@@ -30,7 +30,7 @@ const props = defineProps({
   level: { type: Object, required: true },
   inDraft: { type: Boolean, default: false },
 });
-const emit = defineEmits(["close", "toggle-draft", "select"]);
+const emit = defineEmits(["close", "toggle-draft", "select", "edit-skill"]);
 
 const skill = computed(() => skillsById.value.get(props.level.skillId));
 const color = computed(() => levelColor(props.level));
@@ -139,10 +139,19 @@ async function setMaterialCurrent(m, value) {
 }
 
 // --- Действия уровня ---
+// Когда пройден: по умолчанию сегодня, можно задним числом (поездка весной).
+const todayYmd = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+};
+const doneDate = ref(todayYmd());
+watch(() => props.level.id, () => (doneDate.value = todayYmd()));
+
 async function complete() {
   const undo = props.level.status === "done";
   if (!undo && !props.level.canComplete && !confirm("Не все обязательные критерии закрыты. Засчитать всё равно?")) return;
-  if (await growthAct(() => completeGrowthLevel(props.level.id, undo))) {
+  const date = !undo && doneDate.value && doneDate.value !== todayYmd() ? doneDate.value : "";
+  if (await growthAct(() => completeGrowthLevel(props.level.id, undo, "", date))) {
     if (!undo) confetti({ particleCount: 160, spread: 90, origin: { y: 0.6 } });
   }
 }
@@ -316,7 +325,11 @@ const skillOf = (l) => skillsById.value.get(l.skillId);
     <header class="glc-head">
       <div class="glc-emoji">{{ level.emoji || "◆" }}</div>
       <div class="glc-titles">
-        <div class="glc-skill">{{ skill?.emoji }} {{ skill?.title }} · уровень {{ level.maintenance ? "∞" : level.number }}</div>
+        <div class="glc-skill">
+          {{ skill?.emoji }} {{ skill?.title }} · уровень {{ level.maintenance ? "∞" : level.number }}
+          <button v-if="skill" class="glc-skill-edit" title="Переименовать и настроить навык и его дисциплину"
+            @click="emit('edit-skill', skill.id)">✎ навык</button>
+        </div>
         <h3>{{ level.title }}</h3>
       </div>
       <button class="glc-x" title="Закрыть" @click="emit('close')">✕</button>
@@ -348,9 +361,13 @@ const skillOf = (l) => skillsById.value.get(l.skillId);
       <button v-if="pickable" class="glc-btn primary" @click="emit('toggle-draft', level.id)">
         {{ inDraft ? "− Убрать из месяца" : "+ Взять в месяц" }}
       </button>
-      <button class="glc-btn" :class="{ ok: level.canComplete && level.status !== 'done' }" @click="complete">
-        {{ level.status === "done" ? "Снять зачёт" : "✓ Засчитать" }}
-      </button>
+      <span class="glc-done">
+        <button class="glc-btn" :class="{ ok: level.canComplete && level.status !== 'done' }" @click="complete">
+          {{ level.status === "done" ? "Снять зачёт" : "✓ Засчитать" }}
+        </button>
+        <input v-if="level.status !== 'done'" v-model="doneDate" type="date" class="glc-date" :max="todayYmd()"
+          title="Когда пройден — можно задним числом" />
+      </span>
       <button class="glc-btn" @click="discOpen = !discOpen">Сделать дисциплинным</button>
       <button class="glc-btn" @click="createTasks">Задача месяца</button>
     </div>
@@ -689,6 +706,34 @@ const skillOf = (l) => skillsById.value.get(l.skillId);
   color: #9aa0b0;
 }
 
+.glc-skill-edit {
+  margin-left: 6px;
+  border: 1px solid #343746;
+  background: #1d1f29;
+  color: #c9ccdb;
+  border-radius: 6px;
+  padding: 1px 7px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.glc-done {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.glc-date {
+  background: #1d1f29;
+  border: 1px solid #343746;
+  color: #e8eaf0;
+  border-radius: 7px;
+  padding: 4px 6px;
+  font: inherit;
+  font-size: 13px;
+  color-scheme: dark;
+}
+.glc-date-done {
+  color: #8a8fa3;
+}
 .glc-head {
   display: flex;
   gap: 10px;

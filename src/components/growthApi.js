@@ -42,8 +42,9 @@ export const deleteGrowthSkill = (id) => del(`${G}/skills/${id}`);
 export const createGrowthLevel = (body) => post(`${G}/levels`, body);
 export const updateGrowthLevel = (id, patch) => put(`${G}/levels/${id}`, patch);
 export const deleteGrowthLevel = (id) => del(`${G}/levels/${id}`);
-export const completeGrowthLevel = (id, undo = false, note = "") =>
-  post(`${G}/levels/${id}/complete`, { undo, note });
+// date — когда пройден (ГГГГ-ММ-ДД), пусто — сегодня: зачёт задним числом.
+export const completeGrowthLevel = (id, undo = false, note = "", date = "") =>
+  post(`${G}/levels/${id}/complete`, { undo, note, date });
 export const makeGrowthDisciplined = (id, body) =>
   post(`${G}/levels/${id}/discipline`, { ...body, today: disciplineLogicalToday() });
 export const createGrowthTasks = (id) => post(`${G}/levels/${id}/tasks`);

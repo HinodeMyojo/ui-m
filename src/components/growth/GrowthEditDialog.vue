@@ -15,6 +15,7 @@ import {
   updateGrowthSphere,
 } from "@/components/growthApi.js";
 import { growth, growthAct, growthError } from "@/composables/useGrowth.js";
+import SkillDisciplineEditor from "./SkillDisciplineEditor.vue";
 
 // mode: sphere-new | sphere | skill-new | skill | level-new
 const props = defineProps({
@@ -211,6 +212,7 @@ async function remove() {
           <datalist id="ged-blocks"><option v-for="b in blocks" :key="b" :value="b" /></datalist>
           <small>Когда уровень навыка взят в месяц, в дисциплине появляется этот блок.</small>
         </label>
+        <SkillDisciplineEditor v-if="!isNew" :block="(target?.disciplineBlock || target?.title || '').trim()" />
         <label>Страна (для путешествий)
           <input v-model="form.travelCountry" maxlength="2" placeholder="JP, IT, KR…" class="ged-code" />
           <small>Код ISO. Уровни навыка будут брать места из вишлиста страны в «Путешествиях».</small>

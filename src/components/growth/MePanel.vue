@@ -26,6 +26,7 @@ import {
 import { disciplineLogicalToday } from "@/components/api.js";
 import { heroAge, heroAura, heroFire, yearsWord } from "./heroRhythm.js";
 import GrowthGraph from "./GrowthGraph.vue";
+import GrowthEditDialog from "./GrowthEditDialog.vue";
 import GrowthLevelCard from "./GrowthLevelCard.vue";
 import GrowthRank from "./GrowthRank.vue";
 import WhistleBadge from "./WhistleBadge.vue";
@@ -38,6 +39,14 @@ const age = computed(() => heroAge(profile.value.birthDate));
 const fire = computed(() => heroFire(disciplineMonth.value, disciplineLogicalToday()));
 const aura = computed(() => heroAura(board.value?.aura, fire.value.streak));
 const selected = computed(() => levelsById.value.get(selectedLevelId.value) || null);
+
+// Правка навыка прямо из карточки уровня: раньше она пряталась за режимом
+// «Править ветку», и её не находили.
+const skillDialog = ref(null);
+function editSkill(id) {
+  const skill = skillsById.value.get(id);
+  if (skill) skillDialog.value = { mode: "skill", target: skill };
+}
 
 // Черновик выбора месяца: правится кликами по графу и в мастере. Раньше он
 // жил только на экране и пропадал при закрытии панели — теперь лежит в
@@ -269,7 +278,7 @@ const doneCount = computed(() => (board.value?.levels || []).filter((l) => l.sta
           <transition name="me-card">
             <div v-if="selected" class="me-card">
               <GrowthLevelCard :level="selected" :in-draft="draft.has(selected.id)"
-                @close="selectedLevelId = null" @toggle-draft="toggleDraft" />
+                @close="selectedLevelId = null" @toggle-draft="toggleDraft" @edit-skill="editSkill" />
             </div>
           </transition>
         </div>
@@ -337,6 +346,7 @@ const doneCount = computed(() => (board.value?.levels || []).filter((l) => l.sta
       </div>
     </section>
   </transition>
+  <GrowthEditDialog v-if="skillDialog" v-bind="skillDialog" @close="skillDialog = null" />
 </template>
 
 <style scoped>

@@ -232,7 +232,7 @@ const STATUS_ICONS = { done: "✓", active: "★", paused: "⏸", maintain: "♾
       <input v-model="query" class="gg-search" placeholder="Найти навык или уровень" />
       <label class="gg-check"><input v-model="hideDone" type="checkbox" /> скрыть пройденные</label>
       <button class="gg-edit-toggle" :class="{ on: editMode }" @click="editMode = !editMode">
-        {{ editMode ? "✓ Готово" : "✎ Править ветку" }}
+        {{ editMode ? "✓ Готово" : "✎ Править навыки" }}
       </button>
     </div>
     <div v-if="editMode" class="gg-edit-bar">
