@@ -52,7 +52,18 @@ jobs:
           script: |
             set -e
             cd /home/hinode/planner/test/ui
+            # Перед сборкой: меньше 3 ГБ свободно — сначала чистка. 04.11.2026 диск
+            # кончился посреди сборки, и Postgres упал с No space left on device.
+            if [ "$(df --output=avail -k / | tail -1)" -lt 3000000 ]; then
+              sudo docker image prune -f >/dev/null || true
+              sudo docker builder prune -af >/dev/null || true
+            fi
             sudo docker compose -p test-ui -f docker-compose.test.yaml build --build-arg UPSTREAM_PROXY=${{ secrets.UPSTREAM_PROXY }}
             sudo docker compose -p test-ui -f docker-compose.test.yaml up -d --remove-orphans
-            sudo docker builder prune -f >/dev/null
-            df -h /
+            # После выката: старые образы (прошлая версия после пересборки остаётся
+            # без тега) и кэш сборки старше трёх суток. Свежий кэш не трогаем — иначе
+            # следующая сборка на 0.2 ядра пойдёт с нуля. || true: чистка не должна
+            # красить удачный выкат.
+            sudo docker image prune -f >/dev/null || true
+            sudo docker builder prune -f --filter until=72h >/dev/null || true
+            df -h / | tail -1
