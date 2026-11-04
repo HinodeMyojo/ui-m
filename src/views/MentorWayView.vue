@@ -39,6 +39,9 @@ let toastTimer = 0;
 const today = ref(todayYmd());
 // Отметки в пути: ключ «задача:день».
 const pending = reactive({});
+// Растёт на каждую свою запись. Опрос, ушедший до записи, свой ответ
+// выбрасывает: он мог вернуться позже и показать то, что было до неё.
+let writeSeq = 0;
 const isMentor = computed(() => data.value?.role === "mentor");
 const mentorName = computed(() => data.value?.mentorName || "");
 const studentName = computed(() => data.value?.studentName || "");
@@ -82,9 +85,10 @@ async function poll() {
   if (document.visibilityState !== "visible" || polling || !data.value || fatal.value) return;
   if (Object.keys(pending).length) return;
   polling = true;
+  const seq = writeSeq;
   try {
     const fresh = await fetchWay(token.value);
-    if (!Object.keys(pending).length) data.value = fresh;
+    if (seq === writeSeq && !Object.keys(pending).length) data.value = fresh;
     today.value = todayYmd();
   } catch {
     // Связь моргнула — попробуем на следующем круге.
@@ -267,6 +271,7 @@ async function mark(t, count) {
   if (next === null) delete t.marks[day];
   else t.marks[day] = next;
   try {
+    writeSeq++;
     data.value = await setWayMark(token.value, t.id, day, next);
   } catch (e) {
     if (before === undefined) delete t.marks[day];
@@ -301,10 +306,12 @@ const noteDraft = ref("");
 const noteState = ref("");
 let noteTimer = 0;
 
+// С сервера в поле — только когда человек не пишет и ничего не уходит: иначе
+// ответ опроса стирал бы набранное.
 watch(
   [selectedDay, () => data.value],
   () => {
-    if (noteState.value === "typing") return;
+    if (noteState.value === "typing" || noteState.value === "saving") return;
     noteDraft.value = notesByDay.value[selectedDay.value] || "";
   },
   { immediate: true },
@@ -322,11 +329,13 @@ async function saveNote() {
   const day = selectedDay.value;
   const text = noteDraft.value;
   noteState.value = "saving";
+  writeSeq++;
   try {
     data.value = await setWayNote(token.value, day, text);
-    noteState.value = "saved";
+    // Пока сохранялось, дописали ещё — остаёмся в наборе, допишется следом.
+    if (noteState.value === "saving") noteState.value = "saved";
   } catch (e) {
-    noteState.value = "";
+    if (noteState.value === "saving") noteState.value = "";
     flash(e.message);
   }
 }
@@ -338,6 +347,7 @@ watch(selectedDay, (_, old) => {
     clearTimeout(noteTimer);
     const text = noteDraft.value;
     noteState.value = "";
+    writeSeq++;
     setWayNote(token.value, old, text).then((v) => (data.value = v), (e) => flash(e.message));
   }
   noteState.value = "";
@@ -345,6 +355,11 @@ watch(selectedDay, (_, old) => {
 });
 
 const recentNotes = computed(() => (data.value?.notes || []).slice(0, 10));
+
+function openNoteDay(day) {
+  selectedDay.value = day;
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
 
 // --- Наставник: новая рекомендация и правка ---
 
@@ -449,6 +464,7 @@ async function cancelForm() {
   if (!f?.draftId) return;
   await closeDraft(f.draftId);
   try {
+    writeSeq++;
     data.value = await deleteWayDraft(token.value, f.draftId);
   } catch (e) {
     flash(e.message);
@@ -486,6 +502,7 @@ async function publishDraft(d) {
   }
   await closeDraft(d.id);
   try {
+    writeSeq++;
     data.value = await createWayTask(token.value, {
       kind: d.kind,
       title: d.title,
@@ -505,6 +522,7 @@ async function publishDraft(d) {
 async function removeDraft(d) {
   await closeDraft(d.id);
   try {
+    writeSeq++;
     data.value = await deleteWayDraft(token.value, d.id);
   } catch (e) {
     flash(e.message);
@@ -567,6 +585,7 @@ async function saveForm() {
   formError.value = "";
   if (f.draftId) await closeDraft(f.draftId);
   try {
+    writeSeq++;
     data.value = f.id ? await updateWayTask(token.value, f.id, body) : await createWayTask(token.value, body);
     form.value = null;
     flash(f.id ? "Сохранено" : "Рекомендация добавлена");
@@ -582,6 +601,7 @@ async function saveForm() {
 async function removeTask(t) {
   confirmDelete.value = null;
   try {
+    writeSeq++;
     data.value = await deleteWayTask(token.value, t.id);
     flash("Удалено");
   } catch (e) {
@@ -617,7 +637,7 @@ const studentLabel = computed(() => studentName.value || "Ученик");
       </header>
 
       <!-- ============ Календарь — обоим ============ -->
-      <section v-if="tasks.length" class="way-card way-cal">
+      <section v-if="tasks.length || recentNotes.length" class="way-card way-cal">
         <div class="way-cal-head">
           <button class="way-step" aria-label="Предыдущий месяц" @click="calMonth = addMonths(calMonth, -1)">‹</button>
           <b>{{ monthTitle(calMonth) }}</b>
@@ -630,7 +650,7 @@ const studentLabel = computed(() => studentName.value || "Ученик");
             <button
               v-else
               class="way-cal-day"
-              :class="[`ag-${c.state}`, { 'is-today': c.day === today, 'is-sel': c.day === selectedDay }]"
+              :class="[`ag-${c.state}`, { 'is-today': c.day === today, 'is-sel': c.day === selectedDay, 'has-note': notesByDay[c.day] }]"
               :disabled="c.day > today"
               :aria-pressed="c.day === selectedDay"
               @click="selectedDay = c.day"
@@ -649,7 +669,7 @@ const studentLabel = computed(() => studentName.value || "Ученик");
       </section>
 
       <!-- Наставнику — что было в выбранный день -->
-      <section v-if="isMentor && tasks.length" class="way-card is-flat">
+      <section v-if="isMentor && (tasks.length || recentNotes.length)" class="way-card is-flat">
         <h2 class="way-h way-h-in">{{ dayTitle(selectedDay) }}</h2>
         <p v-if="!dayTasks.length" class="way-sum">В этот день рекомендаций нет.</p>
         <div v-for="t in dayTasks" :key="t.id" class="way-dd">
@@ -728,7 +748,7 @@ const studentLabel = computed(() => studentName.value || "Ученик");
           <div class="way-sum">{{ summaryText(t) }}</div>
         </article>
 
-        <section v-if="dayTasks.length" class="way-card way-notebox">
+        <section v-if="selectedDay <= today" class="way-card way-notebox">
           <label for="way-note">Заметка к дню<span class="way-opt"> — увидит {{ mentorName || "наставник" }}</span></label>
           <textarea
             id="way-note"
@@ -741,6 +761,13 @@ const studentLabel = computed(() => studentName.value || "Ученик");
           <div class="way-hint">
             {{ noteState === "saving" ? "Сохраняю…" : noteState === "saved" ? "Сохранено" : "" }}
           </div>
+        </section>
+
+        <section v-if="recentNotes.length" class="way-more">
+          <h2 class="way-h">Мои заметки</h2>
+          <button v-for="n in recentNotes" :key="n.date" class="way-line way-line-btn" @click="openNoteDay(n.date)">
+            <b>{{ dayTitle(n.date) }}:</b> {{ n.text }}
+          </button>
         </section>
 
         <section v-if="upcomingTasks.length" class="way-more">
@@ -918,9 +945,9 @@ const studentLabel = computed(() => studentName.value || "Ученик");
 
         <section v-if="recentNotes.length" class="way-more">
           <h2 class="way-h">Заметки · {{ studentLabel }}</h2>
-          <div v-for="n in recentNotes" :key="n.date" class="way-line">
+          <button v-for="n in recentNotes" :key="n.date" class="way-line way-line-btn" @click="openNoteDay(n.date)">
             <b>{{ dayTitle(n.date) }}:</b> {{ n.text }}
-          </div>
+          </button>
         </section>
       </template>
 
@@ -1104,6 +1131,21 @@ const studentLabel = computed(() => studentName.value || "Ученик");
 .way-cal-day.is-sel {
   outline: 3px solid var(--text);
   outline-offset: 1px;
+}
+/* День с заметкой ученика — точка в углу клетки */
+.way-cal-day {
+  position: relative;
+}
+.way-cal-day.has-note::after {
+  content: "";
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--gold);
+  box-shadow: 0 0 0 1.5px #fff;
 }
 .way-cal-today {
   align-self: center;
@@ -1501,6 +1543,14 @@ input:focus {
   background: var(--card);
   border: 1px solid var(--line);
   font-size: 15px;
+}
+.way-line-btn {
+  width: 100%;
+  text-align: left;
+  color: var(--text);
+  font: inherit;
+  font-size: 15px;
+  cursor: pointer;
 }
 .way-legend {
   display: flex;
