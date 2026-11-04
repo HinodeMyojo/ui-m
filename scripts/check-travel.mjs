@@ -466,6 +466,14 @@ check("«N»: страница по ссылке объявлена гостев
     ? null
     : "без meta.public человека без учётки уведёт на /login";
 });
+check("«N»: короткая ссылка своего домена — гостевая и только по hex-токену", () => {
+  const at = ROUTER.indexOf('name: "MentorWayShort"');
+  if (at < 0) return "маршрута MentorWayShort нет";
+  const block = ROUTER.slice(ROUTER.lastIndexOf("path:", at), at + 300); // «{» есть и в самом шаблоне пути
+  if (!/meta:\s*{\s*public:\s*true/.test(block)) return "без meta.public гость уйдёт на /login";
+  if (!block.includes("[0-9a-f]{16,64}")) return "токен не ограничен hex — короткий маршрут перехватит разделы вроде /budget";
+  return ROUTER.includes("isWayHost &&") ? null : "на своём домене открывается весь планировщик";
+});
 
 console.log(`\nПроверок: ${checked}, провалено: ${failed}`);
 process.exit(failed ? 1 : 0);

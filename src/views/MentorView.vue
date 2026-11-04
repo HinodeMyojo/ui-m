@@ -6,6 +6,7 @@ import {
   createMentorPair,
   deleteMentorPair,
   fetchMentorPairs,
+  mentorFallbackLink,
   mentorLink,
   regenerateMentorLinks,
   updateMentorPair,
@@ -63,8 +64,9 @@ async function create() {
   }
 }
 
-async function copy(token, who) {
-  flash((await copyText(mentorLink(token))) ? `Ссылка ${who} скопирована` : "Не вышло скопировать");
+async function copy(token, who, fallback = false) {
+  const link = fallback ? mentorFallbackLink(token) : mentorLink(token);
+  flash((await copyText(link)) ? `Ссылка ${who} скопирована` : "Не вышло скопировать");
 }
 
 function startEdit(p) {
@@ -152,6 +154,7 @@ onMounted(load);
             <div class="mtv-row">
               <button class="sv-btn is-small is-primary" @click="copy(p.mentorToken, 'наставника')">Копировать</button>
               <a class="sv-btn is-small" :href="mentorLink(p.mentorToken)" target="_blank">Открыть</a>
+              <button class="sv-btn is-small is-ghost" @click="copy(p.mentorToken, 'наставника', true)">Запасная</button>
             </div>
           </div>
           <div class="mtv-link">
@@ -159,6 +162,7 @@ onMounted(load);
             <div class="mtv-row">
               <button class="sv-btn is-small is-primary" @click="copy(p.studentToken, 'для отметок')">Копировать</button>
               <a class="sv-btn is-small" :href="mentorLink(p.studentToken)" target="_blank">Открыть</a>
+              <button class="sv-btn is-small is-ghost" @click="copy(p.studentToken, 'для отметок', true)">Запасная</button>
             </div>
           </div>
         </div>

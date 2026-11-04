@@ -1,3 +1,4 @@
+import { WAY_HOST } from "@/components/mentorDates.mjs";
 import { createRouter, createWebHistory } from "vue-router";
 import { routeAllowed } from "@/composables/useFeatures.js";
 import HomeView from "../views/HomeView.vue";
@@ -272,6 +273,14 @@ const router = createRouter({
       meta: { public: true, calm: true },
     },
     {
+      // Та же страница на своём домене: hinodemideast.ru/<токен>. Токен —
+      // только hex, поэтому с разделами вида /budget не путается.
+      path: "/:token([0-9a-f]{16,64})",
+      name: "MentorWayShort",
+      component: () => import("../views/MentorWayView.vue"),
+      meta: { public: true, calm: true },
+    },
+    {
       // Гостевой доступ по ссылке — вход в приложение не нужен.
       path: "/travel/shared/:token",
       name: "SharedTrip",
@@ -282,7 +291,14 @@ const router = createRouter({
 });
 
 // Navigation guard
+const isWayHost = window.location.hostname === WAY_HOST || window.location.hostname === `www.${WAY_HOST}`;
 router.beforeEach((to, from, next) => {
+  // Свой домен — только под страницу «N»: всё прочее (вход, главная, разделы)
+  // там не открывается, а показывает «ссылка не открывается».
+  if (isWayHost && to.name !== "MentorWayShort" && to.name !== "MentorWay") {
+    next({ name: "MentorWay", params: { token: "-" } });
+    return;
+  }
   const isAuth = localStorage.getItem("token");
   // Гостевые страницы открываются по ссылке, без входа в приложение.
   if (to.meta?.public) {

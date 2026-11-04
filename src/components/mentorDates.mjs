@@ -1,6 +1,9 @@
 // Даты модуля «N» — строки ГГГГ-ММ-ДД. Отдельно от API, чтобы их
 // проверял npm run check без браузера.
 
+// Свой домен страницы «N»: ссылки вида https://hinodemideast.ru/<токен>.
+export const WAY_HOST = "hinodemideast.ru";
+
 // «Сегодня» — в поясе того, кто держит телефон: сервер его не знает.
 const pad = (n) => String(n).padStart(2, "0");
 
