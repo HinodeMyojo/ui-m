@@ -420,7 +420,7 @@ check("словарь: аббревиатура ищется по первым �
 });
 
 const mentorDates = await import("../src/components/mentorDates.mjs");
-check("«Путь»: сдвиг дат через месяц, год и переход на летнее время", () => {
+check("«N»: сдвиг дат через месяц, год и переход на летнее время", () => {
   const d = mentorDates;
   const got = [
     d.addDays("2026-11-28", 6), // конец рекомендации на 7 дней
@@ -435,15 +435,15 @@ check("«Путь»: сдвиг дат через месяц, год и пере
   const want = "2026-12-04 2027-01-01 2028-02-29 2026-03-30 2026-10-31 3 2 0";
   return got === want ? null : `${got}\n      ждали ${want}`;
 });
-check("«Путь»: склонение «день / дня / дней»", () => {
+check("«N»: склонение «день / дня / дней»", () => {
   const p = (n) => `${n} ${mentorDates.plural(n, "день", "дня", "дней")}`;
   const got = [0, 1, 2, 5, 11, 12, 14, 21, 22, 40, 101, 111].map(p).join(", ");
   const want = "0 дней, 1 день, 2 дня, 5 дней, 11 дней, 12 дней, 14 дней, 21 день, 22 дня, 40 дней, 101 день, 111 дней";
   return got === want ? null : got;
 });
-check("«Путь»: страница по ссылке объявлена гостевой", () => {
-  const at = ROUTER.indexOf('path: "/way/:token"');
-  if (at < 0) return "маршрута /way/:token нет";
+check("«N»: страница по ссылке объявлена гостевой", () => {
+  const at = ROUTER.indexOf('path: "/n/:token"');
+  if (at < 0) return "маршрута /n/:token нет";
   return /meta:\s*{\s*public:\s*true/.test(ROUTER.slice(at, at + 300))
     ? null
     : "без meta.public человека без учётки уведёт на /login";

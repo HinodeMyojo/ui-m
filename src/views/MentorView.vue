@@ -12,8 +12,8 @@ import {
 } from "@/components/mentorApi.js";
 import { copyText } from "@/components/survey/clipboard.js";
 
-// Раздел «Путь»: здесь только заводят пару ссылок и раздают их. Сама работа —
-// рекомендации наставника и отметки ученика — идёт на странице /way/:token,
+// Раздел «N»: здесь только заводят пару ссылок и раздают их. Сама работа —
+// рекомендации наставника и отметки ученика — идёт на странице /n/:token,
 // без входа. Спека — docs/mentor-module.md (back-m).
 
 const router = useRouter();
@@ -101,7 +101,7 @@ onMounted(load);
 <template>
   <div class="sv-scope mtv">
     <div class="mtv-head">
-      <h1>🌙 Путь</h1>
+      <h1>🌙 N</h1>
       <button class="sv-btn" @click="router.push('/')">← Назад</button>
     </div>
     <p class="sv-muted mtv-lead">

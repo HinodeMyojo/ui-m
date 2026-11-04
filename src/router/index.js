@@ -264,9 +264,9 @@ const router = createRouter({
       component: () => import("../views/MentorView.vue"),
     },
     {
-      // «Путь» по секретной ссылке — наставнику и ученику, без входа. Своя
+      // «N» по секретной ссылке — наставнику и ученику, без входа. Своя
       // светлая страница, поэтому calm: листопад над кнопками отметок мешает.
-      path: "/way/:token",
+      path: "/n/:token",
       name: "MentorWay",
       component: () => import("../views/MentorWayView.vue"),
       meta: { public: true, calm: true },

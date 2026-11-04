@@ -1,4 +1,4 @@
-// API модуля «Путь» — docs/mentor-module.md (back-m).
+// API модуля «N» — docs/mentor-module.md (back-m).
 // Две стороны: владелец пары (с входом) и люди по ссылкам (без входа).
 
 import { API_BASE_URL, authorizedFetch } from "@/components/api.js";
@@ -32,7 +32,7 @@ export const updateMentorPair = (id, names) => own(`/${id}`, { method: "PUT", bo
 export const regenerateMentorLinks = (id) => own(`/${id}/tokens`, { method: "POST" });
 export const deleteMentorPair = (id) => own(`/${id}`, { method: "DELETE" });
 
-export const mentorLink = (token) => `${window.location.origin}/way/${token}`;
+export const mentorLink = (token) => `${window.location.origin}/n/${token}`;
 
 // --- По ссылке ---
 

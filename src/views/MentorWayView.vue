@@ -11,7 +11,7 @@ import {
 } from "@/components/mentorApi.js";
 import { addDays, daysBetween, humanDate, plural, todayYmd, weekday } from "@/components/mentorDates.mjs";
 
-// Страница «Путь» по секретной ссылке, без входа. Одна страница на двоих:
+// Страница «N» по секретной ссылке, без входа. Одна страница на двоих:
 // по ссылке наставника назначают рекомендации, по ссылке ученика отмечают
 // дни. Чья ссылка — говорит сервер. Спека — docs/mentor-module.md (back-m).
 
@@ -65,7 +65,7 @@ onMounted(() => {
   prevTitle = document.title;
   document.body.style.background = "#f6f1e7";
   document.documentElement.style.background = "#f6f1e7";
-  document.title = "Путь";
+  document.title = "N";
   document.addEventListener("visibilitychange", onVisible);
   load();
 });
