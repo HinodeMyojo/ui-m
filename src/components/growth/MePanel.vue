@@ -6,6 +6,7 @@
 import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { seedGrowth, setGrowthMonth, updateGrowthProfile } from "@/components/growthApi.js";
 import {
+  currentWhistle,
   closeMe,
   disciplineMonth,
   growth,
@@ -26,6 +27,7 @@ import { disciplineLogicalToday } from "@/components/api.js";
 import { heroAge, heroAura, heroFire, yearsWord } from "./heroRhythm.js";
 import GrowthGraph from "./GrowthGraph.vue";
 import GrowthLevelCard from "./GrowthLevelCard.vue";
+import GrowthRank from "./GrowthRank.vue";
 import WhistleBadge from "./WhistleBadge.vue";
 
 const HeroScene = defineAsyncComponent(() => import("@/components/hero/HeroScene.vue"));
@@ -151,23 +153,24 @@ const doneCount = computed(() => (board.value?.levels || []).filter((l) => l.sta
     <section v-if="meOpen" class="me" role="dialog" aria-label="Я">
       <aside class="me-hero">
         <div class="me-hero-scene">
-          <HeroScene action="campfire" :whistle="profile.whistle || 'bell'" :age="age.years"
+          <HeroScene action="campfire" :whistle="currentWhistle.key" :age="age.years"
             :fire="fire.fire" :streak="fire.streak" :aura="aura.level" />
         </div>
-        <div class="me-hero-rank">
-          <WhistleBadge :whistle="profile.whistle || 'bell'" :aura="aura.level" :size="54" />
+        <div class="me-hero-rank" title="Ранг и аура" @click="meTab = 'rank'">
+          <WhistleBadge :whistle="currentWhistle.key" :aura="aura.level" :size="72" />
           <div>
             <b>{{ profile.heroName || "Хиноде" }}</b>
-            <span>{{ (WHISTLES[profile.whistle] || WHISTLES.bell).title }}</span>
+            <span :style="{ color: currentWhistle.color }">{{ currentWhistle.title }}</span>
             <span>{{ age.years }} {{ yearsWord(age.years) }} · {{ age.months }} мес · {{ age.days }} дн</span>
           </div>
         </div>
         <div v-if="board" class="me-stats">
           <div><span>Пройдено уровней</span><b>{{ doneCount }}</b></div>
           <div><span>Взято в месяц</span><b>{{ board.month.levelIds.length }}</b></div>
-          <div><span>Тело (30 дней)</span><b>{{ board.aura.bodyDone }}/{{ board.aura.bodyTotal }}</b></div>
+          <div><span>Тренировки за 30 дней</span><b>{{ board.aura.bodyDone }}/{{ board.aura.bodyTotal }}</b></div>
           <div><span>Доход, ср. 3 мес</span><b>{{ money(board.aura.goldAmount) }}</b></div>
-          <div><span>Золото к цели</span><b>{{ pct(board.aura.gold) }}</b></div>
+          <div><span>Доход к цели</span><b>{{ pct(board.aura.gold) }}</b></div>
+          <div><span>Стрик дисциплины</span><b>{{ fire.streak }} дн</b></div>
         </div>
         <div v-if="board?.events?.length" class="me-chron-mini">
           <div class="me-label">Летопись</div>
@@ -182,6 +185,7 @@ const doneCount = computed(() => (board.value?.levels || []).filter((l) => l.sta
           <h2>Я</h2>
           <nav class="me-tabs">
             <button :class="{ on: meTab === 'tree' }" @click="meTab = 'tree'">Ветка</button>
+            <button :class="{ on: meTab === 'rank' }" @click="meTab = 'rank'">Ранг и аура</button>
             <button :class="{ on: meTab === 'month' }" @click="meTab = 'month'">
               Месяц <i v-if="board?.month?.needPick" class="me-dot" />
             </button>
@@ -212,6 +216,10 @@ const doneCount = computed(() => (board.value?.levels || []).filter((l) => l.sta
                 @close="selectedLevelId = null" @toggle-draft="toggleDraft" />
             </div>
           </transition>
+        </div>
+
+        <div v-else-if="board && meTab === 'rank'" class="me-rank">
+          <GrowthRank :aura="aura" :fire="fire" @hero-tab="meTab = 'hero'" />
         </div>
 
         <div v-else-if="board && meTab === 'month'" class="me-month">
@@ -267,7 +275,7 @@ const doneCount = computed(() => (board.value?.levels || []).filter((l) => l.sta
             <label>Сон с <input v-model="heroForm.sleepFrom" type="time" /></label>
             <label>до <input v-model="heroForm.sleepTo" type="time" /></label>
           </div>
-          <label>Цель по доходу в месяц, ₽ (золото ауры) <input v-model="heroForm.goldTarget" type="number" /></label>
+          <label>Цель по доходу в месяц, ₽ (на ней доля «Доход» в ауре полная) <input v-model="heroForm.goldTarget" type="number" /></label>
           <button class="me-btn primary" @click="saveHero">Сохранить</button>
         </div>
       </div>
@@ -315,6 +323,7 @@ const doneCount = computed(() => (board.value?.levels || []).filter((l) => l.sta
 }
 
 .me-hero-rank {
+  cursor: pointer;
   display: flex;
   gap: 10px;
   align-items: center;
@@ -490,6 +499,13 @@ const doneCount = computed(() => (board.value?.levels || []).filter((l) => l.sta
   background: #16171e;
   border: 1px solid #2a2d38;
   box-shadow: -10px 0 40px #000a;
+}
+
+.me-rank {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .me-month,

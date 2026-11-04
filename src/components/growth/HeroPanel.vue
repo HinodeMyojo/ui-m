@@ -8,6 +8,8 @@ import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref } from 
 import { fetchDisciplineMonth, disciplineLogicalToday } from "@/components/api.js";
 import { seedGrowth, setGrowthDayState, updateGrowthProfile } from "@/components/growthApi.js";
 import {
+  AURA_LEVELS,
+  currentWhistle,
   disciplineMonth,
   growth,
   growthAct,
@@ -15,9 +17,9 @@ import {
   levelColor,
   loadGrowth,
   MONTH_NAMES_IN,
+  nextWhistle,
   openMe,
   pickedLevels,
-  WHISTLES,
 } from "@/composables/useGrowth.js";
 import { useHeroWeather } from "@/components/hero/useHeroWeather.js";
 import {
@@ -77,7 +79,7 @@ onBeforeUnmount(() => {
 const board = computed(() => growth.value);
 const profile = computed(() => board.value?.profile || {});
 const dayState = computed(() => board.value?.dayState || "good");
-const whistle = computed(() => WHISTLES[profile.value.whistle] || WHISTLES.bell);
+const whistle = currentWhistle;
 const age = computed(() => heroAge(profile.value.birthDate, now.value));
 const fire = computed(() => heroFire(discipline.value, disciplineLogicalToday()));
 const aura = computed(() => heroAura(board.value?.aura, fire.value.streak));
@@ -121,6 +123,22 @@ async function seed() {
   seeding.value = false;
 }
 
+const auraValues = computed(() => {
+  const a = board.value?.aura || {};
+  return { body: a.bodyTotal ? `${a.bodyDone}/${a.bodyTotal}` : "—" };
+});
+const auraTips = computed(() => {
+  const a = board.value?.aura || {};
+  const target = board.value?.profile?.goldTarget || 0;
+  return {
+    body: a.bodyTotal
+      ? `Закрыто ${a.bodyDone} из ${a.bodyTotal} запланированных тренировок за 30 дней`
+      : "В «Спорте» нет запланированных тренировок за 30 дней",
+    gold: `Средний доход за 3 месяца: ${Math.round(a.goldAmount || 0).toLocaleString("ru-RU")} ₽ из цели ${target.toLocaleString("ru-RU")} ₽`,
+    fire: `${fire.value.streak} дней подряд с закрытой дисциплиной; полная доля — с 30`,
+  };
+});
+
 function pct(v) {
   return `${Math.round((v || 0) * 100)}%`;
 }
@@ -129,10 +147,14 @@ function pct(v) {
 <template>
   <aside class="hero-panel">
     <header class="hp-top">
-      <button class="hp-rank" :title="`${whistle.title} · аура ${aura.level}/4`" @click="openMe(null, 'tree')">
-        <WhistleBadge :whistle="profile.whistle || 'bell'" :aura="aura.level" :size="46" />
+      <button class="hp-rank" title="Ранг и аура: что значат и как растут" @click="openMe(null, 'rank')">
+        <WhistleBadge :whistle="whistle.key" :aura="aura.level" :size="76" />
         <div class="hp-rank-text">
-          <b>{{ whistle.title }}</b>
+          <b :style="{ color: whistle.color }">{{ whistle.title }}</b>
+          <span v-if="nextWhistle" class="hp-next">
+            до «{{ nextWhistle.title }}» {{ pct(nextWhistle.progress) }}
+            <i><em :style="{ width: pct(nextWhistle.progress), background: nextWhistle.color }" /></i>
+          </span>
           <span>{{ age.years }} {{ yearsWord(age.years) }} · {{ age.months }} мес · {{ age.days }} дн</span>
         </div>
       </button>
@@ -149,7 +171,7 @@ function pct(v) {
         :fire="fire.fire"
         :streak="fire.streak"
         :aura="aura.level"
-        :whistle="profile.whistle || 'bell'"
+        :whistle="whistle.key"
         :age="age.years"
         :mood="mood"
         :weather="weather"
@@ -179,11 +201,21 @@ function pct(v) {
       <button :class="{ on: dayState === 'weak' }" title="Слабый день" @click="setDay('weak')">🪫</button>
     </div>
 
-    <div class="hp-aura" title="Аура: тело, золото и костёр">
-      <div class="hp-aura-row"><span>Тело</span><i><em :style="{ width: pct(aura.body) }" /></i></div>
-      <div class="hp-aura-row"><span>Золото</span><i><em class="gold" :style="{ width: pct(aura.gold) }" /></i></div>
-      <div class="hp-aura-row"><span>Костёр</span><i><em class="fire" :style="{ width: pct(aura.fire) }" /></i></div>
-    </div>
+    <button class="hp-aura" title="Из чего складывается аура — подробно" @click="openMe(null, 'rank')">
+      <div class="hp-aura-head">
+        <span>Аура «{{ AURA_LEVELS[aura.level].title }}»</span>
+        <span class="hp-aura-q">что это?</span>
+      </div>
+      <div class="hp-aura-row" :title="auraTips.body">
+        <span>🏃 Спорт</span><i><em :style="{ width: pct(aura.body) }" /></i><small>{{ auraValues.body }}</small>
+      </div>
+      <div class="hp-aura-row" :title="auraTips.gold">
+        <span>💰 Доход</span><i><em class="gold" :style="{ width: pct(aura.gold) }" /></i><small>{{ pct(aura.gold) }}</small>
+      </div>
+      <div class="hp-aura-row" :title="auraTips.fire">
+        <span>🔥 Стрик</span><i><em class="fire" :style="{ width: pct(aura.fire) }" /></i><small>{{ fire.streak }} дн</small>
+      </div>
+    </button>
 
     <div v-if="growthError" class="hp-error">{{ growthError }}</div>
 
@@ -272,7 +304,7 @@ function pct(v) {
 }
 
 .hp-rank-text b {
-  font-size: 14px;
+  font-size: 16px;
 }
 
 .hp-rank-text span {
@@ -354,17 +386,66 @@ function pct(v) {
   width: 40px;
 }
 
+.hp-next {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.hp-next i {
+  width: 54px;
+  height: 4px;
+  border-radius: 2px;
+  background: #23252f;
+  overflow: hidden;
+}
+
+.hp-next em {
+  display: block;
+  height: 100%;
+}
+
 .hp-aura {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 5px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid #262833;
+  background: #171820;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.hp-aura:hover {
+  border-color: #3a3d4b;
+}
+
+.hp-aura-head {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: #e8eaf0;
+}
+
+.hp-aura-q {
+  color: #8fa8ff;
+  font-size: 11px;
 }
 
 .hp-aura-row {
   display: grid;
-  grid-template-columns: 56px 1fr;
+  grid-template-columns: 74px 1fr 44px;
+  gap: 6px;
   align-items: center;
-  font-size: 11px;
+  font-size: 12px;
+  color: #b9bfd0;
+}
+
+.hp-aura-row small {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
   color: #9aa0b0;
 }
 

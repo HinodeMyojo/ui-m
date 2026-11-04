@@ -150,6 +150,31 @@ export async function revokeAssistantConnector() {
   if (!response.ok) throw "Не удалось отключить коннектор";
 }
 
+// --- Ключи доступа для нейросетей: несколько ключей, у каждого свой срок ---
+
+export async function fetchAiTokens() {
+  const response = await authorizedFetch(`${API_BASE_URL}/api/v1/assistant/tokens`);
+  const data = await response.json().catch(() => []);
+  if (!response.ok) throw data.error || "Не удалось загрузить ключи";
+  return data;
+}
+
+// Сам ключ и адреса с ним показываются один раз — на сервере только отпечаток.
+export async function issueAiToken(body) {
+  const response = await authorizedFetch(`${API_BASE_URL}/api/v1/assistant/tokens`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw data.error || "Не удалось выпустить ключ";
+  return data;
+}
+
+export async function revokeAiToken(id) {
+  const response = await authorizedFetch(`${API_BASE_URL}/api/v1/assistant/tokens/${id}`, { method: "DELETE" });
+  if (!response.ok) throw "Не удалось погасить ключ";
+}
+
 export async function changePassword(oldPassword, newPassword) {
   const response = await authorizedFetch(
     `${API_BASE_URL}/api/v1/auth/change-password`,

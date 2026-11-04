@@ -91,6 +91,29 @@ export const WHISTLES = {
   white: { title: "Белый свисток", color: "#f2f2f2" },
 };
 
+// Аура — пять ступеней. Ступень = среднее трёх источников (спорт, доход,
+// стрик), округлённое до четвертей: 0–12% — нет, 13–37% — тлеет и т. д.
+export const AURA_LEVELS = [
+  { title: "Нет ауры", color: "#5b616e", glow: 0, from: 0 },
+  { title: "Тлеет", color: "#b08a5a", glow: 0.35, from: 0.125 },
+  { title: "Ровная", color: "#e3b341", glow: 0.45, from: 0.375 },
+  { title: "Яркая", color: "#ffd98a", glow: 0.6, from: 0.625 },
+  { title: "Сияющая", color: "#fff3c4", glow: 0.8, from: 0.875 },
+];
+
+// Свисток, который сейчас у героя, и следующий — из ранга, что считает сервер.
+export const rank = computed(() => growth.value?.rank || null);
+export const currentWhistle = computed(() => {
+  const r = rank.value;
+  const key = r?.current || growth.value?.profile?.whistle || "bell";
+  return r?.whistles?.find((w) => w.key === key) || { key, ...WHISTLES[key] };
+});
+export const nextWhistle = computed(() => {
+  const list = rank.value?.whistles || [];
+  const i = list.findIndex((w) => w.key === currentWhistle.value.key);
+  return i >= 0 ? list[i + 1] || null : null;
+});
+
 export const STATUS_TITLES = {
   done: "пройден",
   active: "взят в этом месяце",

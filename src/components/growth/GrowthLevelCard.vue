@@ -5,7 +5,13 @@ import { computed, ref, watch } from "vue";
 import confetti from "@/composables/useConfetti.js";
 import {
   addGrowthCriterion,
+  addGrowthEdge,
   addGrowthMaterial,
+  addGrowthPlace,
+  deleteGrowthEdge,
+  deleteGrowthPlace,
+  fetchGrowthPlaceOptions,
+  updateGrowthPlace,
   completeGrowthLevel,
   createGrowthLevel,
   createGrowthTasks,
@@ -18,7 +24,7 @@ import {
   updateGrowthMaterial,
 } from "@/components/growthApi.js";
 import { getPdfFiles } from "@/api/pdfFiles.js";
-import { growthAct, levelColor, skillsById, STATUS_TITLES } from "@/composables/useGrowth.js";
+import { growth, growthAct, levelColor, levelsById, skillsById, STATUS_TITLES } from "@/composables/useGrowth.js";
 
 const props = defineProps({
   level: { type: Object, required: true },
@@ -46,6 +52,10 @@ watch(() => props.level.id, () => {
   editing.value = false;
   notice.value = "";
   discOpen.value = false;
+  placeOptions.value = null;
+  wishPicker.value = false;
+  linkOpen.value = false;
+  if (isTravel.value) loadPlaceOptions();
 });
 
 function numOrNull(v) {
@@ -165,6 +175,140 @@ async function removeLevel() {
 }
 
 const pickable = computed(() => props.level.status !== "done");
+
+// --- Что дальше: одна понятная следующая цель вместо стены пунктов ---
+const nextStep = computed(() => {
+  const l = props.level;
+  if (l.status === "done") return null;
+  const crit = l.criteria.find((c) => c.required && !c.done) || l.criteria.find((c) => !c.done);
+  if (crit) return { icon: "☐", text: crit.title, kind: "критерий" };
+  const place = l.places.find((p) => p.status === "planned" || p.status === "idea");
+  if (place) return { icon: "📍", text: place.title, kind: "место" };
+  const mat = l.materials.find((m) => m.progress < 1);
+  if (mat) return { icon: KIND_ICONS[mat.kind] || "•", text: mat.title, kind: "материал" };
+  const task = l.tasks.find((t) => !t.done);
+  if (task) return { icon: "✔", text: task.title, kind: "задача" };
+  if (l.canComplete) return { icon: "🏁", text: "Всё закрыто — засчитай уровень", kind: "финиш" };
+  return null;
+});
+
+// Из чего сложился процент: те же единицы, что считает сервер.
+const breakdown = computed(() => {
+  const l = props.level;
+  const out = [];
+  const req = l.criteria.filter((c) => c.required);
+  const crit = req.length ? req : l.criteria;
+  if (crit.length) out.push({ label: req.length ? "обяз. критерии" : "критерии", done: crit.filter((c) => c.done).length, total: crit.length });
+  const places = l.places.filter((p) => p.status !== "skipped");
+  if (places.length) out.push({ label: "места", done: places.filter((p) => p.status === "visited").length, total: places.length });
+  if (l.materials.length) out.push({ label: "материалы", done: l.materials.filter((m) => m.progress >= 1).length, total: l.materials.length });
+  if (l.tasks.length) out.push({ label: "задачи", done: l.tasks.filter((t) => t.done).length, total: l.tasks.length });
+  return out;
+});
+
+// --- Путешествия: поездка и места из вишлиста страны ---
+const isTravel = computed(() => !!skill.value?.travelCountry || props.level.places.length > 0 || !!props.level.tripId);
+const placeOptions = ref(null);
+const newPlace = ref("");
+const wishPicker = ref(false);
+const placeBusy = ref(false);
+
+async function loadPlaceOptions() {
+  try {
+    placeOptions.value = await fetchGrowthPlaceOptions(props.level.id);
+  } catch (e) {
+    notice.value = e.message;
+  }
+}
+if (isTravel.value) loadPlaceOptions();
+
+const PLACE_STATUS = {
+  idea: { icon: "·", title: "идея" },
+  planned: { icon: "☐", title: "в плане" },
+  visited: { icon: "☑", title: "был" },
+  skipped: { icon: "✗", title: "не вышло" },
+};
+const visitedCount = computed(() => props.level.places.filter((p) => p.status === "visited").length);
+
+// Несколько мест сразу — через запятую или с новой строки.
+async function addPlaces() {
+  const titles = newPlace.value.split(/[,\n;]/).map((t) => t.trim()).filter(Boolean);
+  if (!titles.length) return;
+  placeBusy.value = true;
+  for (const title of titles) {
+    if (!(await growthAct(() => addGrowthPlace(props.level.id, { title })))) break;
+  }
+  placeBusy.value = false;
+  newPlace.value = "";
+  loadPlaceOptions();
+}
+
+async function toggleWish(w) {
+  placeBusy.value = true;
+  if (w.linked) {
+    const place = props.level.places.find((p) => p.wishId === w.id);
+    if (place) await growthAct(() => deleteGrowthPlace(place.id));
+  } else {
+    await growthAct(() => addGrowthPlace(props.level.id, { wishId: w.id }));
+  }
+  placeBusy.value = false;
+  loadPlaceOptions();
+}
+
+const setPlaceStatus = (p, status) => growthAct(() => updateGrowthPlace(p.id, { status: p.status === status ? "planned" : status }));
+const removePlace = async (p) => {
+  await growthAct(() => deleteGrowthPlace(p.id));
+  loadPlaceOptions();
+};
+
+async function setTrip(id) {
+  await growthAct(() => updateGrowthLevel(props.level.id, id ? { tripId: id } : { clearTrip: true }));
+}
+
+function tripWhen(t) {
+  if (!t?.startDate) return "даты не выбраны";
+  const start = new Date(`${t.startDate}T00:00:00`);
+  const end = new Date(start);
+  end.setDate(end.getDate() + Math.max(0, (t.daysCount || 1) - 1));
+  const fmt = (d) => d.toLocaleDateString("ru-RU", { day: "numeric", month: "long" });
+  const today = new Date(`${growth.value?.today || ""}T00:00:00`);
+  const days = Math.round((start - today) / 86400000);
+  let rel = "";
+  if (Number.isFinite(days)) {
+    if (days > 0) rel = ` · через ${days} дн.`;
+    else if (today <= end) rel = " · идёт сейчас";
+    else rel = " · позади";
+  }
+  return `${fmt(start)} — ${fmt(end)}${rel}`;
+}
+
+// --- Стрелки: что открывает этот уровень и что нужно до него ---
+const incoming = computed(() =>
+  (growth.value?.edges || []).filter((e) => e.toId === props.level.id)
+    .map((e) => ({ edge: e, other: levelsById.value.get(e.fromId) })).filter((x) => x.other),
+);
+const outgoing = computed(() =>
+  (growth.value?.edges || []).filter((e) => e.fromId === props.level.id)
+    .map((e) => ({ edge: e, other: levelsById.value.get(e.toId) })).filter((x) => x.other),
+);
+const linkOpen = ref(false);
+const linkDir = ref("from"); // from — «до этого уровня нужен…», to — «после него открывается…»
+const linkQuery = ref("");
+const linkResults = computed(() => {
+  const q = linkQuery.value.trim().toLowerCase();
+  if (q.length < 2) return [];
+  const linked = new Set([...incoming.value, ...outgoing.value].map((x) => x.other.id));
+  return (growth.value?.levels || [])
+    .filter((l) => l.id !== props.level.id && !linked.has(l.id))
+    .filter((l) => l.title.toLowerCase().includes(q) || skillsById.value.get(l.skillId)?.title.toLowerCase().includes(q))
+    .slice(0, 8);
+});
+async function link(other) {
+  const [from, to] = linkDir.value === "from" ? [other.id, props.level.id] : [props.level.id, other.id];
+  if (await growthAct(() => addGrowthEdge(from, to))) linkQuery.value = "";
+}
+const unlink = (edge) => growthAct(() => deleteGrowthEdge(edge.id));
+const skillOf = (l) => skillsById.value.get(l.skillId);
 </script>
 
 <template>
@@ -189,6 +333,14 @@ const pickable = computed(() => props.level.status !== "done");
     </div>
     <div class="glc-bar"><em :style="{ width: pct(level.progress) }" /></div>
 
+    <div v-if="breakdown.length" class="glc-break">
+      <span v-for="b in breakdown" :key="b.label" :class="{ full: b.done === b.total }">{{ b.label }} {{ b.done }}/{{ b.total }}</span>
+    </div>
+    <div v-if="nextStep" class="glc-next">
+      <span class="glc-next-label">Следующий шаг</span>
+      <span>{{ nextStep.icon }} {{ nextStep.text }}</span>
+    </div>
+
     <p v-if="level.goal && !editing" class="glc-goal">🎯 {{ level.goal }}</p>
     <p v-if="level.description && !editing" class="glc-desc">{{ level.description }}</p>
 
@@ -211,6 +363,54 @@ const pickable = computed(() => props.level.status !== "done");
       <input v-model="disc.max" placeholder="Максимум (можно пусто)" />
       <button class="glc-btn primary" @click="makeDisciplined">Добавить</button>
     </div>
+
+    <section v-if="isTravel" class="glc-sec glc-travel">
+      <div class="glc-sec-head">
+        <span>🧭 Поездка и места</span>
+        <router-link v-if="placeOptions?.countryId" class="glc-link" :to="`/travel/countries/${placeOptions.countryId}`">
+          {{ placeOptions.countryName }} в «Путешествиях» →
+        </router-link>
+      </div>
+      <div class="glc-trip">
+        <template v-if="level.trip">
+          <router-link class="glc-trip-card" :to="`/travel/trips/${level.trip.id}`">
+            <b>✈ {{ level.trip.title }}</b>
+            <span>{{ tripWhen(level.trip) }}</span>
+          </router-link>
+          <button class="glc-link" @click="setTrip(null)">отвязать</button>
+        </template>
+        <template v-else>
+          <select v-if="placeOptions?.trips?.length" class="glc-select" @change="setTrip($event.target.value)">
+            <option value="">— привязать поездку —</option>
+            <option v-for="t in placeOptions.trips" :key="t.id" :value="t.id">{{ t.title }} · {{ tripWhen(t) }}</option>
+          </select>
+          <span v-else class="glc-small">Поездок по стране пока нет — заведи её в «Путешествиях», и она появится здесь.</span>
+        </template>
+      </div>
+
+      <div class="glc-small">Мест {{ level.places.length }}, посещено {{ visitedCount }}. Отметка «был» видна и в «Путешествиях».</div>
+      <div v-for="p in level.places" :key="p.id" class="glc-row glc-place" :class="`ps-${p.status}`">
+        <span class="glc-ps">{{ PLACE_STATUS[p.status]?.icon || "·" }}</span>
+        <span class="glc-row-text" :class="{ done: p.status === 'visited' }">{{ p.title }}</span>
+        <button class="glc-tag" :class="{ req: p.status === 'visited' }" title="Был здесь" @click="setPlaceStatus(p, 'visited')">был</button>
+        <button class="glc-tag" title="Не получилось — выпадет из процента" @click="setPlaceStatus(p, 'skipped')">не вышло</button>
+        <button class="glc-del" title="Убрать из уровня (в вишлисте останется)" @click="removePlace(p)">×</button>
+      </div>
+      <div class="glc-add">
+        <input v-model="newPlace" :disabled="placeBusy" placeholder="Места через запятую: Фусими Инари, Сибуя Скай…" @keydown.enter="addPlaces" />
+        <button class="glc-btn" :disabled="placeBusy" @click="addPlaces">+</button>
+      </div>
+      <button v-if="placeOptions?.wishes?.length" class="glc-link" @click="wishPicker = !wishPicker">
+        {{ wishPicker ? "скрыть вишлист" : `выбрать из вишлиста страны (${placeOptions.wishes.length})` }}
+      </button>
+      <div v-if="wishPicker" class="glc-wishes">
+        <label v-for="w in placeOptions.wishes" :key="w.id" class="glc-wish">
+          <input type="checkbox" :checked="w.linked" :disabled="placeBusy" @change="toggleWish(w)" />
+          <span :class="{ done: w.status === 'visited' }">{{ w.title }}</span>
+          <small>{{ PLACE_STATUS[w.status]?.title }}</small>
+        </label>
+      </div>
+    </section>
 
     <section class="glc-sec">
       <div class="glc-sec-head">
@@ -282,6 +482,40 @@ const pickable = computed(() => props.level.status !== "done");
 
     <section class="glc-sec">
       <div class="glc-sec-head">
+        <span>Связи</span>
+        <button class="glc-link" @click="linkOpen = !linkOpen">{{ linkOpen ? "готово" : "+ связать" }}</button>
+      </div>
+      <div v-if="!incoming.length && !outgoing.length" class="glc-small">Стрелок нет: уровень стоит отдельно.</div>
+      <div v-for="x in incoming" :key="x.edge.id" class="glc-row">
+        <span class="glc-kind" title="До этого уровня">⬅</span>
+        <span class="glc-row-text" :class="{ done: x.other.status === 'done' }">
+          {{ x.other.title }}<small> — {{ skillOf(x.other)?.emoji }} {{ skillOf(x.other)?.title }}</small>
+        </span>
+        <button class="glc-del" title="Убрать стрелку" @click="unlink(x.edge)">×</button>
+      </div>
+      <div v-for="x in outgoing" :key="x.edge.id" class="glc-row">
+        <span class="glc-kind" title="После этого уровня">➡</span>
+        <span class="glc-row-text">
+          {{ x.other.title }}<small> — {{ skillOf(x.other)?.emoji }} {{ skillOf(x.other)?.title }}</small>
+        </span>
+        <button class="glc-del" title="Убрать стрелку" @click="unlink(x.edge)">×</button>
+      </div>
+      <div v-if="linkOpen" class="glc-form">
+        <div class="glc-row-btns">
+          <select v-model="linkDir" class="glc-select">
+            <option value="from">до этого уровня нужен…</option>
+            <option value="to">после него открывается…</option>
+          </select>
+        </div>
+        <input v-model="linkQuery" placeholder="Найти уровень в любом навыке (от 2 букв)" />
+        <button v-for="l in linkResults" :key="l.id" class="glc-pickrow" @click="link(l)">
+          {{ l.emoji }} {{ l.title }} <small>{{ skillOf(l)?.emoji }} {{ skillOf(l)?.title }} · {{ l.number }}</small>
+        </button>
+      </div>
+    </section>
+
+    <section class="glc-sec">
+      <div class="glc-sec-head">
         <span>Уровень</span>
         <button v-if="!editing" class="glc-link" @click="startEdit">править</button>
       </div>
@@ -318,6 +552,141 @@ const pickable = computed(() => props.level.status !== "done");
   flex-direction: column;
   gap: 10px;
   color: #e8eaf0;
+}
+
+.glc-break {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 11px;
+  color: #9aa0b0;
+}
+
+.glc-break span {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #1d1f28;
+}
+
+.glc-break span.full {
+  color: #63c94f;
+}
+
+.glc-next {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border-left: 3px solid var(--c);
+  background: color-mix(in srgb, var(--c) 10%, #171820);
+  font-size: 14px;
+}
+
+.glc-next-label {
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #9aa0b0;
+}
+
+.glc-travel {
+  border: 1px solid #2fbfa044;
+  border-radius: 10px;
+  padding: 8px 10px;
+  background: #2fbfa00a;
+}
+
+.glc-trip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.glc-trip-card {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #1d1f28;
+  color: #e8eaf0;
+  text-decoration: none;
+  font-size: 13px;
+}
+
+.glc-trip-card span {
+  color: #9aa0b0;
+  font-size: 12px;
+}
+
+.glc-select {
+  flex: 1;
+  background: #1a1c24;
+  border: 1px solid #2a2d38;
+  border-radius: 8px;
+  color: #e8eaf0;
+  padding: 5px 8px;
+}
+
+.glc-ps {
+  width: 18px;
+  text-align: center;
+}
+
+.glc-place.ps-skipped .glc-row-text {
+  color: #7d8396;
+  text-decoration: line-through;
+}
+
+.glc-wishes {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 220px;
+  overflow-y: auto;
+  padding: 4px;
+  border-radius: 8px;
+  background: #15161d;
+}
+
+.glc-wish {
+  display: grid;
+  grid-template-columns: 18px 1fr auto;
+  gap: 6px;
+  align-items: center;
+  font-size: 13px;
+  padding: 3px 4px;
+  cursor: pointer;
+}
+
+.glc-wish small {
+  color: #7d8396;
+  font-size: 11px;
+}
+
+.glc-wish .done {
+  color: #9aa0b0;
+}
+
+.glc-pickrow {
+  text-align: left;
+  background: #1d1f28;
+  border: 1px solid #2a2d38;
+  border-radius: 8px;
+  color: #e8eaf0;
+  padding: 6px 8px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.glc-pickrow:hover {
+  border-color: var(--c);
+}
+
+.glc-pickrow small {
+  color: #9aa0b0;
 }
 
 .glc-head {

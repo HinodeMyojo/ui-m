@@ -60,3 +60,13 @@ export const deleteGrowthMaterial = (id) => del(`${G}/materials/${id}`);
 
 export const addGrowthEdge = (fromId, toId) => post(`${G}/edges`, { fromId, toId });
 export const deleteGrowthEdge = (id) => del(`${G}/edges/${id}`);
+
+export const createGrowthSphere = (body) => post(`${G}/spheres`, body);
+export const updateGrowthSphere = (id, patch) => put(`${G}/spheres/${id}`, patch);
+export const deleteGrowthSphere = (id) => del(`${G}/spheres/${id}`);
+
+// Места уровня — из вишлиста страны в «Путешествиях».
+export const fetchGrowthPlaceOptions = (levelId) => request(`${G}/levels/${levelId}/places`);
+export const addGrowthPlace = (levelId, body) => post(`${G}/levels/${levelId}/places`, body);
+export const updateGrowthPlace = (id, patch) => put(`${G}/places/${id}`, patch);
+export const deleteGrowthPlace = (id) => del(`${G}/places/${id}`);

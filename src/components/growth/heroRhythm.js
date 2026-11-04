@@ -77,13 +77,19 @@ export function heroFire(month, today) {
   return { fire: 1, streak };
 }
 
-// Аура 0..4: тело, золото и костёр поровну.
+// Стрик, при котором его доля в ауре полная.
+export const AURA_STREAK_FULL = 30;
+
+// Аура 0..4: спорт, доход и стрик дисциплины поровну. mean — среднее 0..1,
+// next — сколько среднего не хватает до следующей ступени (null на вершине).
 export function heroAura(aura, fireStreak) {
-  const fire = Math.min(1, (fireStreak || 0) / 30);
+  const fire = Math.min(1, (fireStreak || 0) / AURA_STREAK_FULL);
   const body = aura?.body || 0;
   const gold = aura?.gold || 0;
   const mean = (body + gold + fire) / 3;
-  return { level: Math.round(mean * 4), body, gold, fire };
+  const level = Math.max(0, Math.min(4, Math.round(mean * 4)));
+  const next = level < 4 ? (level + 0.5) / 4 - mean : null;
+  return { level, mean, next, body, gold, fire, streak: fireStreak || 0 };
 }
 
 // Возраст «24 года · 5 мес · 28 дн» от даты рождения.
