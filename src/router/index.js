@@ -105,6 +105,13 @@ const router = createRouter({
       component: () => import("../views/WorkspaceView.vue"),
     },
     {
+      // Календарь: события, пары, встречи; сверка с Google Calendar.
+      path: "/calendar",
+      name: "Calendar",
+      component: () => import("../views/CalendarView.vue"),
+      meta: { noWeather: true },
+    },
+    {
       path: "/sport",
       name: "Sport",
       component: () => import("../views/SportView.vue"),

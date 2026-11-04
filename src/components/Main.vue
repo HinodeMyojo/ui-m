@@ -31,6 +31,7 @@ import VentureDraftsBar from "./venture/VentureDraftsBar.vue";
 import HeroPanel from "./growth/HeroPanel.vue";
 import GrowthLevelsBar from "./growth/GrowthLevelsBar.vue";
 import MePanel from "./growth/MePanel.vue";
+import NextEventButton from "./calendar/NextEventButton.vue";
 import { growth } from "@/composables/useGrowth.js";
 
 // Уровни для привязки новой задачи: сначала взятые в месяц, потом прочие
@@ -846,6 +847,7 @@ function closeTimeStats() {
       </div>
       <div class="header-right">
         <button v-if="isOn('module.today')" class="add-task-btn" @click="router.push('/today')">Сегодня</button>
+        <NextEventButton v-if="isOn('module.calendar')" />
         <button class="add-task-btn" @click="openNyamaModal">Вкусняхи</button>
         <button class="add-task-btn" @click="openAddModal">
           + Добавить задачу

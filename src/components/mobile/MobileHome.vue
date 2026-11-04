@@ -18,6 +18,7 @@ import "@/styles/mobile.css";
 const MobileDayHoursCard = defineAsyncComponent(() => import("./MobileDayHoursCard.vue"));
 const MobileRoadmapCard = defineAsyncComponent(() => import("./MobileRoadmapCard.vue"));
 const MobileTodayCard = defineAsyncComponent(() => import("./MobileTodayCard.vue"));
+const MobileCalendarCard = defineAsyncComponent(() => import("./MobileCalendarCard.vue"));
 const MobileDisciplineCard = defineAsyncComponent(() => import("./MobileDisciplineCard.vue"));
 const MobileSportCard = defineAsyncComponent(() => import("./MobileSportCard.vue"));
 const MobileJapaneseCard = defineAsyncComponent(() => import("./MobileJapaneseCard.vue"));
@@ -74,6 +75,7 @@ const weekdayLabel = computed(() => WEEKDAYS[now.getDay()]);
       <!-- План часов на день — первым: его задают утром, до всего остального. -->
       <MobileDayHoursCard />
       <MobileRoadmapCard v-if="isOn('module.roadmap')" />
+      <MobileCalendarCard v-if="isOn('module.calendar')" />
       <MobileTodayCard v-if="isOn('module.today')" />
       <MobileDisciplineCard v-if="isOn('module.discipline')" />
       <MobileJapaneseCard v-if="isOn('module.japanese')" />
