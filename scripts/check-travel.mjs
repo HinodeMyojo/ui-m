@@ -419,5 +419,35 @@ check("словарь: аббревиатура ищется по первым �
   return got === "Automated clearing house | Settlement (finance) | Value chain | true | bank" ? null : got;
 });
 
+const mentorDates = await import("../src/components/mentorDates.mjs");
+check("«N»: сдвиг дат через месяц, год и переход на летнее время", () => {
+  const d = mentorDates;
+  const got = [
+    d.addDays("2026-11-28", 6), // конец рекомендации на 7 дней
+    d.addDays("2026-12-31", 1),
+    d.addDays("2028-02-28", 1), // високосный
+    d.addDays("2026-03-29", 1), // в Европе в эту ночь 23 часа
+    d.addDays("2026-11-04", -4),
+    d.daysBetween("2026-11-01", "2026-11-04"),
+    d.daysBetween("2026-03-28", "2026-03-30"),
+    d.daysBetween("2026-11-04", "2026-11-04"),
+  ].join(" ");
+  const want = "2026-12-04 2027-01-01 2028-02-29 2026-03-30 2026-10-31 3 2 0";
+  return got === want ? null : `${got}\n      ждали ${want}`;
+});
+check("«N»: склонение «день / дня / дней»", () => {
+  const p = (n) => `${n} ${mentorDates.plural(n, "день", "дня", "дней")}`;
+  const got = [0, 1, 2, 5, 11, 12, 14, 21, 22, 40, 101, 111].map(p).join(", ");
+  const want = "0 дней, 1 день, 2 дня, 5 дней, 11 дней, 12 дней, 14 дней, 21 день, 22 дня, 40 дней, 101 день, 111 дней";
+  return got === want ? null : got;
+});
+check("«N»: страница по ссылке объявлена гостевой", () => {
+  const at = ROUTER.indexOf('path: "/n/:token"');
+  if (at < 0) return "маршрута /n/:token нет";
+  return /meta:\s*{\s*public:\s*true/.test(ROUTER.slice(at, at + 300))
+    ? null
+    : "без meta.public человека без учётки уведёт на /login";
+});
+
 console.log(`\nПроверок: ${checked}, провалено: ${failed}`);
 process.exit(failed ? 1 : 0);
