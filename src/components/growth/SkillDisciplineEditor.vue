@@ -3,7 +3,7 @@
 // Блок общий у навыков с одним «блоком дисциплины» (у всех IT-навыков —
 // «IT»), поэтому правка видна у каждого из них. Новый месяц копирует план
 // прошлого — правка остаётся и дальше. docs/me-module.md (back-m)
-import { onMounted, ref, watch } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import {
   createDisciplineActivity,
   deleteDisciplineActivity,
@@ -11,6 +11,8 @@ import {
   fetchDisciplineMonth,
   updateDisciplineActivity,
 } from "@/components/api.js";
+import { fetchJpStudies } from "@/components/japaneseApi.js";
+import { growth } from "@/composables/useGrowth.js";
 
 const props = defineProps({
   block: { type: String, required: true },
@@ -24,6 +26,30 @@ const rows = ref([]); // правимые копии строк
 const confirmId = ref("");
 const fresh = ref({ emoji: "", title: "", minDesc: "", midDesc: "", maxDesc: "" });
 
+// Строку можно считать из своего приложения: сессии японского, план
+// тренировок, страницы книги уровня. Пороги — в единицах источника.
+const SOURCES = [
+  { value: "", label: "Отмечаю руками" },
+  { value: "japanese", label: "Считать: сессии японского", unit: "сессий", defaults: [2, 3, 5] },
+  { value: "sport", label: "Считать: план тренировок", unit: "% плана", defaults: [50, 75, 100] },
+  { value: "reading", label: "Считать: страницы книги уровня", unit: "стр.", defaults: [10, 15, 25] },
+];
+const sourceOf = (value) => SOURCES.find((x) => x.value === (value || "")) || SOURCES[0];
+
+const studies = ref([]);
+// Уровни с книгой из библиотеки — для строки «чтение».
+const bookLevels = computed(() =>
+  (growth.value?.levels || []).filter((l) => (l.materials || []).some((m) => m.pdfFileId)),
+);
+
+function onSource(row) {
+  const src = sourceOf(row.source);
+  row.sourceRef = null;
+  if (src.defaults) [row.sourceMin, row.sourceMid, row.sourceMax] = src.defaults;
+  else row.sourceMin = row.sourceMid = row.sourceMax = null;
+  saveRow(row);
+}
+
 function monthYear() {
   const [y, m] = disciplineLogicalToday().split("-").map(Number);
   return { month: m, year: y };
@@ -36,6 +62,13 @@ async function load() {
     const { month, year } = monthYear();
     const data = await fetchDisciplineMonth(month, year);
     planId.value = data.plan?.id || "";
+    if (!studies.value.length) {
+      try {
+        studies.value = (await fetchJpStudies()) || [];
+      } catch {
+        studies.value = [];
+      }
+    }
     const name = props.block.trim().toLowerCase();
     skill.value = (data.skills || []).find((s) => !s.general && s.title.trim().toLowerCase() === name) || null;
     rows.value = (skill.value?.activities || []).map((a) => ({ ...a }));
@@ -51,6 +84,7 @@ function changed() {
 }
 
 const nul = (v) => (typeof v === "string" && v.trim() ? v.trim() : null);
+const num = (v) => (v === "" || v === null || v === undefined || !Number.isFinite(Number(v)) ? null : Number(v));
 
 // PUT заменяет строку целиком — шлём всё, что у неё было, с правкой поверх:
 // иначе слетели бы варианты, замены и привязка к чтению.
@@ -68,6 +102,11 @@ async function saveRow(row) {
       minDesc: nul(row.minDesc),
       midDesc: nul(row.midDesc),
       maxDesc: nul(row.maxDesc),
+      source: row.source || "",
+      sourceRef: row.sourceRef || null,
+      sourceMin: num(row.sourceMin),
+      sourceMid: num(row.sourceMid),
+      sourceMax: num(row.sourceMax),
     });
     changed();
   } catch (e) {
@@ -142,7 +181,25 @@ onMounted(load);
             <input v-model="r.midDesc" placeholder="средний" @change="saveRow(r)" @keydown.enter.prevent="saveRow(r)" />
             <input v-model="r.maxDesc" placeholder="максимум" @change="saveRow(r)" @keydown.enter.prevent="saveRow(r)" />
           </div>
-          <div v-if="r.source === 'reading'" class="sde-muted">Считается по страницам книги уровня — пороги пересчитываются сами.</div>
+          <div class="sde-src">
+            <select v-model="r.source" @change="onSource(r)">
+              <option v-for="o in SOURCES" :key="o.value" :value="o.value">{{ o.label }}</option>
+            </select>
+            <select v-if="r.source === 'japanese'" v-model="r.sourceRef" @change="saveRow(r)">
+              <option :value="null">все курсы</option>
+              <option v-for="st in studies" :key="st.id" :value="st.id">{{ st.emoji }} {{ st.name }}</option>
+            </select>
+            <select v-if="r.source === 'reading'" v-model="r.sourceRef" @change="saveRow(r)">
+              <option :value="null">— выберите уровень с книгой —</option>
+              <option v-for="l in bookLevels" :key="l.id" :value="l.id">{{ l.emoji }} {{ l.title }}</option>
+            </select>
+          </div>
+          <div v-if="r.source" class="sde-levels sde-thr">
+            <label>мин <input v-model.number="r.sourceMin" type="number" min="0" @change="saveRow(r)" /></label>
+            <label>сред <input v-model.number="r.sourceMid" type="number" min="0" @change="saveRow(r)" /></label>
+            <label>макс <input v-model.number="r.sourceMax" type="number" min="0" @change="saveRow(r)" /></label>
+            <span class="sde-muted">{{ sourceOf(r.source).unit }} в день — отмечается само</span>
+          </div>
           <div v-if="confirmId === r.id" class="sde-confirm">
             Убрать «{{ r.title }}» из дисциплины? Отметки по ней за месяц пропадут.
             <button type="button" class="sde-btn danger" @click="removeRow(r)">Убрать</button>
@@ -230,6 +287,34 @@ input {
   color: #8a8fa3;
   cursor: pointer;
   font-size: 15px;
+}
+.sde-src {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+select {
+  background: #1d1f29;
+  border: 1px solid #343746;
+  color: #e8eaf0;
+  border-radius: 7px;
+  padding: 5px 8px;
+  font: inherit;
+  font-size: 13px;
+}
+.sde-thr {
+  align-items: center;
+  flex-wrap: wrap;
+}
+.sde-thr label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: #8a8fa3;
+}
+.sde-thr input {
+  width: 64px;
 }
 .sde-confirm {
   display: flex;
