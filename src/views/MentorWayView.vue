@@ -388,7 +388,8 @@ async function removeTask(t) {
 }
 
 const greetingName = computed(() => (isMentor.value ? mentorName.value : studentName.value));
-const studentLabel = computed(() => studentName.value || "ученика");
+// Имена не склоняем — ставим их только в именительном: «для Егор» режет глаз.
+const studentLabel = computed(() => studentName.value || "Ученик");
 </script>
 
 <template>
@@ -404,7 +405,7 @@ const studentLabel = computed(() => studentName.value || "ученика");
       <header class="way-head">
         <div class="way-greet">Ассаляму алейкум{{ greetingName ? `, ${greetingName}` : "" }}</div>
         <div class="way-sub">
-          <template v-if="isMentor">Рекомендации для {{ studentLabel }}</template>
+          <template v-if="isMentor">Ваши рекомендации · {{ studentLabel }}</template>
           <template v-else>Сегодня, {{ humanDate(today) }}</template>
         </div>
       </header>
@@ -587,7 +588,7 @@ const studentLabel = computed(() => studentName.value || "ученика");
         </section>
 
         <p v-if="!tasks.length && !form" class="way-empty">
-          Здесь вы назначаете {{ studentLabel }}, сколько дней не есть свинину, сколько раз в день делать намаз
+          Здесь вы назначаете, сколько дней не есть свинину, сколько раз в день делать намаз
           или что-то своё. {{ studentName || "Ученик" }} будет отмечать каждый день, а вы увидите, как получается.
         </p>
 
@@ -649,7 +650,7 @@ const studentLabel = computed(() => studentName.value || "ученика");
         </section>
 
         <section v-if="recentNotes.length" class="way-more">
-          <h2 class="way-h">Заметки {{ studentName || "ученика" }}</h2>
+          <h2 class="way-h">Заметки · {{ studentLabel }}</h2>
           <div v-for="n in recentNotes" :key="n.date" class="way-line">
             <b>{{ dayTitle(n.date) }}:</b> {{ n.text }}
           </div>
