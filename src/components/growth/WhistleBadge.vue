@@ -23,6 +23,7 @@ const color = computed(() => (WHISTLES[props.whistle] || WHISTLES.bell).color);
 const sparks = computed(() => (level.value >= 3 ? Array.from({ length: 8 }, (_, i) => (i / 8) * Math.PI * 2) : []));
 const rays = computed(() => (level.value >= 4 ? Array.from({ length: 12 }, (_, i) => i * 30) : []));
 const uid = `wb-${Math.random().toString(36).slice(2, 8)}`;
+const motion = typeof window === "undefined" || !window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 </script>
 
 <template>
@@ -43,11 +44,17 @@ const uid = `wb-${Math.random().toString(36).slice(2, 8)}`;
     <!-- Аура -->
     <g v-if="level > 0" class="wb-aura">
       <circle r="58" :fill="`url(#${uid}-glow)`" />
-      <g v-if="rays.length" class="wb-rays">
+      <!-- Вращение — SMIL вокруг (0,0): CSS-поворот в SVG с отрицательным
+           viewBox крутит вокруг чужой точки, и кольцо уезжает в сторону. -->
+      <g v-if="rays.length">
         <line v-for="deg in rays" :key="deg" x1="0" y1="-40" x2="0" y2="-57" :stroke="a.color" stroke-width="2.2"
           stroke-linecap="round" :transform="`rotate(${deg})`" opacity="0.8" />
+        <animateTransform v-if="motion" attributeName="transform" type="rotate" from="0" to="-360" dur="40s" repeatCount="indefinite" />
       </g>
-      <circle v-if="level >= 2" r="38" fill="none" :stroke="a.color" stroke-width="1.6" stroke-dasharray="4 5" class="wb-ring" opacity="0.85" />
+      <g v-if="level >= 2">
+        <circle r="38" fill="none" :stroke="a.color" stroke-width="1.6" stroke-dasharray="4 5" opacity="0.85" />
+        <animateTransform v-if="motion" attributeName="transform" type="rotate" from="0" to="360" dur="18s" repeatCount="indefinite" />
+      </g>
       <g v-for="(t, i) in sparks" :key="i" class="wb-spark" :style="{ animationDelay: `${i * 0.3}s` }">
         <circle :cx="Math.cos(t) * 46" :cy="Math.sin(t) * 46" r="2.6" :fill="a.color" />
       </g>
@@ -80,21 +87,9 @@ const uid = `wb-${Math.random().toString(36).slice(2, 8)}`;
   filter: grayscale(0.85) brightness(0.6);
 }
 
-.wb-ring,
-.wb-rays {
-  transform-origin: center;
-  transform-box: view-box;
-}
-
 @media (prefers-reduced-motion: no-preference) {
   .wb-aura {
     animation: wb-breathe 3.2s ease-in-out infinite;
-  }
-  .wb-ring {
-    animation: wb-spin 18s linear infinite;
-  }
-  .wb-rays {
-    animation: wb-spin 40s linear infinite reverse;
   }
   .wb-spark {
     animation: wb-twinkle 2.4s ease-in-out infinite;
@@ -104,12 +99,6 @@ const uid = `wb-${Math.random().toString(36).slice(2, 8)}`;
 @keyframes wb-breathe {
   50% {
     opacity: 0.72;
-  }
-}
-
-@keyframes wb-spin {
-  to {
-    transform: rotate(360deg);
   }
 }
 

@@ -151,8 +151,8 @@ function pct(v) {
         <WhistleBadge :whistle="whistle.key" :aura="aura.level" :size="76" />
         <div class="hp-rank-text">
           <b :style="{ color: whistle.color }">{{ whistle.title }}</b>
-          <span v-if="nextWhistle" class="hp-next">
-            до «{{ nextWhistle.title }}» {{ pct(nextWhistle.progress) }}
+          <span v-if="nextWhistle" class="hp-next" :title="`До «${nextWhistle.title}»: ${pct(nextWhistle.progress)} ворот`">
+            <span>→ {{ nextWhistle.title.replace(" свисток", "") }} · {{ pct(nextWhistle.progress) }}</span>
             <i><em :style="{ width: pct(nextWhistle.progress), background: nextWhistle.color }" /></i>
           </span>
           <span>{{ age.years }} {{ yearsWord(age.years) }} · {{ age.months }} мес · {{ age.days }} дн</span>
@@ -388,12 +388,14 @@ function pct(v) {
 
 .hp-next {
   display: flex;
-  align-items: center;
-  gap: 6px;
+  flex-direction: column;
+  gap: 3px;
+  white-space: nowrap;
 }
 
 .hp-next i {
-  width: 54px;
+  width: 100%;
+  max-width: 140px;
   height: 4px;
   border-radius: 2px;
   background: #23252f;
