@@ -196,37 +196,44 @@
                 </span>
               </div>
             </div>
+            <!-- Ушедшие в задачи следующих месяцев: живут там, здесь — ссылкой.
+                 Объект тот же: галочка общая, и прогресс этой задачи их считает. -->
+            <div
+              v-for="c in carries.outgoing"
+              :key="c.subtaskId"
+              class="subtask linked"
+            >
+              <div class="subtask-boba">
+                <input
+                  type="checkbox"
+                  v-model="c.done"
+                  class="w-4 h-4 accent-blue"
+                  @change="toggleLinked(c)"
+                />
+                <span :class="{ 'text-gray-500': c.done }" class="flex-1 overflow-hidden subtask-content">
+                  <h3 class="truncate block text-white" :title="c.title">{{ c.title }}</h3>
+                  <div class="subtask-log-row">
+                    <button
+                      class="subtask-diary subtask-linked-to"
+                      :title="`Подзадача перенесена и живёт в «${c.toTitle}» — открыть`"
+                      @click.stop="emit('open-task', c.toTaskId)"
+                    >
+                      → {{ shortMonth(c.toStart) }} · {{ c.toTitle }}
+                    </button>
+                  </div>
+                </span>
+              </div>
+            </div>
           </div>
 
-          <!-- Что ушло отсюда в задачи следующих месяцев: подзадачи живут там,
-               здесь от них только ссылка -->
           <div class="carried-out">
             <div class="carried-out-row">
-              <button
-                v-if="carries.outgoing.length"
-                class="carried-out-toggle"
-                @click="carriedOutOpen = !carriedOutOpen"
-              >
-                {{ carriedOutOpen ? "▾" : "▸" }} Перенесены в другие задачи: {{ carries.outgoing.length }}
-              </button>
               <button
                 class="carry-open-btn"
                 title="Забрать недоделанные подзадачи из задачи прошлого месяца"
                 @click="showCarry = !showCarry"
               >
                 {{ showCarry ? "✕ закрыть перенос" : "⤵ из прошлого месяца" }}
-              </button>
-            </div>
-            <div v-if="carriedOutOpen" class="carried-out-list">
-              <button
-                v-for="c in carries.outgoing"
-                :key="c.subtaskId"
-                class="carried-out-item"
-                :title="`Открыть «${c.toTitle}»`"
-                @click="emit('open-task', c.toTaskId)"
-              >
-                <span class="carried-out-title" :class="{ done: c.done }">{{ c.done ? "✓ " : "" }}{{ c.title }}</span>
-                <span class="carried-out-to">→ {{ c.toTitle }} · {{ shortMonth(c.toStart) }}</span>
               </button>
             </div>
             <CarrySubtasksPicker
@@ -838,7 +845,6 @@ const emit = defineEmits(["open-task"]);
 const carries = ref({ incoming: [], outgoing: [] });
 const showCarry = ref(false);
 const carryNote = ref("");
-const carriedOutOpen = ref(false);
 
 async function loadCarries() {
   if (!task.value?.id) return;
@@ -856,6 +862,17 @@ function carriedFrom(subtaskId) {
 function shortMonth(date) {
   if (!date) return "?";
   return new Date(date).toLocaleString("ru", { month: "short" }).replace(".", "");
+}
+
+// Галочка у подзадачи-ссылки ставится той самой подзадаче в новом месяце.
+async function toggleLinked(c) {
+  try {
+    await checkTask(c.subtaskId, c.done);
+  } catch (e) {
+    c.done = !c.done;
+    return;
+  }
+  await getProgress();
 }
 
 async function onCarried({ moved, skipped }) {
@@ -1822,65 +1839,20 @@ function getFileIcon(type) {
   margin-top: 6px;
 }
 
-.carried-out-toggle {
-  background: none;
-  border: none;
-  color: rgba(255, 255, 255, 0.5);
-  font-size: 12px;
-  cursor: pointer;
-  padding: 4px 0;
+/* Подзадача-ссылка: живёт в другой задаче, здесь приглушена */
+.subtask.linked {
+  opacity: 0.75;
+  cursor: default;
 }
 
-.carried-out-toggle:hover {
-  color: #fff;
-}
-
-.carried-out-list {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding-left: 14px;
-}
-
-.carried-out-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  min-height: 28px;
-  background: none;
-  border: none;
-  border-radius: 6px;
-  padding: 2px 6px;
-  text-align: left;
-  cursor: pointer;
-  font-size: 12px;
-}
-
-.carried-out-item:hover {
-  background: rgba(255, 255, 255, 0.04);
-}
-
-.carried-out-title {
-  flex: 1;
-  min-width: 0;
+.subtask-linked-to {
+  color: #6ba4ff;
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
-  color: rgba(255, 255, 255, 0.55);
-}
-
-.carried-out-title.done {
-  color: rgba(255, 255, 255, 0.35);
-}
-
-.carried-out-to {
-  color: #6ba4ff;
-  white-space: nowrap;
 }
 
 @media (max-width: 768px) {
-  .carried-out-item,
   .carry-open-btn {
     min-height: 40px;
   }
