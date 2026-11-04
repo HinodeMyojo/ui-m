@@ -160,6 +160,8 @@
                 <span class="pdf-ri-extra"> · {{ estimatedReadingTime }}</span>
                 <template v-if="libraryFileId">
                     <span class="pdf-ri-extra"> · 📚 сохраняю позицию</span>
+                    <button class="pdf-ri-goal" title="Переставить позицию, не считая страницы прочитанными"
+                        @click="askJump">📍 я здесь</button>
                     <template v-if="sessionSeconds >= 60">
                         <span class="pdf-ri-extra"> · {{ Math.round(sessionSeconds / 60) }} мин</span>
                     </template>
@@ -233,9 +235,19 @@ const libraryFileId = ref(typeof route.query.file === 'string' ? route.query.fil
 
 const { annotations, annotationsForPage, addAnnotation, updateNote, removeAnnotation, exportAnnotations, importAnnotations } = usePdfAnnotations(fileName, libraryFileId);
 const { bookmarks, isCurrentPageBookmarked, toggleCurrentPage, removeBookmark, updateLabel } = usePdfBookmarks(fileName, currentPage, libraryFileId);
-const { details: libraryDetails, sessionSeconds, flush: flushReading, markActivity: markReadingActivity } = usePdfReadingSync(
+const { details: libraryDetails, sessionSeconds, flush: flushReading, markActivity: markReadingActivity, jumpTo: jumpReading } = usePdfReadingSync(
     libraryFileId, pdfDoc, pageCount, currentPage, goToPage,
 );
+async function askJump() {
+    const answer = prompt('На какой странице ты сейчас? Страницы до неё не засчитаются как прочитанные сегодня.', String(currentPage.value));
+    const page = Number(answer);
+    if (!answer || !Number.isFinite(page)) return;
+    try {
+        await jumpReading(Math.round(page));
+    } catch {
+        // Не сохранилось — позиция всё равно переставлена, отправится с очередной синхронизацией.
+    }
+}
 // Цель на сессию — docs/pdf-library.md. Ставится и в карточке книги, и здесь:
 // в библиотеку заходят не всегда, «Продолжить чтение» открывает читалку сразу.
 const goalPanelOpen = ref(false);

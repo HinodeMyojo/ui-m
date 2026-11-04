@@ -54,8 +54,9 @@ watch(
 );
 
 // Экраны, которые занимают телефон целиком: вход, читалка (там своя панель и
-// каждый пиксель под текст), печать резюме и гостевая ссылка на поездку.
-const FULLSCREEN = ["/login", "/pdfReader"];
+// каждый пиксель под текст), PDF-редактор (свои панели инструментов снизу),
+// печать резюме и гостевая ссылка на поездку.
+const FULLSCREEN = ["/login", "/pdfReader", "/pdf-editor"];
 
 // Разделы со своим задником: у арабского ночная пустыня, и осенние листья,
 // летящие над барханами, — это не «два слоя», а сломанная картинка.
@@ -88,9 +89,10 @@ const showTabBar = computed(() => {
   <template v-if="!route.path.endsWith('/print')">
     <AutumnLayer v-if="!sessionFocus && !hasOwnScenery && !route.meta?.calm && isOn('layer.autumn')" />
     <!-- noWeatherOnPhone — экраны, где язычок погоды на телефоне ложится на
-         содержимое (доска хаба, путь по ступеням). -->
+         содержимое (доска хаба, путь по ступеням). noWeather — и на
+         десктопе: в PDF-редакторе язычок садится на панель свойств. -->
     <WeatherPanel
-      v-if="!route.meta?.public && isOn('layer.weather') && !(isMobile && route.meta?.noWeatherOnPhone)"
+      v-if="!route.meta?.public && !route.meta?.noWeather && isOn('layer.weather') && !(isMobile && route.meta?.noWeatherOnPhone)"
     />
   </template>
 </template>

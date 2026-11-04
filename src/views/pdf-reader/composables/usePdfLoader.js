@@ -59,7 +59,7 @@ export function pdfjs() {
     return lib;
 }
 
-const COMMON_OPTIONS = {
+export const COMMON_OPTIONS = {
     cMapUrl: 'https://cdn.jsdelivr.net/npm/pdfjs-dist/cmaps/',
     cMapPacked: true,
     standardFontDataUrl: 'https://cdn.jsdelivr.net/npm/pdfjs-dist/standard_fonts/',
