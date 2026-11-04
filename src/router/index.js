@@ -259,6 +259,19 @@ const router = createRouter({
       meta: { public: true, calm: true },
     },
     {
+      path: "/mentor",
+      name: "Mentor",
+      component: () => import("../views/MentorView.vue"),
+    },
+    {
+      // «Путь» по секретной ссылке — наставнику и ученику, без входа. Своя
+      // светлая страница, поэтому calm: листопад над кнопками отметок мешает.
+      path: "/way/:token",
+      name: "MentorWay",
+      component: () => import("../views/MentorWayView.vue"),
+      meta: { public: true, calm: true },
+    },
+    {
       // Гостевой доступ по ссылке — вход в приложение не нужен.
       path: "/travel/shared/:token",
       name: "SharedTrip",
