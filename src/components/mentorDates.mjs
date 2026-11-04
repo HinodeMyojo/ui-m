@@ -4,12 +4,16 @@
 // Свой домен страницы «N»: ссылки вида https://hinodemideast.ru/<токен>.
 export const WAY_HOST = "hinodemideast.ru";
 
-// «Сегодня» — в поясе того, кто держит телефон: сервер его не знает.
 const pad = (n) => String(n).padStart(2, "0");
 
-export function todayYmd() {
-  const d = new Date();
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+// «Сегодня» — по GMT+3 (Москва, без летнего времени), где бы ни был телефон:
+// так попросил пользователь — сутки у наставницы и ученика сменяются в
+// полночь по Москве, а не по поясу телефона. now — для проверок.
+const DAY_OFFSET_MS = 3 * 3600 * 1000;
+
+export function todayYmd(now = Date.now()) {
+  const d = new Date(now + DAY_OFFSET_MS);
+  return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
 }
 
 // Сдвиг по календарю в UTC: без перехода на летнее время и его 23-часовых суток.
