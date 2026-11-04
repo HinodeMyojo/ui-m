@@ -3,13 +3,25 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue"
 import { useRoute } from "vue-router";
 import {
   createWayTask,
+  deleteWayDraft,
   deleteWayTask,
+  saveWayDraft,
   fetchWay,
   setWayMark,
   setWayNote,
   updateWayTask,
 } from "@/components/mentorApi.js";
-import { addDays, daysBetween, humanDate, plural, todayYmd, weekday } from "@/components/mentorDates.mjs";
+import {
+  addDays,
+  addMonths,
+  daysBetween,
+  humanDate,
+  monthGrid,
+  monthTitle,
+  plural,
+  todayYmd,
+  weekday,
+} from "@/components/mentorDates.mjs";
 
 // Страница «N» по секретной ссылке, без входа. Одна страница на двоих:
 // по ссылке наставника назначают рекомендации, по ссылке ученика отмечают
@@ -25,6 +37,8 @@ const toast = ref("");
 let toastTimer = 0;
 
 const today = ref(todayYmd());
+// Отметки в пути: ключ «задача:день».
+const pending = reactive({});
 const isMentor = computed(() => data.value?.role === "mentor");
 const mentorName = computed(() => data.value?.mentorName || "");
 const studentName = computed(() => data.value?.studentName || "");
@@ -51,9 +65,32 @@ async function load(quiet = false) {
 }
 
 // Вернулись на вкладку — показываем свежее: пока страница лежала в фоне,
-// второй человек мог что-то отметить, а «сегодня» — смениться.
+// второй человек мог что-то отметить, а «сегодня» — смениться. Ушли —
+// дописанный черновик отправляем сразу, не дожидаясь паузы в наборе.
 function onVisible() {
   if (document.visibilityState === "visible" && data.value) load(true);
+  if (document.visibilityState === "hidden") flushDraft();
+}
+
+// Почти живое: пока страница открыта, раз в 2,5 с забираем свежее — ученик
+// видит, что ему пишут, наставник — отметки. Пока уходит своя отметка, ответ
+// опроса не применяем: он мог уйти раньше неё и вернул бы старое.
+const POLL_MS = 2500;
+let pollTimer = 0;
+let polling = false;
+async function poll() {
+  if (document.visibilityState !== "visible" || polling || !data.value || fatal.value) return;
+  if (Object.keys(pending).length) return;
+  polling = true;
+  try {
+    const fresh = await fetchWay(token.value);
+    if (!Object.keys(pending).length) data.value = fresh;
+    today.value = todayYmd();
+  } catch {
+    // Связь моргнула — попробуем на следующем круге.
+  } finally {
+    polling = false;
+  }
 }
 
 // Своя тёплая светлая страница поверх тёмного приложения: фон body иначе
@@ -67,6 +104,8 @@ onMounted(() => {
   document.documentElement.style.background = "#f6f1e7";
   document.title = "N";
   document.addEventListener("visibilitychange", onVisible);
+  window.addEventListener("pagehide", flushDraft);
+  pollTimer = setInterval(poll, POLL_MS);
   load();
 });
 onBeforeUnmount(() => {
@@ -74,7 +113,10 @@ onBeforeUnmount(() => {
   document.documentElement.style.background = "";
   document.title = prevTitle;
   document.removeEventListener("visibilitychange", onVisible);
+  window.removeEventListener("pagehide", flushDraft);
+  clearInterval(pollTimer);
   clearTimeout(toastTimer);
+  flushDraft();
 });
 
 // --- Рекомендации: какие сейчас, какие впереди, какие прошли ---
@@ -170,19 +212,32 @@ watch(today, (t, old) => {
   if (selectedDay.value === old) selectedDay.value = t;
 });
 
-// Полоса дней: неделя до сегодня, но не раньше первой рекомендации.
-const dayChips = computed(() => {
-  if (!tasks.value.length) return [];
-  const first = tasks.value.reduce((m, t) => (t.startDate < m ? t.startDate : m), today.value);
-  const out = [];
-  for (let i = 6; i >= 0; i--) {
-    const day = addDays(today.value, -i);
-    if (day < first) continue;
-    const list = tasks.value.filter((t) => t.startDate <= day && t.endDate >= day);
-    out.push({ day, empty: !list.length, unmarked: list.some((t) => t.marks[day] === undefined) });
-  }
-  return out;
-});
+// --- Календарь: месяц сеткой, день раскрашен сразу по всем рекомендациям ---
+
+const WEEK = ["пн", "вт", "ср", "чт", "пт", "сб", "вс"];
+const calMonth = ref(todayYmd().slice(0, 7));
+// Выбрали день из точек под рекомендацией — календарь листается к нему.
+watch(selectedDay, (d) => (calMonth.value = d.slice(0, 7)));
+
+function dayAggregate(day) {
+  const list = tasks.value.filter((t) => t.startDate <= day && t.endDate >= day);
+  if (!list.length) return "empty";
+  if (day > today.value) return "future";
+  const states = list.map((t) => dayState(t, day));
+  if (states.every((s) => s === "full")) return "full";
+  if (states.every((s) => s === "miss")) return "miss";
+  if (states.every((s) => s === "none" || s === "today")) return day === today.value ? "today" : "none";
+  return "part";
+}
+
+const calCells = computed(() =>
+  monthGrid(calMonth.value).map((day) => day && { day, num: Number(day.slice(8)), state: dayAggregate(day) }),
+);
+
+function toToday() {
+  selectedDay.value = today.value;
+  calMonth.value = today.value.slice(0, 7);
+}
 
 const dayTasks = computed(() =>
   tasks.value.filter((t) => t.startDate <= selectedDay.value && t.endDate >= selectedDay.value),
@@ -199,8 +254,6 @@ function dayTitle(day) {
   if (day === addDays(today.value, -1)) return "Вчера";
   return `${weekday(day)}, ${humanDate(day)}`;
 }
-
-const pending = reactive({});
 
 async function mark(t, count) {
   const day = selectedDay.value;
@@ -302,15 +355,160 @@ const KINDS = [
 ];
 const DAY_CHIPS = [1, 3, 7, 14, 30, 40];
 
-const form = ref(null); // { id?, kind, title, perDay, days, start, note }
+// { id?, draftId?, kind, title, perDay, days, start, note }. У новой — draftId:
+// она с первой секунды пишется черновиком на сервер.
+const form = ref(null);
 const formError = ref("");
 const saving = ref(false);
 const confirmDelete = ref(null);
 
+function newId() {
+  if (window.crypto?.randomUUID) return window.crypto.randomUUID();
+  // По голому http (вход с портом) randomUUID нет — собираем v4 сами.
+  const b = window.crypto.getRandomValues(new Uint8Array(16));
+  b[6] = (b[6] & 0x0f) | 0x40;
+  b[8] = (b[8] & 0x3f) | 0x80;
+  const h = [...b].map((x) => x.toString(16).padStart(2, "0")).join("");
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
+}
+
 function openCreate() {
   confirmDelete.value = null;
   formError.value = "";
-  form.value = { kind: "pork", title: "", perDay: 1, days: 7, start: "today", note: "" };
+  form.value = { draftId: newId(), kind: "pork", title: "", perDay: 1, days: 7, start: "today", note: "" };
+}
+
+function openDraft(d) {
+  confirmDelete.value = null;
+  formError.value = "";
+  form.value = {
+    draftId: d.id,
+    kind: d.kind,
+    title: d.title,
+    perDay: d.perDay || 1,
+    days: d.days || 7,
+    start: d.start || "today",
+    note: d.note,
+  };
+}
+
+// Черновик уходит через паузу в наборе, запросы — цепочкой, по одному: иначе
+// старый мог бы прийти позже нового. Закрытые (сохранённые или отменённые)
+// больше не пишутся — поздний запрос создал бы черновик заново.
+const DRAFT_MS = 500;
+let draftTimer = 0;
+let draftChain = Promise.resolve();
+const closedDrafts = new Set();
+
+function draftBody(f) {
+  return { kind: f.kind, title: f.title, perDay: f.perDay, days: Number(f.days) || 0, start: f.start, note: f.note };
+}
+
+function queueDraft(f, keepalive = false) {
+  const id = f.draftId;
+  const body = draftBody(f);
+  draftChain = draftChain.then(() =>
+    closedDrafts.has(id) ? null : saveWayDraft(token.value, id, body, keepalive).catch((e) => flash(e.message)),
+  );
+  return draftChain;
+}
+
+watch(
+  form,
+  (f) => {
+    clearTimeout(draftTimer);
+    draftTimer = 0;
+    if (!f?.draftId) return;
+    draftTimer = setTimeout(() => {
+      draftTimer = 0;
+      queueDraft(f);
+    }, DRAFT_MS);
+  },
+  { deep: true },
+);
+
+function flushDraft() {
+  if (!draftTimer || !form.value?.draftId) return;
+  clearTimeout(draftTimer);
+  draftTimer = 0;
+  queueDraft(form.value, true);
+}
+
+// Закрыть черновик: дождаться ушедших запросов, чтобы ни один не пришёл после.
+async function closeDraft(id) {
+  clearTimeout(draftTimer);
+  draftTimer = 0;
+  closedDrafts.add(id);
+  await draftChain;
+}
+
+async function cancelForm() {
+  const f = form.value;
+  form.value = null;
+  formError.value = "";
+  if (!f?.draftId) return;
+  await closeDraft(f.draftId);
+  try {
+    data.value = await deleteWayDraft(token.value, f.draftId);
+  } catch (e) {
+    flash(e.message);
+  }
+}
+
+// Черновики, кроме того, что сейчас открыт в форме.
+const drafts = computed(() => (data.value?.drafts || []).filter((d) => d.id !== form.value?.draftId));
+
+function draftHeading(d) {
+  if (d.kind === "pork") return "Не есть свинину";
+  const per = d.perDay > 1 ? `, ${d.perDay} ${plural(d.perDay, "раз", "раза", "раз")} в день` : "";
+  if (d.kind === "namaz") return `Намаз${per}`;
+  return (d.title || "").trim() ? `${d.title.trim()}${per}` : "Другое — без названия";
+}
+
+function draftDetails(d) {
+  const parts = [];
+  if (d.days >= 1) parts.push(`${d.days} ${plural(d.days, "день", "дня", "дней")}`);
+  parts.push(d.start === "tomorrow" ? "с завтра" : "с сегодня");
+  return parts.join(", ");
+}
+
+// «Пишет сейчас» — черновик трогали последние две минуты; старше — просто
+// брошенный черновик, и «пишет» про него было бы неправдой.
+function draftLive(d) {
+  return Date.now() - Date.parse(d.updatedAt) < 2 * 60 * 1000;
+}
+
+async function publishDraft(d) {
+  if (!(d.days >= 1) || (d.kind === "custom" && !(d.title || "").trim())) {
+    openDraft(d);
+    formError.value = d.days >= 1 ? "Напишите, что нужно делать" : "Сколько дней — от 1 до 365";
+    return;
+  }
+  await closeDraft(d.id);
+  try {
+    data.value = await createWayTask(token.value, {
+      kind: d.kind,
+      title: d.title,
+      perDay: d.perDay || 1,
+      days: d.days,
+      note: d.note,
+      startDate: d.start === "tomorrow" ? addDays(today.value, 1) : today.value,
+      draftId: d.id,
+    });
+    flash("Рекомендация добавлена");
+  } catch (e) {
+    closedDrafts.delete(d.id);
+    flash(e.message);
+  }
+}
+
+async function removeDraft(d) {
+  await closeDraft(d.id);
+  try {
+    data.value = await deleteWayDraft(token.value, d.id);
+  } catch (e) {
+    flash(e.message);
+  }
 }
 
 function openEdit(t) {
@@ -363,14 +561,18 @@ async function saveForm() {
     days,
     note: f.note,
     startDate: f.start === "tomorrow" ? addDays(today.value, 1) : today.value,
+    draftId: f.draftId || null,
   };
   saving.value = true;
   formError.value = "";
+  if (f.draftId) await closeDraft(f.draftId);
   try {
     data.value = f.id ? await updateWayTask(token.value, f.id, body) : await createWayTask(token.value, body);
     form.value = null;
     flash(f.id ? "Сохранено" : "Рекомендация добавлена");
   } catch (e) {
+    // Не сохранилось — черновик снова пишется, иначе правки пропадут.
+    if (f.draftId) closedDrafts.delete(f.draftId);
     formError.value = e.message;
   } finally {
     saving.value = false;
@@ -414,21 +616,66 @@ const studentLabel = computed(() => studentName.value || "Ученик");
         </div>
       </header>
 
+      <!-- ============ Календарь — обоим ============ -->
+      <section v-if="tasks.length" class="way-card way-cal">
+        <div class="way-cal-head">
+          <button class="way-step" aria-label="Предыдущий месяц" @click="calMonth = addMonths(calMonth, -1)">‹</button>
+          <b>{{ monthTitle(calMonth) }}</b>
+          <button class="way-step" aria-label="Следующий месяц" @click="calMonth = addMonths(calMonth, 1)">›</button>
+        </div>
+        <div class="way-cal-grid">
+          <span v-for="w in WEEK" :key="w" class="way-cal-wd">{{ w }}</span>
+          <template v-for="(c, i) in calCells" :key="c ? c.day : `b${i}`">
+            <span v-if="!c"></span>
+            <button
+              v-else
+              class="way-cal-day"
+              :class="[`ag-${c.state}`, { 'is-today': c.day === today, 'is-sel': c.day === selectedDay }]"
+              :disabled="c.day > today"
+              :aria-pressed="c.day === selectedDay"
+              @click="selectedDay = c.day"
+            >
+              {{ c.num }}
+            </button>
+          </template>
+        </div>
+        <button
+          v-if="selectedDay !== today || calMonth !== today.slice(0, 7)"
+          class="way-link way-cal-today"
+          @click="toToday"
+        >
+          К сегодня
+        </button>
+      </section>
+
+      <!-- Наставнику — что было в выбранный день -->
+      <section v-if="isMentor && tasks.length" class="way-card is-flat">
+        <h2 class="way-h way-h-in">{{ dayTitle(selectedDay) }}</h2>
+        <p v-if="!dayTasks.length" class="way-sum">В этот день рекомендаций нет.</p>
+        <div v-for="t in dayTasks" :key="t.id" class="way-dd">
+          <i class="way-dot" :class="`st-${dayState(t, selectedDay)}`"></i>
+          <span class="way-dd-name">{{ taskHeading(t) }}</span>
+          <b>
+            {{ stateLabel(t, dayState(t, selectedDay))
+            }}<template v-if="t.perDay > 1 && t.marks[selectedDay] !== undefined">
+              · {{ t.marks[selectedDay] }} из {{ t.perDay }}</template
+            >
+          </b>
+        </div>
+        <p v-if="notesByDay[selectedDay]" class="way-note">{{ notesByDay[selectedDay] }} — {{ studentLabel }}</p>
+      </section>
+
       <!-- ============ Ученик ============ -->
       <template v-if="!isMentor">
-        <nav v-if="dayChips.length > 1" class="way-days" aria-label="День">
-          <button
-            v-for="c in dayChips"
-            :key="c.day"
-            class="way-day"
-            :class="{ 'is-on': c.day === selectedDay, 'is-empty': c.empty }"
-            @click="pickDay(c.day)"
-          >
-            <span class="way-day-wd">{{ c.day === today ? "сег." : weekday(c.day) }}</span>
-            <span class="way-day-n">{{ Number(c.day.slice(8)) }}</span>
-            <span v-if="c.unmarked" class="way-day-dot" aria-label="есть неотмеченное"></span>
-          </button>
-        </nav>
+        <section v-for="d in data.drafts || []" :key="d.id" class="way-card way-writing">
+          <div class="way-writing-who">
+            <template v-if="draftLive(d)">✍️ {{ mentorName || "Наставник" }} пишет рекомендацию…</template>
+            <template v-else>📝 Черновик{{ mentorName ? ` от ${mentorName}` : "" }} — ещё не назначено</template>
+          </div>
+          <b>{{ draftHeading(d) }}</b>
+          <span class="way-dates">{{ draftDetails(d) }}</span>
+          <p v-if="d.note" class="way-note">«{{ d.note }}»</p>
+        </section>
 
         <h2 class="way-h">{{ dayTitle(selectedDay) }}</h2>
 
@@ -488,7 +735,6 @@ const studentLabel = computed(() => studentName.value || "Ученик");
             v-model="noteDraft"
             rows="2"
             maxlength="1000"
-            placeholder="например: был в дороге"
             @input="onNoteInput"
             @blur="saveNote"
           ></textarea>
@@ -507,6 +753,23 @@ const studentLabel = computed(() => studentName.value || "Ученик");
 
       <!-- ============ Наставник ============ -->
       <template v-else>
+        <section v-if="drafts.length" class="way-card way-drafts">
+          <h2 class="way-h way-h-in">Черновики — не сохранены</h2>
+          <p class="way-sum">Вы начали и не сохранили. Создать их?</p>
+          <div v-for="d in drafts" :key="d.id" class="way-draft">
+            <div class="way-draft-text">
+              <b>{{ draftHeading(d) }}</b>
+              <span class="way-dates">{{ draftDetails(d) }}</span>
+              <span v-if="d.note" class="way-dates">«{{ d.note }}»</span>
+            </div>
+            <div class="way-actions">
+              <button class="way-btn is-primary" @click="publishDraft(d)">Создать</button>
+              <button class="way-btn" @click="openDraft(d)">Изменить</button>
+              <button class="way-link" @click="removeDraft(d)">Удалить</button>
+            </div>
+          </div>
+        </section>
+
         <button v-if="!form" class="way-btn is-big" @click="openCreate">＋ Новая рекомендация</button>
 
         <section v-if="form" class="way-card way-form">
@@ -526,7 +789,7 @@ const studentLabel = computed(() => studentName.value || "Ученик");
 
           <label v-if="form.kind === 'custom'" class="way-field">
             <span>Что делать</span>
-            <input v-model="form.title" maxlength="120" placeholder="например: читать суру перед сном" />
+            <input v-model="form.title" maxlength="120" />
           </label>
 
           <div v-if="form.kind !== 'pork'" class="way-field">
@@ -579,7 +842,7 @@ const studentLabel = computed(() => studentName.value || "Ученик");
 
           <label class="way-field">
             <span>Пояснение <span class="way-opt">(необязательно)</span></span>
-            <textarea v-model="form.note" rows="2" maxlength="1000" placeholder="например: пока идёт пост"></textarea>
+            <textarea v-model="form.note" rows="2" maxlength="1000"></textarea>
           </label>
 
           <div v-if="formError" class="way-error">{{ formError }}</div>
@@ -587,7 +850,7 @@ const studentLabel = computed(() => studentName.value || "Ученик");
             <button class="way-btn is-primary" :disabled="saving" @click="saveForm">
               {{ saving ? "Сохраняю…" : "Сохранить" }}
             </button>
-            <button class="way-btn" :disabled="saving" @click="form = null">Отмена</button>
+            <button class="way-btn" :disabled="saving" @click="cancelForm">Отмена</button>
           </div>
         </section>
 
@@ -772,53 +1035,127 @@ const studentLabel = computed(() => studentName.value || "Ученик");
   text-align: center;
 }
 
-/* Полоса дней */
-.way-days {
-  display: flex;
-  gap: 6px;
-  overflow-x: auto;
-  padding: 2px;
-  scrollbar-width: none;
+/* Календарь */
+.way-cal {
+  gap: 10px;
 }
-.way-day {
-  position: relative;
-  flex: 1 0 44px;
-  min-height: 58px;
+.way-cal-head {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  background: var(--card);
-  color: var(--text);
+  justify-content: space-between;
+}
+.way-cal-head b {
+  font-size: 18px;
+}
+.way-cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 5px;
+}
+.way-cal-wd {
+  text-align: center;
+  font-size: 12px;
+  color: var(--muted);
+}
+.way-cal-day {
+  aspect-ratio: 1;
+  min-height: 40px;
+  border-radius: 12px;
+  border: 2px solid transparent;
+  background: transparent;
+  color: var(--dim);
   font: inherit;
+  font-size: 16px;
+  font-weight: 600;
   cursor: pointer;
 }
-.way-day.is-on {
+.way-cal-day:disabled {
+  cursor: default;
+}
+.way-cal-day.ag-empty {
+  color: var(--muted);
+  font-weight: 400;
+}
+.way-cal-day.ag-future {
+  background: #fff;
+  border-color: var(--line);
+  color: var(--muted);
+}
+.way-cal-day.ag-none,
+.way-cal-day.ag-today {
+  background: #e7e0d2;
+  color: var(--text);
+}
+.way-cal-day.ag-full {
   background: var(--green);
-  border-color: var(--green);
   color: #fff;
 }
-.way-day.is-empty:not(.is-on) {
-  opacity: 0.45;
-}
-.way-day-wd {
-  font-size: 12px;
-  opacity: 0.8;
-}
-.way-day-n {
-  font-size: 18px;
-  font-weight: 700;
-}
-.way-day-dot {
-  position: absolute;
-  top: 6px;
-  right: 6px;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
+.way-cal-day.ag-part {
   background: var(--gold);
+  color: #fff;
+}
+.way-cal-day.ag-miss {
+  background: var(--red);
+  color: #fff;
+}
+.way-cal-day.is-today {
+  border-color: var(--green);
+}
+.way-cal-day.is-sel {
+  outline: 3px solid var(--text);
+  outline-offset: 1px;
+}
+.way-cal-today {
+  align-self: center;
+}
+.way-h-in {
+  margin: 0;
+}
+.way-dd {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+}
+.way-dd .way-dot {
+  flex-shrink: 0;
+}
+.way-dd-name {
+  flex: 1;
+}
+.way-dd b {
+  color: var(--dim);
+  font-weight: 600;
+  text-align: right;
+}
+
+/* Черновики */
+.way-drafts {
+  border-color: var(--gold);
+  background: #fffaf0;
+}
+.way-draft {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+.way-draft-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.way-writing {
+  border-style: dashed;
+  border-color: var(--gold);
+  background: #fffaf0;
+  gap: 4px;
+}
+.way-writing-who {
+  font-size: 14px;
+  color: var(--gold);
+  font-weight: 600;
 }
 
 /* Карточка */

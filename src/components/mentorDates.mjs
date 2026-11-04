@@ -43,3 +43,27 @@ export function plural(n, one, few, many) {
   if (b === 1) return one;
   return many;
 }
+
+// Сетка месяца для календаря: недели с понедельника, пустые клетки — null.
+export function monthGrid(ym) {
+  const [y, m] = ym.split("-").map(Number);
+  const lead = (new Date(Date.UTC(y, m - 1, 1)).getUTCDay() + 6) % 7;
+  const days = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  const out = Array(lead).fill(null);
+  for (let d = 1; d <= days; d++) out.push(`${y}-${pad(m)}-${pad(d)}`);
+  while (out.length % 7) out.push(null);
+  return out;
+}
+
+export function addMonths(ym, n) {
+  const [y, m] = ym.split("-").map(Number);
+  const t = new Date(Date.UTC(y, m - 1 + n, 1));
+  return `${t.getUTCFullYear()}-${pad(t.getUTCMonth() + 1)}`;
+}
+
+const MONTHS_NOM = ["Январь", "Февраль", "Март", "Апрель", "Май", "Июнь", "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"];
+
+export function monthTitle(ym) {
+  const [y, m] = ym.split("-").map(Number);
+  return `${MONTHS_NOM[m - 1]} ${y}`;
+}

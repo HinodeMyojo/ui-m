@@ -55,3 +55,8 @@ export const setWayMark = (token, taskId, date, count) =>
   pub(token, "/marks", { method: "PUT", body: JSON.stringify({ taskId, date, count }) });
 export const setWayNote = (token, date, text) =>
   pub(token, "/notes", { method: "PUT", body: JSON.stringify({ date, text }) });
+// Черновик новой рекомендации: пишется на ходу. keepalive — когда страницу
+// закрывают: такой запрос браузер доносит и после ухода со страницы.
+export const saveWayDraft = (token, id, draft, keepalive = false) =>
+  pub(token, `/drafts/${id}`, { method: "PUT", body: JSON.stringify(draft), keepalive });
+export const deleteWayDraft = (token, id) => pub(token, `/drafts/${id}`, { method: "DELETE" });

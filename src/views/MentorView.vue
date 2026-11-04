@@ -116,11 +116,11 @@ onMounted(load);
       <h2>Новая пара ссылок</h2>
       <label>
         <span>Как зовут наставника</span>
-        <input v-model="mentorName" class="sv-input" maxlength="60" placeholder="например, Амина" />
+        <input v-model="mentorName" class="sv-input" maxlength="60" />
       </label>
       <label>
         <span>Как зовут тебя</span>
-        <input v-model="studentName" class="sv-input" maxlength="60" placeholder="например, Егор" />
+        <input v-model="studentName" class="sv-input" maxlength="60" />
       </label>
       <button class="sv-btn is-primary" :disabled="busy" @click="create">Создать ссылки</button>
     </section>

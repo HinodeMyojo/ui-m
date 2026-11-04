@@ -441,6 +441,24 @@ check("«N»: склонение «день / дня / дней»", () => {
   const want = "0 дней, 1 день, 2 дня, 5 дней, 11 дней, 12 дней, 14 дней, 21 день, 22 дня, 40 дней, 101 день, 111 дней";
   return got === want ? null : got;
 });
+check("«N»: календарь — месяц с понедельника, переход через год", () => {
+  const d = mentorDates;
+  const nov = d.monthGrid("2026-11"); // 1 ноября 2026 — воскресенье
+  const feb = d.monthGrid("2027-02"); // 1 февраля 2027 — понедельник, 28 дней
+  const got = [
+    nov.indexOf("2026-11-01"),
+    nov.length,
+    nov.filter(Boolean).length,
+    feb.indexOf("2027-02-01"),
+    feb.length,
+    d.addMonths("2026-12", 1),
+    d.addMonths("2026-01", -1),
+    d.monthTitle("2026-11"),
+  ].join(" ");
+  const want = "6 42 30 0 28 2027-01 2025-12 Ноябрь 2026"; // 6 пустых + 30 дней = 6 недель
+  return got === want ? null : `${got}
+      ждали ${want}`;
+});
 check("«N»: страница по ссылке объявлена гостевой", () => {
   const at = ROUTER.indexOf('path: "/n/:token"');
   if (at < 0) return "маршрута /n/:token нет";
