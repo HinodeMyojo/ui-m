@@ -475,7 +475,7 @@ function draftDetails(d) {
 // «Пишет сейчас» — черновик трогали последние две минуты; старше — просто
 // брошенный черновик, и «пишет» про него было бы неправдой.
 function draftLive(d) {
-  return Date.now() - Date.parse(d.updatedAt) < 2 * 60 * 1000;
+  return d.ageSeconds < 120;
 }
 
 async function publishDraft(d) {
