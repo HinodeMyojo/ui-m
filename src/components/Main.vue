@@ -435,6 +435,12 @@ function closeTaskDetails() {
   openedTask.value = null;
   reloadTasksForCurrentDate();
 }
+// Из одной задачи в другую — по ссылке переноса подзадач («из октября»,
+// «перенесена в ноябрь»). Сетку перечитываем: перенос меняет прогресс обеих.
+async function switchTaskDetails(id) {
+  reloadTasksForCurrentDate();
+  await openTaskDetails({ id });
+}
 
 function formatDate(date) {
   return new Date(date).toLocaleDateString("ru-RU", {
@@ -1024,7 +1030,7 @@ function closeTimeStats() {
   </transition> -->
   <transition name="modal-fade">
     <div class="modal-overlay-2" v-if="openedTask" @click.self="closeTaskDetails">
-      <TaskDetails :task="openedTask" />
+      <TaskDetails :key="openedTask.id" :task="openedTask" @open-task="switchTaskDetails" />
     </div>
   </transition>
   <transition name="modal-fade">

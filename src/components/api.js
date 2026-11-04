@@ -2113,3 +2113,31 @@ export async function sharedAcquireLock(token, data) {
 export async function sharedReleaseLock(token, data) {
   return guestFetch(`${PUB}/${token}/locks/release`, { method: "POST", body: JSON.stringify(data) });
 }
+
+// --- Перенос подзадач из задачи прошлого месяца в задачу нового ---
+// Подзадача переезжает целиком, с лентой и блокерами; в старой задаче
+// остаётся след. back-m: application/services/taskCarry.go
+
+export async function fetchCarrySources(taskId) {
+  const response = await authorizedFetch(`${API_BASE_URL}/api/v1/tasks/${taskId}/carry-sources`);
+  const data = await response.json().catch(() => []);
+  if (!response.ok) throw new Error(data.error || "не удалось загрузить задачи прошлого месяца");
+  return Array.isArray(data) ? data : [];
+}
+
+export async function carrySubtasksAPI(taskId, subtaskIds) {
+  const response = await authorizedFetch(`${API_BASE_URL}/api/v1/tasks/${taskId}/carry`, {
+    method: "POST",
+    body: JSON.stringify({ subtaskIds }),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.error || "не удалось перенести подзадачи");
+  return { moved: data.moved || 0, skipped: data.skipped || 0 };
+}
+
+export async function fetchTaskCarries(taskId) {
+  const response = await authorizedFetch(`${API_BASE_URL}/api/v1/tasks/${taskId}/carries`);
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.error || "не удалось загрузить переносы");
+  return { incoming: data.incoming || [], outgoing: data.outgoing || [] };
+}

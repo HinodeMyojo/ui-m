@@ -183,10 +183,59 @@
                     >
                       📓 в ежедневник
                     </button>
+                    <button
+                      v-if="carriedFrom(subtask.id)"
+                      class="subtask-diary subtask-carried"
+                      :title="`Перенесена из «${carriedFrom(subtask.id).fromTitle || 'удалённой задачи'}» — открыть её`"
+                      :disabled="!carriedFrom(subtask.id).fromTitle"
+                      @click.stop="emit('open-task', carriedFrom(subtask.id).fromTaskId)"
+                    >
+                      ↪ из {{ shortMonth(carriedFrom(subtask.id).fromStart) }}
+                    </button>
                   </div>
                 </span>
               </div>
             </div>
+          </div>
+
+          <!-- Что ушло отсюда в задачи следующих месяцев: подзадачи живут там,
+               здесь от них только ссылка -->
+          <div class="carried-out">
+            <div class="carried-out-row">
+              <button
+                v-if="carries.outgoing.length"
+                class="carried-out-toggle"
+                @click="carriedOutOpen = !carriedOutOpen"
+              >
+                {{ carriedOutOpen ? "▾" : "▸" }} Перенесены в другие задачи: {{ carries.outgoing.length }}
+              </button>
+              <button
+                class="carry-open-btn"
+                title="Забрать недоделанные подзадачи из задачи прошлого месяца"
+                @click="showCarry = !showCarry"
+              >
+                {{ showCarry ? "✕ закрыть перенос" : "⤵ из прошлого месяца" }}
+              </button>
+            </div>
+            <div v-if="carriedOutOpen" class="carried-out-list">
+              <button
+                v-for="c in carries.outgoing"
+                :key="c.subtaskId"
+                class="carried-out-item"
+                :title="`Открыть «${c.toTitle}»`"
+                @click="emit('open-task', c.toTaskId)"
+              >
+                <span class="carried-out-title" :class="{ done: c.done }">{{ c.done ? "✓ " : "" }}{{ c.title }}</span>
+                <span class="carried-out-to">→ {{ c.toTitle }} · {{ shortMonth(c.toStart) }}</span>
+              </button>
+            </div>
+            <CarrySubtasksPicker
+              v-if="showCarry"
+              :task-id="task.id"
+              @carried="onCarried"
+              @close="showCarry = false"
+            />
+            <div v-if="carryNote" class="subtask-dates-note">{{ carryNote }}</div>
           </div>
 
           <!-- К каким проектам «Архитектуры» относится задача -->
@@ -247,6 +296,7 @@
           </div>
 
           <div v-if="refreshDatesNote" class="subtask-dates-note">{{ refreshDatesNote }}</div>
+
 
           <!-- JSON Import Section -->
           <div v-if="showJsonImport" class="json-import-panel">
@@ -629,6 +679,7 @@ import UniversalSubtaskModal from "./UniversalSubtaskModal.vue";
 import TaskLogPanel from "../tasklog/TaskLogPanel.vue";
 import BlockedByChip from "../tasklog/BlockedByChip.vue";
 import ArchLinkChips from "../arch/ArchLinkChips.vue";
+import CarrySubtasksPicker from "./CarrySubtasksPicker.vue";
 
 import {
   fetchTasks,
@@ -646,6 +697,7 @@ import {
   fetchTaskLogBoard,
   resolveTaskLogEntry,
   refreshSubtaskDatesAPI,
+  fetchTaskCarries,
 } from "../api.js";
 
 import {
@@ -776,6 +828,50 @@ const props = defineProps({
 });
 
 const task = ref(props.task);
+
+// Переход в другую задачу (откуда подзадача пришла или куда ушла): модалку
+// пересобирает главная.
+const emit = defineEmits(["open-task"]);
+
+// --- Перенос подзадач из месяца в месяц ---
+
+const carries = ref({ incoming: [], outgoing: [] });
+const showCarry = ref(false);
+const carryNote = ref("");
+const carriedOutOpen = ref(false);
+
+async function loadCarries() {
+  if (!task.value?.id) return;
+  try {
+    carries.value = await fetchTaskCarries(task.value.id);
+  } catch (e) {
+    carries.value = { incoming: [], outgoing: [] };
+  }
+}
+
+function carriedFrom(subtaskId) {
+  return carries.value.incoming.find((c) => c.subtaskId === subtaskId) || null;
+}
+
+function shortMonth(date) {
+  if (!date) return "?";
+  return new Date(date).toLocaleString("ru", { month: "short" }).replace(".", "");
+}
+
+async function onCarried({ moved, skipped }) {
+  showCarry.value = false;
+  carryNote.value = moved
+    ? `Перенесено: ${moved}` + (skipped ? `, пропущено ${skipped} (уже здесь или закрыты)` : "")
+    : "Ничего не перенесено: выбранные уже здесь или закрыты";
+  if (!moved) return;
+  // Лента пришедших подзадач переехала в чат этой задачи (а чата могло и не
+  // быть — его заводит перенос), поэтому перечитываем и чат.
+  const fresh = await fetchTask(task.value.id);
+  task.value.subtasks = fresh.subtasks;
+  task.value.chat = fresh.chat;
+  if (chatContext.value === "task") chatValue.value = fresh.chat;
+  await Promise.all([getProgress(), loadCarries(), loadLogBoard(), loadChatMessages()]);
+}
 
 // --- Статусы, блокеры и лента задачи ---
 
@@ -1323,6 +1419,7 @@ onMounted(() => {
   getProgress();
   loadTaskSkills();
   loadLogBoard();
+  loadCarries();
   window.addEventListener("resize", scrollToBottom);
 });
 
@@ -1687,6 +1784,106 @@ function getFileIcon(type) {
 
 .subtask-diary:hover {
   border-color: #1767fd;
+}
+
+/* Подзадача пришла из задачи прошлого месяца */
+.subtask-carried {
+  color: #5cdbd3;
+}
+
+.subtask-carried:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.carried-out-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.carry-open-btn {
+  margin-left: auto;
+  background: none;
+  border: 1px solid #2f3340;
+  border-radius: 20px;
+  color: #5cdbd3;
+  font-size: 11px;
+  padding: 2px 10px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.carry-open-btn:hover {
+  border-color: #5cdbd3;
+}
+
+.carried-out {
+  margin-top: 6px;
+}
+
+.carried-out-toggle {
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 12px;
+  cursor: pointer;
+  padding: 4px 0;
+}
+
+.carried-out-toggle:hover {
+  color: #fff;
+}
+
+.carried-out-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-left: 14px;
+}
+
+.carried-out-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  min-height: 28px;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  padding: 2px 6px;
+  text-align: left;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.carried-out-item:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.carried-out-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.carried-out-title.done {
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.carried-out-to {
+  color: #6ba4ff;
+  white-space: nowrap;
+}
+
+@media (max-width: 768px) {
+  .carried-out-item,
+  .carry-open-btn {
+    min-height: 40px;
+  }
 }
 
 .subtask-log {
