@@ -89,49 +89,52 @@ async function carry() {
       <button class="carry-close" title="Закрыть" @click="emit('close')">✕</button>
     </div>
 
+    <!-- Кнопка сверху: источников за три месяца бывает десяток, и внизу она
+         уезжает за край карточки. -->
+    <div v-if="sources.length" class="carry-foot">
+      <button class="carry-submit" :disabled="!selectedIds.length || saving" @click="carry">
+        {{ saving ? "Переношу…" : `Перенести сюда (${selectedIds.length})` }}
+      </button>
+    </div>
+    <div v-if="error" class="carry-error">{{ error }}</div>
+
     <div v-if="loading" class="carry-empty">Загружаю…</div>
     <div v-else-if="!sources.length && !error" class="carry-empty">
       За последние три месяца открытых подзадач нет — переносить нечего.
     </div>
 
-    <div v-for="source in sources" :key="source.id" class="carry-source">
-      <div class="carry-source-row">
-        <button class="carry-caret" :aria-label="expanded[source.id] ? 'Свернуть' : 'Развернуть'"
-          @click="expanded[source.id] = !expanded[source.id]">
-          {{ expanded[source.id] ? "▾" : "▸" }}
-        </button>
-        <label class="carry-source-title">
-          <input
-            type="checkbox"
-            class="accent-blue"
-            :checked="pickedIn(source) === source.subtasks.length"
-            :indeterminate.prop="pickedIn(source) > 0 && pickedIn(source) < source.subtasks.length"
-            @change="toggleSource(source)"
-          />
-          <span class="carry-title-text" :title="source.title">
-            {{ source.sticker }} {{ source.title }}
-          </span>
-        </label>
-        <span class="carry-month">{{ monthLabel(source.start) }}</span>
-        <span v-if="source.match" class="carry-match" :class="source.match">{{ MATCH_LABELS[source.match] }}</span>
-        <span class="carry-count">{{ pickedIn(source) }}/{{ source.subtasks.length }}</span>
+    <div class="carry-list">
+      <div v-for="source in sources" :key="source.id" class="carry-source">
+        <div class="carry-source-row">
+          <button class="carry-caret" :aria-label="expanded[source.id] ? 'Свернуть' : 'Развернуть'"
+            @click="expanded[source.id] = !expanded[source.id]">
+            {{ expanded[source.id] ? "▾" : "▸" }}
+          </button>
+          <label class="carry-source-title">
+            <input
+              type="checkbox"
+              class="accent-blue"
+              :checked="pickedIn(source) === source.subtasks.length"
+              :indeterminate.prop="pickedIn(source) > 0 && pickedIn(source) < source.subtasks.length"
+              @change="toggleSource(source)"
+            />
+            <span class="carry-title-text" :title="source.title">
+              {{ source.sticker }} {{ source.title }}
+            </span>
+          </label>
+          <span class="carry-month">{{ monthLabel(source.start) }}</span>
+          <span v-if="source.match" class="carry-match" :class="source.match">{{ MATCH_LABELS[source.match] }}</span>
+          <span class="carry-count">{{ pickedIn(source) }}/{{ source.subtasks.length }}</span>
+        </div>
+
+        <div v-if="expanded[source.id]" class="carry-subs">
+          <label v-for="sub in source.subtasks" :key="sub.id" class="carry-sub">
+            <input v-model="selected[sub.id]" type="checkbox" class="accent-blue" />
+            <span class="carry-sub-title" :title="sub.title">{{ sub.title }}</span>
+            <span v-if="sub.end" class="carry-sub-end">до {{ deadlineLabel(sub.end) }}</span>
+          </label>
+        </div>
       </div>
-
-      <div v-if="expanded[source.id]" class="carry-subs">
-        <label v-for="sub in source.subtasks" :key="sub.id" class="carry-sub">
-          <input v-model="selected[sub.id]" type="checkbox" class="accent-blue" />
-          <span class="carry-sub-title" :title="sub.title">{{ sub.title }}</span>
-          <span v-if="sub.end" class="carry-sub-end">до {{ deadlineLabel(sub.end) }}</span>
-        </label>
-      </div>
-    </div>
-
-    <div v-if="error" class="carry-error">{{ error }}</div>
-
-    <div v-if="sources.length" class="carry-foot">
-      <button class="carry-submit" :disabled="!selectedIds.length || saving" @click="carry">
-        {{ saving ? "Переношу…" : `Перенести сюда (${selectedIds.length})` }}
-      </button>
     </div>
   </div>
 </template>
@@ -180,6 +183,12 @@ async function carry() {
   color: rgba(255, 255, 255, 0.45);
   font-size: 12px;
   padding: 6px 0;
+}
+
+/* Список со своей прокруткой, чтобы кнопка и подсказка оставались на виду */
+.carry-list {
+  max-height: 50vh;
+  overflow-y: auto;
 }
 
 .carry-source {
