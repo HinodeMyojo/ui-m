@@ -606,6 +606,7 @@ function draftLive(d) {
 }
 
 async function publishDraft(d) {
+  if (d.mode === "week") d = { ...d, days: WEEK_DAYS };
   if (!(d.days >= 1) || (d.kind === "custom" && !(d.title || "").trim())) {
     openDraft(d);
     formError.value = d.days >= 1 ? "Напишите, что нужно делать" : "Сколько дней — от 1 до 365";
@@ -658,11 +659,18 @@ function openEdit(t) {
   };
 }
 
-const MODES = [
-  { mode: "daily", label: "Каждый день" },
-  { mode: "week", label: "За неделю" },
-  { mode: "term", label: "За весь срок" },
-];
+// «За весь срок» из формы убран по просьбе пользователя; старые такие
+// рекомендации показываются как были, а при правке режим остаётся в списке.
+// «За неделю» — ровно одна неделя: 7 дней от начала, срок не спрашивается.
+const WEEK_DAYS = 7;
+const MODES = computed(() => {
+  const list = [
+    { mode: "daily", label: "Каждый день" },
+    { mode: "week", label: "За неделю" },
+  ];
+  if (form.value?.mode === "term") list.push({ mode: "term", label: "За весь срок" });
+  return list;
+});
 
 // Сколько раз в день можно сделать — потолок цели за период.
 function dayCap(kind) {
@@ -689,6 +697,7 @@ function setKind(kind) {
 
 function setMode(mode) {
   form.value.mode = mode;
+  if (mode === "week") form.value.days = WEEK_DAYS;
   clampGoal();
 }
 
@@ -704,11 +713,11 @@ const formSummary = computed(() => {
   const what =
     f.kind === "pork" ? "не есть свинину" : f.kind === "namaz" ? "делать намаз" : `«${(f.title || "").trim() || "…"}»`;
   let how;
-  if (f.mode === "week") how = `хотя бы ${f.goal} ${unit(f.kind, f.goal)} в каждую неделю`;
+  if (f.mode === "week") how = `хотя бы ${f.goal} ${unit(f.kind, f.goal)} за неделю`;
   else if (f.mode === "term") how = `хотя бы ${f.goal} ${unit(f.kind, f.goal)} за весь срок`;
   else how = f.kind === "pork" ? "каждый день" : `${f.perDay} ${plural(f.perDay, "раз", "раза", "раз")} в день`;
   const days = Number(f.days) || 0;
-  const span = days ? `, ${days} ${plural(days, "день", "дня", "дней")}` : "";
+  const span = days && f.mode !== "week" ? `, ${days} ${plural(days, "день", "дня", "дней")}` : "";
   const end = formEnd.value ? ` (до ${humanDate(formEnd.value)})` : "";
   return `${studentLabel.value}: ${what} ${how}${span}${end}`;
 });
@@ -735,7 +744,7 @@ const formEnd = computed(() => {
 
 async function saveForm() {
   const f = form.value;
-  const days = Math.round(Number(f.days));
+  const days = f.mode === "week" ? WEEK_DAYS : Math.round(Number(f.days));
   if (!days || days < 1 || days > 365) {
     formError.value = "Сколько дней — от 1 до 365";
     return;
@@ -1043,7 +1052,7 @@ const studentLabel = computed(() => studentName.value || "Ученик");
             </div>
           </div>
 
-          <div class="way-field">
+          <div v-if="form.mode !== 'week'" class="way-field">
             <span>Сколько дней</span>
             <div class="way-chips">
               <button
