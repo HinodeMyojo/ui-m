@@ -2,6 +2,7 @@
 // Две стороны: владелец пары (с входом) и люди по ссылкам (без входа).
 
 import { API_BASE_URL, authorizedFetch } from "@/components/api.js";
+import { WAY_HOST } from "@/components/mentorDates.mjs";
 
 const OWN = `${API_BASE_URL}/api/v1/mentor/pairs`;
 const PUB = `${API_BASE_URL}/api/v1/public/mentor`;
@@ -32,7 +33,10 @@ export const updateMentorPair = (id, names) => own(`/${id}`, { method: "PUT", bo
 export const regenerateMentorLinks = (id) => own(`/${id}/tokens`, { method: "POST" });
 export const deleteMentorPair = (id) => own(`/${id}`, { method: "DELETE" });
 
-export const mentorLink = (token) => `${window.location.origin}/n/${token}`;
+// Ссылка — на свой домен. Запасная (/n/ на адресе планировщика) работает
+// всегда, в том числе пока домен не заработал.
+export const mentorLink = (token) => `https://${WAY_HOST}/${token}`;
+export const mentorFallbackLink = (token) => `${window.location.origin}/n/${token}`;
 
 // --- По ссылке ---
 
