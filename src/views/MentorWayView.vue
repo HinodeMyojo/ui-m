@@ -137,21 +137,45 @@ function dayNumber(t, day = today.value) {
   return daysBetween(t.startDate, day) + 1;
 }
 
-function perDayText(t) {
-  if (t.kind === "pork") return "";
-  if (t.perDay === 1) return "1 раз в день";
-  return `${t.perDay} ${plural(t.perDay, "раз", "раза", "раз")} в день`;
+// Рекомендация бывает «каждый день» (daily) или «хотя бы K раз за неделю /
+// за весь срок» (week / term). Недели считаются от дня начала: 1–7, 8–14…
+function isPeriod(t) {
+  return t.mode === "week" || t.mode === "term";
 }
 
-function taskHeading(t) {
-  const per = perDayText(t);
-  return per ? `${t.title}, ${per}` : t.title;
+// Чем меряется цель: у свинины — днями без неё, у остального — разами.
+function unit(kind, n) {
+  return kind === "pork" ? plural(n, "день", "дня", "дней") : plural(n, "раз", "раза", "раз");
 }
 
-// Состояние дня у рекомендации — для точек и итогов.
+function itemTitle(x) {
+  if (x.kind === "pork") return "Не есть свинину";
+  if (x.kind === "namaz") return "Намаз";
+  return (x.title || "").trim() || "Другое — без названия";
+}
+
+// Годится и для рекомендации, и для черновика.
+function goalText(x) {
+  if (x.mode === "week") return `хотя бы ${x.goal} ${unit(x.kind, x.goal)} в неделю`;
+  if (x.mode === "term") return `хотя бы ${x.goal} ${unit(x.kind, x.goal)} за весь срок`;
+  if (x.kind === "pork") return "";
+  return `${x.perDay} ${plural(x.perDay, "раз", "раза", "раз")} в день`;
+}
+
+function taskHeading(x) {
+  const g = goalText(x);
+  return g ? `${itemTitle(x)}, ${g}` : itemTitle(x);
+}
+
+// Состояние дня у рекомендации — для точек, календаря и итогов. У цели за
+// период день без дела — не провал, а просто «не в зачёт» (rest).
 function dayState(t, day) {
   if (day > today.value) return "future";
   const c = t.marks[day];
+  if (isPeriod(t)) {
+    if (c > 0) return "full";
+    return c === undefined && day === today.value ? "today" : "rest";
+  }
   if (c === undefined) return day === today.value ? "today" : "none";
   if (c >= t.perDay) return "full";
   if (c === 0) return "miss";
@@ -161,13 +185,55 @@ function dayState(t, day) {
 function stateLabel(t, state) {
   const pork = t.kind === "pork";
   return {
-    full: pork ? "не ел" : "выполнено",
+    full: pork ? "не ел" : isPeriod(t) ? "сделал" : "выполнено",
     part: "частично",
     miss: pork ? "сорвался" : "не получилось",
     none: "не отмечено",
+    rest: "не в зачёт",
     today: "сегодня, не отмечено",
     future: "ещё впереди",
   }[state];
+}
+
+// Неделя (или весь срок), в которую попадает день, и сколько в ней набрано.
+function periodBlock(t, day) {
+  let from = t.startDate;
+  let to = t.endDate;
+  let index = 0;
+  if (t.mode === "week") {
+    index = Math.max(0, Math.floor(daysBetween(t.startDate, day) / 7));
+    from = addDays(t.startDate, index * 7);
+    const weekEnd = addDays(from, 6);
+    to = weekEnd < t.endDate ? weekEnd : t.endDate;
+  }
+  const length = daysBetween(from, to) + 1;
+  let sum = 0;
+  for (let i = 0; i < length; i++) sum += t.marks[addDays(from, i)] || 0;
+  // Неполная последняя неделя: больше, чем в ней можно успеть, не требуем.
+  const goal = Math.min(t.goal, length * t.perDay);
+  return { index, from, to, sum, goal, done: sum >= goal };
+}
+
+function periodTitle(t, day) {
+  const b = periodBlock(t, day);
+  if (t.mode === "week") return `Неделя ${b.index + 1}: ${humanDate(b.from)} — ${humanDate(b.to)}`;
+  return `Весь срок: до ${humanDate(b.to)}`;
+}
+
+function periodHint(t, day) {
+  const b = periodBlock(t, day);
+  const week = t.mode === "week";
+  if (b.done) return week ? "✓ Цель этой недели выполнена" : "✓ Цель выполнена";
+  if (b.to < today.value) return week ? "Цель этой недели не набрана" : "Цель не набрана";
+  const left = b.goal - b.sum;
+  const from = b.from > today.value ? b.from : today.value;
+  const daysLeft = daysBetween(from, b.to) + 1;
+  return `Осталось ${left} ${unit(t.kind, left)}, впереди ${daysLeft} ${plural(daysLeft, "день", "дня", "дней")}${week ? " недели" : ""}`;
+}
+
+function periodPct(t, day) {
+  const b = periodBlock(t, day);
+  return `${Math.min(100, Math.round((b.sum / Math.max(1, b.goal)) * 100))}%`;
 }
 
 // Точки по дням. Длинный срок (больше 42 дней) показывается последними
@@ -199,6 +265,21 @@ function summary(t) {
 }
 
 function summaryText(t) {
+  if (t.mode === "week") {
+    // Недели, которые уже начались; текущая засчитывается, только если набрана.
+    let started = 0;
+    let done = 0;
+    for (let from = t.startDate; from <= t.endDate && from <= today.value; from = addDays(from, 7)) {
+      const b = periodBlock(t, from);
+      if (b.done) done++;
+      if (b.to < today.value || b.done) started++;
+    }
+    return started ? `Недель с выполненной целью: ${done} из ${started}` : "";
+  }
+  if (t.mode === "term") {
+    const b = periodBlock(t, t.startDate);
+    return `За весь срок: ${b.sum} из ${b.goal}${b.done ? " ✓" : ""}`;
+  }
   const s = summary(t);
   if (!s.passed) return "";
   const parts = [`${s.full} из ${s.passed} ${plural(s.passed, "дня", "дней", "дней")} — ${t.kind === "pork" ? "держался" : "выполнено"}`];
@@ -227,7 +308,8 @@ function dayAggregate(day) {
   const list = tasks.value.filter((t) => t.startDate <= day && t.endDate >= day);
   if (!list.length) return "empty";
   if (day > today.value) return "future";
-  const states = list.map((t) => dayState(t, day));
+  const states = list.map((t) => dayState(t, day)).filter((s) => s !== "rest");
+  if (!states.length) return "empty";
   if (states.every((s) => s === "full")) return "full";
   if (states.every((s) => s === "miss")) return "miss";
   if (states.every((s) => s === "none" || s === "today")) return day === today.value ? "today" : "none";
@@ -283,6 +365,17 @@ async function mark(t, count) {
 }
 
 function markOptions(t) {
+  if (isPeriod(t)) {
+    if (t.kind === "pork") {
+      return [
+        { count: 1, label: "Не ел ✓", tone: "ok" },
+        { count: 0, label: "Ел", tone: "rest" },
+      ];
+    }
+    const out = [];
+    for (let n = 0; n <= t.perDay; n++) out.push({ count: n, label: String(n), tone: n ? "ok" : "rest" });
+    return out;
+  }
   if (t.perDay === 1) {
     return t.kind === "pork"
       ? [
@@ -390,7 +483,17 @@ function newId() {
 function openCreate() {
   confirmDelete.value = null;
   formError.value = "";
-  form.value = { draftId: newId(), kind: "pork", title: "", perDay: 1, days: 7, start: "today", note: "" };
+  form.value = {
+    draftId: newId(),
+    kind: "pork",
+    title: "",
+    mode: "daily",
+    goal: 1,
+    perDay: 1,
+    days: 7,
+    start: "today",
+    note: "",
+  };
 }
 
 function openDraft(d) {
@@ -400,6 +503,8 @@ function openDraft(d) {
     draftId: d.id,
     kind: d.kind,
     title: d.title,
+    mode: d.mode || "daily",
+    goal: d.goal || 1,
     perDay: d.perDay || 1,
     days: d.days || 7,
     start: d.start || "today",
@@ -416,7 +521,16 @@ let draftChain = Promise.resolve();
 const closedDrafts = new Set();
 
 function draftBody(f) {
-  return { kind: f.kind, title: f.title, perDay: f.perDay, days: Number(f.days) || 0, start: f.start, note: f.note };
+  return {
+    kind: f.kind,
+    title: f.title,
+    mode: f.mode,
+    goal: f.goal,
+    perDay: f.perDay,
+    days: Number(f.days) || 0,
+    start: f.start,
+    note: f.note,
+  };
 }
 
 function queueDraft(f, keepalive = false) {
@@ -475,10 +589,7 @@ async function cancelForm() {
 const drafts = computed(() => (data.value?.drafts || []).filter((d) => d.id !== form.value?.draftId));
 
 function draftHeading(d) {
-  if (d.kind === "pork") return "Не есть свинину";
-  const per = d.perDay > 1 ? `, ${d.perDay} ${plural(d.perDay, "раз", "раза", "раз")} в день` : "";
-  if (d.kind === "namaz") return `Намаз${per}`;
-  return (d.title || "").trim() ? `${d.title.trim()}${per}` : "Другое — без названия";
+  return taskHeading({ ...d, mode: d.mode || "daily", perDay: d.perDay || 1, goal: d.goal || 1 });
 }
 
 function draftDetails(d) {
@@ -506,6 +617,8 @@ async function publishDraft(d) {
     data.value = await createWayTask(token.value, {
       kind: d.kind,
       title: d.title,
+      mode: d.mode || "daily",
+      goal: d.goal || 1,
       perDay: d.perDay || 1,
       days: d.days,
       note: d.note,
@@ -532,14 +645,73 @@ async function removeDraft(d) {
 function openEdit(t) {
   confirmDelete.value = null;
   formError.value = "";
-  form.value = { id: t.id, kind: t.kind, title: t.title, perDay: t.perDay, days: t.days, note: t.note };
+  form.value = {
+    id: t.id,
+    kind: t.kind,
+    title: t.title,
+    mode: t.mode || "daily",
+    goal: t.goal || 1,
+    // В режиме «за период» perDay — потолок отметок, а не норма.
+    perDay: isPeriod(t) ? 1 : t.perDay,
+    days: t.days,
+    note: t.note,
+  };
+}
+
+const MODES = [
+  { mode: "daily", label: "Каждый день" },
+  { mode: "week", label: "За неделю" },
+  { mode: "term", label: "За весь срок" },
+];
+
+// Сколько раз в день можно сделать — потолок цели за период.
+function dayCap(kind) {
+  return kind === "namaz" ? 5 : kind === "custom" ? 10 : 1;
+}
+
+const goalMax = computed(() => {
+  const f = form.value;
+  if (!f) return 1;
+  const span = f.mode === "week" ? 7 : Math.max(1, Number(f.days) || 1);
+  return span * dayCap(f.kind);
+});
+
+function clampGoal() {
+  form.value.goal = Math.min(goalMax.value, Math.max(1, Number(form.value.goal) || 1));
 }
 
 function setKind(kind) {
   form.value.kind = kind;
   if (kind === "pork") form.value.perDay = 1;
   if (kind === "namaz" && form.value.perDay > 5) form.value.perDay = 5;
+  clampGoal();
 }
+
+function setMode(mode) {
+  form.value.mode = mode;
+  clampGoal();
+}
+
+function stepGoal(delta) {
+  form.value.goal = (Number(form.value.goal) || 0) + delta;
+  clampGoal();
+}
+
+// Итог формы простыми словами — что именно получит ученик.
+const formSummary = computed(() => {
+  const f = form.value;
+  if (!f) return "";
+  const what =
+    f.kind === "pork" ? "не есть свинину" : f.kind === "namaz" ? "делать намаз" : `«${(f.title || "").trim() || "…"}»`;
+  let how;
+  if (f.mode === "week") how = `хотя бы ${f.goal} ${unit(f.kind, f.goal)} в каждую неделю`;
+  else if (f.mode === "term") how = `хотя бы ${f.goal} ${unit(f.kind, f.goal)} за весь срок`;
+  else how = f.kind === "pork" ? "каждый день" : `${f.perDay} ${plural(f.perDay, "раз", "раза", "раз")} в день`;
+  const days = Number(f.days) || 0;
+  const span = days ? `, ${days} ${plural(days, "день", "дня", "дней")}` : "";
+  const end = formEnd.value ? ` (до ${humanDate(formEnd.value)})` : "";
+  return `${studentLabel.value}: ${what} ${how}${span}${end}`;
+});
 
 function stepDays(delta) {
   form.value.days = Math.min(365, Math.max(1, (Number(form.value.days) || 0) + delta));
@@ -572,9 +744,12 @@ async function saveForm() {
     formError.value = "Напишите, что нужно делать";
     return;
   }
+  if (f.mode !== "daily") clampGoal();
   const body = {
     kind: f.kind,
     title: f.title,
+    mode: f.mode,
+    goal: f.goal,
     perDay: f.perDay,
     days,
     note: f.note,
@@ -678,7 +853,7 @@ const studentLabel = computed(() => studentName.value || "Ученик");
           <b>
             {{ stateLabel(t, dayState(t, selectedDay))
             }}<template v-if="t.perDay > 1 && t.marks[selectedDay] !== undefined">
-              · {{ t.marks[selectedDay] }} из {{ t.perDay }}</template
+              · {{ isPeriod(t) ? `${t.marks[selectedDay]} ${unit(t.kind, t.marks[selectedDay])}` : `${t.marks[selectedDay]} из ${t.perDay}` }}</template
             >
           </b>
         </div>
@@ -715,7 +890,18 @@ const studentLabel = computed(() => studentName.value || "Ученик");
             «{{ t.note }}»<span v-if="mentorName"> — {{ mentorName }}</span>
           </p>
 
-          <div v-if="t.perDay > 1" class="way-ask">Сколько раз сделал?</div>
+          <div v-if="isPeriod(t)" class="way-goal" :class="{ 'is-done': periodBlock(t, selectedDay).done }">
+            <div class="way-goal-line">
+              <span>{{ periodTitle(t, selectedDay) }}</span>
+              <b>{{ periodBlock(t, selectedDay).sum }} из {{ periodBlock(t, selectedDay).goal }}</b>
+            </div>
+            <div class="way-bar"><i :style="{ width: periodPct(t, selectedDay) }"></i></div>
+            <div class="way-goal-hint">{{ periodHint(t, selectedDay) }}</div>
+          </div>
+
+          <div v-if="t.perDay > 1" class="way-ask">
+            {{ isPeriod(t) ? "Сколько раз сделал в этот день?" : "Сколько раз сделал?" }}
+          </div>
           <div class="way-marks" :class="{ 'is-count': t.perDay > 1 }">
             <button
               v-for="o in markOptions(t)"
@@ -819,7 +1005,34 @@ const studentLabel = computed(() => studentName.value || "Ученик");
             <input v-model="form.title" maxlength="120" />
           </label>
 
-          <div v-if="form.kind !== 'pork'" class="way-field">
+          <div class="way-field">
+            <span>Как часто</span>
+            <div class="way-chips">
+              <button
+                v-for="m in MODES"
+                :key="m.mode"
+                class="way-chip is-wide"
+                :class="{ 'is-on': form.mode === m.mode }"
+                @click="setMode(m.mode)"
+              >
+                {{ m.label }}
+              </button>
+            </div>
+          </div>
+
+          <div v-if="form.mode !== 'daily'" class="way-field">
+            <span>
+              Хотя бы сколько {{ form.kind === "pork" ? "дней" : "раз" }}
+              {{ form.mode === "week" ? "за неделю" : "за весь срок" }}
+            </span>
+            <div class="way-stepper">
+              <button class="way-step" :disabled="form.goal <= 1" @click="stepGoal(-1)">−</button>
+              <b>{{ form.goal }}</b>
+              <button class="way-step" :disabled="form.goal >= goalMax" @click="stepGoal(1)">＋</button>
+            </div>
+          </div>
+
+          <div v-if="form.mode === 'daily' && form.kind !== 'pork'" class="way-field">
             <span>Сколько раз в день</span>
             <div class="way-stepper">
               <button class="way-step" :disabled="form.perDay <= 1" @click="stepPerDay(-1)">−</button>
@@ -865,7 +1078,7 @@ const studentLabel = computed(() => studentName.value || "Ученик");
               </button>
             </div>
           </div>
-          <div v-if="formEnd" class="way-hint">Последний день — {{ humanDate(formEnd) }}</div>
+          <div class="way-summary">{{ formSummary }}</div>
 
           <label class="way-field">
             <span>Пояснение <span class="way-opt">(необязательно)</span></span>
@@ -894,6 +1107,14 @@ const studentLabel = computed(() => studentName.value || "Ученик");
           </div>
           <div class="way-dates">до {{ humanDate(t.endDate) }} включительно</div>
           <p v-if="t.note" class="way-note">«{{ t.note }}»</p>
+          <div v-if="isPeriod(t)" class="way-goal" :class="{ 'is-done': periodBlock(t, today).done }">
+            <div class="way-goal-line">
+              <span>{{ periodTitle(t, today) }}</span>
+              <b>{{ periodBlock(t, today).sum }} из {{ periodBlock(t, today).goal }}</b>
+            </div>
+            <div class="way-bar"><i :style="{ width: periodPct(t, today) }"></i></div>
+            <div class="way-goal-hint">{{ periodHint(t, today) }}</div>
+          </div>
           <div class="way-strip">
             <span v-if="strip(t).cut" class="way-strip-cut">…</span>
             <span
@@ -901,12 +1122,12 @@ const studentLabel = computed(() => studentName.value || "Ученик");
               :key="c.day"
               class="way-dot"
               :class="`st-${c.state}`"
-              :title="`${humanDate(c.day)}: ${stateLabel(t, c.state)}${t.perDay > 1 && t.marks[c.day] !== undefined ? ` (${t.marks[c.day]} из ${t.perDay})` : ''}`"
+              :title="`${humanDate(c.day)}: ${stateLabel(t, c.state)}${t.perDay > 1 && !isPeriod(t) && t.marks[c.day] !== undefined ? ` (${t.marks[c.day]} из ${t.perDay})` : ''}`"
             ></span>
           </div>
           <div class="way-sum">{{ summaryText(t) || "Сегодня первый день" }}</div>
           <div v-if="t.marks[today] !== undefined" class="way-today">
-            Сегодня: {{ stateLabel(t, dayState(t, today)) }}<template v-if="t.perDay > 1"> ({{ t.marks[today] }} из {{ t.perDay }})</template>
+            Сегодня: {{ stateLabel(t, dayState(t, today)) }}<template v-if="t.perDay > 1"> ({{ isPeriod(t) ? `${t.marks[today]} ${unit(t.kind, t.marks[today])}` : `${t.marks[today]} из ${t.perDay}` }})</template>
           </div>
 
           <div v-if="confirmDelete === t.id" class="way-confirm">
@@ -1169,6 +1390,64 @@ const studentLabel = computed(() => studentName.value || "Ученик");
   color: var(--dim);
   font-weight: 600;
   text-align: right;
+}
+
+/* Цель за период */
+.way-goal {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px;
+  border-radius: 14px;
+  background: var(--green-soft);
+}
+.way-goal-line {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 15px;
+}
+.way-goal-line b {
+  font-size: 18px;
+  color: var(--green);
+  white-space: nowrap;
+}
+.way-bar {
+  height: 10px;
+  border-radius: 5px;
+  background: #fff;
+  overflow: hidden;
+}
+.way-bar i {
+  display: block;
+  height: 100%;
+  border-radius: 5px;
+  background: var(--green);
+  transition: width 0.25s;
+}
+.way-goal-hint {
+  font-size: 14px;
+  color: var(--dim);
+}
+.way-goal.is-done .way-goal-hint {
+  color: var(--green);
+  font-weight: 600;
+}
+.way-summary {
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: var(--green-soft);
+  color: var(--green);
+  font-weight: 600;
+  line-height: 1.45;
+}
+.way-mark.tone-rest.is-on {
+  background: #b9b09f;
+  border-color: #b9b09f;
+  color: #fff;
+}
+.way-dot.st-rest {
+  background: #efe9dd;
 }
 
 /* Черновики */
