@@ -106,7 +106,7 @@ onMounted(() => {
   prevTitle = document.title;
   document.body.style.background = "#f6f1e7";
   document.documentElement.style.background = "#f6f1e7";
-  document.title = "N";
+  document.title = "Проект N";
   document.addEventListener("visibilitychange", onVisible);
   window.addEventListener("pagehide", flushDraft);
   pollTimer = setInterval(poll, POLL_MS);

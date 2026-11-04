@@ -103,7 +103,7 @@ onMounted(load);
 <template>
   <div class="sv-scope mtv">
     <div class="mtv-head">
-      <h1>🌙 N</h1>
+      <h1>🌙 Проект N</h1>
       <button class="sv-btn" @click="router.push('/')">← Назад</button>
     </div>
     <p class="sv-muted mtv-lead">
