@@ -83,13 +83,13 @@ async function carry() {
   <div class="carry-panel">
     <div class="carry-head">
       <span class="carry-hint">
-        Открытые подзадачи из задач прошлых месяцев. Переедут сюда со статусами и блокерами,
+        Открытые подзадачи из задач прошлого месяца. Переедут сюда со статусами и блокерами,
         в старой задаче останется ссылка.
       </span>
       <button class="carry-close" title="Закрыть" @click="emit('close')">✕</button>
     </div>
 
-    <!-- Кнопка сверху: источников за три месяца бывает десяток, и внизу она
+    <!-- Кнопка сверху: источников за месяц бывает десяток, и внизу она
          уезжает за край карточки. -->
     <div v-if="sources.length" class="carry-foot">
       <button class="carry-submit" :disabled="!selectedIds.length || saving" @click="carry">
@@ -100,7 +100,7 @@ async function carry() {
 
     <div v-if="loading" class="carry-empty">Загружаю…</div>
     <div v-else-if="!sources.length && !error" class="carry-empty">
-      За последние три месяца открытых подзадач нет — переносить нечего.
+      В прошлом месяце открытых подзадач нет — переносить нечего.
     </div>
 
     <div class="carry-list">
