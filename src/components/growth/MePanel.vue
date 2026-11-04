@@ -39,15 +39,44 @@ const fire = computed(() => heroFire(disciplineMonth.value, disciplineLogicalTod
 const aura = computed(() => heroAura(board.value?.aura, fire.value.streak));
 const selected = computed(() => levelsById.value.get(selectedLevelId.value) || null);
 
-// Черновик выбора месяца: правится кликами по графу и в мастере, уходит на
-// сервер одной кнопкой.
+// Черновик выбора месяца: правится кликами по графу и в мастере. Раньше он
+// жил только на экране и пропадал при закрытии панели — теперь лежит в
+// браузере до сохранения, а допустимый выбор уходит на сервер сам.
 const draft = ref(new Set());
-function resetDraft() {
-  draft.value = new Set(board.value?.month?.levelIds || []);
+
+function draftKey() {
+  const m = board.value?.month;
+  return m ? `growth.monthDraft.${m.year}-${m.month}` : "";
 }
-watch(() => board.value?.month?.levelIds?.join(","), resetDraft, { immediate: true });
+function readLocalDraft() {
+  try {
+    const raw = draftKey() && localStorage.getItem(draftKey());
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+function writeLocalDraft(ids) {
+  try {
+    if (!draftKey()) return;
+    if (ids) localStorage.setItem(draftKey(), JSON.stringify(ids));
+    else localStorage.removeItem(draftKey());
+  } catch {
+    // Приватный режим — живём без памяти.
+  }
+}
+
+// force — «Сбросить»: к тому, что сохранено на сервере, без черновика.
+function resetDraft(force = false) {
+  const local = force ? null : readLocalDraft();
+  if (force) writeLocalDraft(null);
+  draft.value = new Set(local || board.value?.month?.levelIds || []);
+}
+watch(() => board.value?.month?.levelIds?.join(","), () => resetDraft(), { immediate: true });
 watch(meOpen, (open) => {
   if (open) resetDraft();
+  // Закрыли панель с допустимым несохранённым выбором — сохраняем сразу.
+  else if (draftChanged.value && draftOk.value) saveMonth();
 });
 
 function toggleDraft(id) {
@@ -68,14 +97,35 @@ const draftOk = computed(() => {
   return m && draftCounted.value >= m.min && draftCounted.value <= m.max;
 });
 
+// Почему не сохраняется — словами, а не серой кнопкой.
+const draftProblem = computed(() => {
+  const m = board.value?.month;
+  if (!m || draftOk.value) return "";
+  const n = draftCounted.value;
+  if (n > m.max) return `Выбрано ${n}, на месяц можно ${m.min}–${m.max}. Уберите ${n - m.max}.`;
+  return `Выбрано ${n}, на месяц нужно ${m.min}–${m.max}. Добавьте ещё ${m.min - n}.`;
+});
+
+// Черновик — в браузер на каждое изменение; допустимый — через паузу на сервер.
+let autosaveTimer = 0;
+watch(draft, () => {
+  writeLocalDraft(draftChanged.value ? [...draft.value] : null);
+  clearTimeout(autosaveTimer);
+  if (draftChanged.value && draftOk.value) autosaveTimer = setTimeout(saveMonth, 1500);
+});
+
 const saving = ref(false);
 const saved = ref("");
 async function saveMonth() {
-  const m = board.value.month;
+  clearTimeout(autosaveTimer);
+  const m = board.value?.month;
+  if (!m || saving.value || !draftChanged.value || !draftOk.value) return;
   saving.value = true;
-  const ok = await growthAct(() => setGrowthMonth(m.year, m.month, [...draft.value]));
+  const ids = [...draft.value];
+  const ok = await growthAct(() => setGrowthMonth(m.year, m.month, ids));
   saving.value = false;
   if (ok) {
+    writeLocalDraft(null);
     saved.value = "Месяц собран: дисциплина перестроена.";
     window.dispatchEvent(new Event("discipline:reload"));
   }
@@ -138,7 +188,12 @@ function onKey(e) {
   if (e.key === "Escape" && meOpen.value) closeMe();
 }
 onMounted(() => window.addEventListener("keydown", onKey));
-onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
+onBeforeUnmount(() => {
+  window.removeEventListener("keydown", onKey);
+  // Ушли с главной, не дождавшись автосохранения, — допустимый выбор уходит
+  // сразу; недопустимый остаётся черновиком в браузере.
+  if (draftChanged.value && draftOk.value) saveMonth();
+});
 
 const pct = (v) => `${Math.round((v || 0) * 100)}%`;
 const money = (v) => `${Math.round(v || 0).toLocaleString("ru-RU")} ₽`;
@@ -193,11 +248,12 @@ const doneCount = computed(() => (board.value?.levels || []).filter((l) => l.sta
             <button :class="{ on: meTab === 'hero' }" @click="meTab = 'hero'">Герой</button>
           </nav>
           <div v-if="draftChanged" class="me-draft">
-            Выбор месяца: {{ draftCounted }} из {{ board.month.min }}–{{ board.month.max }}
+            <template v-if="draftProblem">{{ draftProblem }}</template>
+            <template v-else>Выбор месяца: {{ draftCounted }} из {{ board.month.min }}–{{ board.month.max }}{{ saving ? " · сохраняю…" : "" }}</template>
             <button class="me-btn primary" :disabled="!draftOk || saving" @click="saveMonth">
               {{ saving ? "…" : "Сохранить месяц" }}
             </button>
-            <button class="me-btn" @click="resetDraft">Сбросить</button>
+            <button class="me-btn" @click="resetDraft(true)">Сбросить</button>
           </div>
           <button class="me-close" title="Закрыть (Esc)" @click="closeMe">✕</button>
         </header>
