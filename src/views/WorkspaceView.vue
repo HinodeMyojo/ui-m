@@ -29,6 +29,7 @@ import {
   fetchDisciplineMonth,
   disciplineLogicalToday,
 } from "@/components/api.js";
+import { SITE_OFFSETS, offsetLabel, siteMinutes, siteOffset, siteYmd } from "@/utils/siteTime.js";
 
 const router = useRouter();
 const route = useRoute();
@@ -391,8 +392,7 @@ function timeKey(item) {
   if (item.plannedStartMin >= 0) return item.plannedStartMin;
   if (item.deadline) {
     if (!item.deadlineHasTime) return 24 * 60;
-    const d = new Date(item.deadline);
-    return d.getHours() * 60 + d.getMinutes();
+    return siteMinutes(item.deadline);
   }
   return 100000;
 }
@@ -402,9 +402,9 @@ function timeKey(item) {
 function subTimeKey(sub) {
   const d = new Date(sub.deadline);
   if (!sub.deadline || Number.isNaN(d.getTime())) return 100000;
-  const days = Math.round((new Date(d).setHours(12, 0, 0, 0) - new Date(date.value + "T12:00:00")) / 86400000);
+  const days = Math.round((Date.parse(siteYmd(d)) - Date.parse(date.value)) / 86400000);
   if (days > 0) return 200000 + days;
-  return d.getHours() * 60 + d.getMinutes();
+  return siteMinutes(d);
 }
 
 async function sortByTime() {
@@ -524,7 +524,13 @@ function humanMinutes(minutes) {
         <button class="ws-icon" title="Предыдущий день" @click="shiftDate(-1)">‹</button>
         <div class="ws-date">
           <h1>{{ dayTitle }}</h1>
-          <input type="date" v-model="date" class="ws-date-input" />
+          <div class="ws-date-sub">
+            <input type="date" v-model="date" class="ws-date-input" />
+            <select v-model.number="siteOffset" class="ws-date-input"
+              title="Часовой пояс сайта: по нему «сегодня», сроки и линия «сейчас», а не по часам компьютера">
+              <option v-for="h in SITE_OFFSETS" :key="h" :value="h">{{ offsetLabel(h) }}</option>
+            </select>
+          </div>
         </div>
         <button class="ws-icon" title="Следующий день" @click="shiftDate(1)">›</button>
         <button v-if="!isToday" class="ws-btn ghost" @click="goToday">Сегодня</button>
@@ -796,6 +802,12 @@ function humanMinutes(minutes) {
   font-size: 20px;
   text-transform: capitalize;
   line-height: 1.2;
+}
+
+.ws-date-sub {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .ws-date-input {

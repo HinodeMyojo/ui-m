@@ -9,6 +9,7 @@ import {
   fetchTaskChecks,
   saveTaskChecks,
 } from "@/components/api.js";
+import { fromSiteInput, toSiteInput } from "@/utils/siteTime.js";
 
 // Подзадача с главной страницы, открытая из доски дня. Здесь её правят там же,
 // где увидели: название, срок, статус, блокеры и лента — не уходя на главную.
@@ -135,12 +136,7 @@ const checkProgress = computed(() => {
 });
 
 function toInput(value) {
-  if (!value) return "";
-  const d = new Date(value);
-  const pad = (n) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(
-    d.getHours(),
-  )}:${pad(d.getMinutes())}`;
+  return value ? toSiteInput(value) : "";
 }
 
 const dirty = computed(
@@ -162,7 +158,7 @@ async function save() {
     await updateTaskAPI(props.sub.id, {
       title: title.value.trim(),
       start: props.sub.start || null,
-      end: deadline.value ? new Date(deadline.value).toISOString() : null,
+      end: deadline.value ? fromSiteInput(deadline.value).toISOString() : null,
       color: props.sub.color || "",
     });
     saved.value = true;

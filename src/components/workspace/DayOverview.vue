@@ -16,6 +16,7 @@ import {
   setWorkMode,
   updateTaskAPI,
 } from "@/components/api.js";
+import { siteInstant, siteMinutes, siteTime, siteYmd } from "@/utils/siteTime.js";
 
 // Общий вид дня: все карточки разом. Отсюда день не только читают, но и
 // разгребают — карточку можно перетащить в другой статус, закрыть одним
@@ -122,9 +123,7 @@ function orderAfterDrop(id, column, beforeId) {
 function localDay(value) {
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return "";
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
-    d.getDate(),
-  ).padStart(2, "0")}`;
+  return siteYmd(d);
 }
 
 // Дедлайн подзадачи — это «сделать до», поэтому в дне стоят не только
@@ -191,10 +190,7 @@ const subsByColumn = computed(() => {
 });
 
 function subTime(sub) {
-  return new Date(sub.deadline).toLocaleTimeString("ru-RU", {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return siteTime(sub.deadline);
 }
 
 const subBusy = ref(new Set());
@@ -357,14 +353,8 @@ function deferItem(id) {
 // остаться прежним, иначе «к 11 утра» превращается в «к 03:00».
 function nextDayDeadline(value) {
   const at = new Date(value);
-  const from = new Date(at);
-  from.setHours(12, 0, 0, 0);
-  const days = Math.round(
-    (new Date(nextDate.value + "T12:00:00").getTime() - from.getTime()) / 86400000,
-  );
-  const moved = new Date(at);
-  moved.setDate(moved.getDate() + days);
-  return moved;
+  const days = Math.round((Date.parse(nextDate.value) - Date.parse(siteYmd(at))) / 86400000);
+  return new Date(at.getTime() + days * 86400000);
 }
 
 // Подзадача с главной живёт в дне не размещением, а дедлайном: перенести её
@@ -405,7 +395,7 @@ function minutesOnDay(deadline) {
   const d = new Date(deadline);
   if (Number.isNaN(d.getTime())) return null;
   const day = localDay(d);
-  const min = d.getHours() * 60 + d.getMinutes();
+  const min = siteMinutes(d);
   if (day === props.date) return min;
   if (day === nextDate.value && min === 0) return 24 * 60;
   return null;
@@ -426,9 +416,7 @@ function cardSlot(card) {
 
 function slotDeadline(slot) {
   if (slot === SLOT_NONE) return null;
-  const d = new Date(props.date + "T00:00:00");
-  d.setHours(0, slot, 0, 0); // 1440 минут — полночь следующих суток
-  return d.toISOString();
+  return siteInstant(props.date, slot).toISOString(); // 1440 минут — полночь следующих суток
 }
 
 function slotTitle(min) {
@@ -637,8 +625,7 @@ const nowTs = ref(Date.now());
 let clock = null;
 
 function minutesNow() {
-  const d = new Date();
-  return d.getHours() * 60 + d.getMinutes();
+  return siteMinutes();
 }
 
 const DAY_FROM = 6 * 60; // шкалу начинаем с шести утра: ночь на ней — пустое место
@@ -707,7 +694,7 @@ const nowPos = computed(() => trackPos(nowMin.value));
 function deadlineLabel(item) {
   if (!item.deadline) return "";
   if (!item.deadlineHasTime) return "до конца дня";
-  return new Date(item.deadline).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
+  return siteTime(item.deadline);
 }
 
 function isOverdue(item) {

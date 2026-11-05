@@ -19,6 +19,7 @@ import {
   workIcsUrl,
   fetchLearningSkill,
 } from "@/components/api.js";
+import { fromSiteInput, siteDate, siteDateTime, siteInstant, siteTime, siteYmd, toSiteInput } from "@/utils/siteTime.js";
 
 const props = defineProps({
   item: { type: Object, required: true },
@@ -280,25 +281,16 @@ async function setStatus(status) {
 
 // --- Дедлайн ---
 
-function toLocalInput(value) {
-  if (!value) return "";
-  const d = new Date(value);
-  const pad = (n) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
 const deadlineInput = computed({
-  get: () => toLocalInput(form.value.deadline),
+  get: () => (form.value.deadline ? toSiteInput(form.value.deadline) : ""),
   set: (value) => {
-    form.value.deadline = value ? new Date(value).toISOString() : null;
+    form.value.deadline = value ? fromSiteInput(value).toISOString() : null;
     form.value.deadlineHasTime = !!value;
   },
 });
 
 function presetDeadline(hour) {
-  const d = new Date(props.date + "T00:00:00");
-  d.setHours(hour, 0, 0, 0);
-  form.value.deadline = d.toISOString();
+  form.value.deadline = siteInstant(props.date, hour * 60).toISOString();
   form.value.deadlineHasTime = true;
 }
 
@@ -310,8 +302,7 @@ function relativeDeadline(hours) {
 }
 
 function allDayDeadline() {
-  const d = new Date(props.date + "T23:59:00");
-  form.value.deadline = d.toISOString();
+  form.value.deadline = siteInstant(props.date, 23 * 60 + 59).toISOString();
   form.value.deadlineHasTime = false;
 }
 
@@ -324,13 +315,9 @@ function deadlineToToday() {
     return;
   }
   const deadline = new Date(form.value.deadline);
-  const startOfDeadlineDay = new Date(deadline.getFullYear(), deadline.getMonth(), deadline.getDate());
-  const now = new Date();
-  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const days = Math.round((startOfToday - startOfDeadlineDay) / 86400000);
+  const days = Math.round((Date.parse(siteYmd()) - Date.parse(siteYmd(deadline))) / 86400000);
   if (days === 0) return;
-  deadline.setDate(deadline.getDate() + days);
-  form.value.deadline = deadline.toISOString();
+  form.value.deadline = new Date(deadline.getTime() + days * 86400000).toISOString();
   scheduleSave();
 }
 
@@ -341,10 +328,9 @@ function clearDeadline() {
 
 const deadlineLabel = computed(() => {
   if (!form.value.deadline) return "не задан";
-  const d = new Date(form.value.deadline);
-  const day = d.toLocaleDateString("ru-RU", { day: "numeric", month: "short" });
+  const day = siteDate(form.value.deadline, { day: "numeric", month: "short" });
   if (!form.value.deadlineHasTime) return `${day}, до конца дня`;
-  return `${day}, ${d.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}`;
+  return `${day}, ${siteTime(form.value.deadline)}`;
 });
 
 // --- Слот времени ---
@@ -416,7 +402,7 @@ const sortedNotes = computed(() =>
 
 function noteTime(note) {
   if (!note.createdAt) return "только что";
-  return new Date(note.createdAt).toLocaleString("ru-RU", {
+  return siteDateTime(note.createdAt, {
     day: "numeric",
     month: "short",
     hour: "2-digit",

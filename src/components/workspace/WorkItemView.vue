@@ -12,6 +12,7 @@ import {
   fetchTaskChecks,
   saveTaskChecks,
 } from "@/components/api.js";
+import { siteDateTime, siteTime } from "@/utils/siteTime.js";
 
 // Рабочий вид карточки: показываем только то, что реально заполнено.
 // Никаких пустых секций и полей ввода — работать, а не настраивать.
@@ -207,9 +208,8 @@ function humanMinutes(minutes) {
 
 const deadlineLabel = computed(() => {
   if (!props.item.deadline) return "";
-  const d = new Date(props.item.deadline);
   if (!props.item.deadlineHasTime) return "до конца дня";
-  return d.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
+  return siteTime(props.item.deadline);
 });
 
 const isOverdue = computed(() => {
@@ -237,7 +237,7 @@ function hostOf(url) {
 
 function noteTime(note) {
   if (!note.createdAt) return "";
-  return new Date(note.createdAt).toLocaleString("ru-RU", {
+  return siteDateTime(note.createdAt, {
     day: "numeric",
     month: "short",
     hour: "2-digit",

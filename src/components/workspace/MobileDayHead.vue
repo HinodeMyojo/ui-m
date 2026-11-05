@@ -1,5 +1,6 @@
 <script setup>
 import { computed, ref } from "vue";
+import { disciplineLogicalToday } from "@/components/api.js";
 
 // Шапка «Сегодня» на телефоне.
 //
@@ -47,7 +48,7 @@ const week = computed(() => {
   const d = new Date(props.date + "T12:00:00");
   const monday = new Date(d);
   monday.setDate(d.getDate() - ((d.getDay() + 6) % 7));
-  const today = iso(new Date(Date.now() - 3 * 60 * 60 * 1000));
+  const today = disciplineLogicalToday();
   return Array.from({ length: 7 }, (_, i) => {
     const day = new Date(monday);
     day.setDate(monday.getDate() + i);

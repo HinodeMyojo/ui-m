@@ -1,6 +1,7 @@
 <script setup>
 import { computed, ref } from "vue";
 import { checkTask, setTaskLogStatus, updateTaskAPI } from "@/components/api.js";
+import { siteDate, siteTime, siteYmd } from "@/utils/siteTime.js";
 
 // Дела дня на телефоне — список, а не доска.
 //
@@ -44,7 +45,7 @@ const SECTIONS = [
 function localDay(value) {
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return "";
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  return siteYmd(d);
 }
 
 // Смещение срока подзадачи от этого дня в сутках — как на доске: сервер
@@ -106,7 +107,7 @@ function hhmm(min) {
 }
 
 function clock(value) {
-  return new Date(value).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
+  return siteTime(value);
 }
 
 function dayWord(n) {
@@ -155,7 +156,7 @@ function soonLabel(sub) {
   const o = subOffset(sub);
   if (o === 1) return "завтра";
   if (o === 2) return "послезавтра";
-  return new Date(sub.deadline).toLocaleDateString("ru-RU", { weekday: "short", day: "numeric", month: "short" });
+  return siteDate(sub.deadline, { weekday: "short", day: "numeric", month: "short" });
 }
 
 // --- Отметка ---
@@ -280,8 +281,7 @@ async function act(key) {
   try {
     if (key === "defer") {
       if (!row.deadline) throw new Error("у подзадачи нет срока — переносить нечего");
-      const at = new Date(row.deadline);
-      at.setDate(at.getDate() + 1);
+      const at = new Date(new Date(row.deadline).getTime() + 86400000);
       await updateTaskAPI(row.id, { title: row.title, start: row.start || null, end: at.toISOString(), color: row.color || "" });
     } else {
       const status = props.taskStatuses.find((st) => st.column === key);

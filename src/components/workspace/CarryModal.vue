@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed, watch } from "vue";
 import { placeWorkItem } from "@/components/api.js";
+import { siteDate, siteTime, siteYmd } from "@/utils/siteTime.js";
 
 const props = defineProps({
   carry: { type: Array, default: () => [] }, // [{ date, items: [...] }]
@@ -36,7 +37,7 @@ const withDeadline = computed(() => {
   return count;
 });
 
-const isToday = computed(() => props.date === new Date().toLocaleDateString("sv-SE"));
+const isToday = computed(() => props.date === siteYmd());
 const targetLabel = computed(() =>
   isToday.value
     ? "сегодня"
@@ -48,11 +49,10 @@ const targetLabel = computed(() =>
 
 function shiftedDeadlineLabel(item) {
   if (!item.deadline) return "";
-  const deadline = new Date(item.deadline);
-  const time = deadline.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
+  const time = siteTime(item.deadline);
   return shifts.value
     ? `дедлайн → ${targetLabel.value} ${time}`
-    : `дедлайн ${deadline.toLocaleDateString("ru-RU", { day: "numeric", month: "short" })} ${time}`;
+    : `дедлайн ${siteDate(item.deadline, { day: "numeric", month: "short" })} ${time}`;
 }
 const busy = ref(false);
 const error = ref("");

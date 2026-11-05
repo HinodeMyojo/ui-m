@@ -8,6 +8,7 @@ import {
 
 export { API_BASE_URL } from "@/api/base";
 import { API_BASE_URL } from "@/api/base";
+import { siteYmd } from "@/utils/siteTime.js";
 
 function withAuth(options, token) {
   return {
@@ -803,13 +804,9 @@ export async function fetchTestStats(suiteId) { return (await authorizedFetch(`$
 
 const D = `${API_BASE_URL}/api/v1/discipline`;
 
-// Логическая дата: до 03:00 ночи считается предыдущий день
+// Логическая дата: до 03:00 ночи по времени сайта считается предыдущий день
 export function disciplineLogicalToday() {
-  const now = new Date(Date.now() - 3 * 60 * 60 * 1000);
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, "0");
-  const d = String(now.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
+  return siteYmd(Date.now() - 3 * 60 * 60 * 1000);
 }
 
 export async function fetchDisciplineMonth(month, year) {
