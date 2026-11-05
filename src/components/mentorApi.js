@@ -32,6 +32,7 @@ export const createMentorPair = (names) => own("", { method: "POST", body: JSON.
 export const updateMentorPair = (id, names) => own(`/${id}`, { method: "PUT", body: JSON.stringify(names) });
 export const regenerateMentorLinks = (id) => own(`/${id}/tokens`, { method: "POST" });
 export const deleteMentorPair = (id) => own(`/${id}`, { method: "DELETE" });
+export const fetchMentorVisits = (id) => own(`/${id}/visits`);
 
 // Ссылка — на свой домен. Запасная (/n/ на адресе планировщика) работает
 // всегда, в том числе пока домен не заработал.
@@ -44,12 +45,32 @@ async function pub(token, path, options = {}) {
   return parse(
     await fetch(`${PUB}/${encodeURIComponent(token)}${path}`, {
       ...options,
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...options.headers },
     }),
   );
 }
 
-export const fetchWay = (token) => pub(token, "");
+// Чем открыта страница — по этому владелец пары узнаёт устройство наставника.
+// Chrome на Android прячет модель и версию системы из User-Agent и отдаёт их
+// только так, у iPhone модель не узнать вовсе, но различим размер экрана.
+let deviceHeaders = null;
+async function deviceHints() {
+  if (deviceHeaders) return deviceHeaders;
+  const headers = { "X-Device-Screen": `${screen.width}x${screen.height}@${Math.round(devicePixelRatio * 100) / 100}` };
+  try {
+    const hints = await navigator.userAgentData?.getHighEntropyValues(["model", "platformVersion"]);
+    // Не-латиница в заголовке уронила бы сам запрос страницы.
+    const ascii = (s) => (s || "").replace(/[^\x20-\x7e]/g, "");
+    if (ascii(hints?.model)) headers["X-Device-Model"] = ascii(hints.model);
+    if (ascii(hints?.platformVersion)) headers["X-Device-Os"] = ascii(hints.platformVersion);
+  } catch {
+    // Подсказок нет — устройство узнается по User-Agent.
+  }
+  deviceHeaders = headers;
+  return headers;
+}
+
+export const fetchWay = async (token) => pub(token, "", { headers: await deviceHints() });
 export const createWayTask = (token, task) => pub(token, "/tasks", { method: "POST", body: JSON.stringify(task) });
 export const updateWayTask = (token, id, task) =>
   pub(token, `/tasks/${id}`, { method: "PUT", body: JSON.stringify(task) });

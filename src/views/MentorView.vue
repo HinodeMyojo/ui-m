@@ -6,6 +6,7 @@ import {
   createMentorPair,
   deleteMentorPair,
   fetchMentorPairs,
+  fetchMentorVisits,
   mentorFallbackLink,
   mentorLink,
   regenerateMentorLinks,
@@ -32,11 +33,50 @@ const busy = ref(false);
 const editing = ref(null);
 const confirming = ref(null);
 
+// Заходы по ссылке наставника — видны только здесь. Время — московское.
+const visits = ref({});
+const allVisits = ref({});
+const VISITS_SHOWN = 5;
+
+const dayKey = (sec) => new Date(sec * 1000).toLocaleDateString("ru-RU", { timeZone: "Europe/Moscow" });
+const clock = (sec) =>
+  new Date(sec * 1000).toLocaleTimeString("ru-RU", { timeZone: "Europe/Moscow", hour: "2-digit", minute: "2-digit" });
+
+function visitTime(v) {
+  const now = Date.now() / 1000;
+  const day = dayKey(v.startedAt);
+  let date = new Date(v.startedAt * 1000).toLocaleDateString("ru-RU", {
+    timeZone: "Europe/Moscow",
+    day: "numeric",
+    month: "short",
+  });
+  if (day === dayKey(now)) date = "сегодня";
+  else if (day === dayKey(now - 86400)) date = "вчера";
+  const end = clock(v.seenAt);
+  const start = clock(v.startedAt);
+  return start === end ? `${date}, ${start}` : `${date}, ${start}–${end}`;
+}
+
+function visitLength(v) {
+  const minutes = Math.round((v.seenAt - v.startedAt) / 60);
+  if (minutes < 1) return "меньше минуты";
+  if (minutes < 60) return `${minutes} мин`;
+  return `${Math.floor(minutes / 60)} ч ${minutes % 60} мин`;
+}
+
+const screenSize = (s) => s.split("@")[0].replace("x", "×");
+
+async function loadVisits(list) {
+  const entries = await Promise.all(list.map(async (p) => [p.id, (await fetchMentorVisits(p.id)) || []]));
+  visits.value = Object.fromEntries(entries);
+}
+
 async function load() {
   loading.value = true;
   error.value = "";
   try {
     pairs.value = (await fetchMentorPairs()) || [];
+    await loadVisits(pairs.value);
   } catch (e) {
     error.value = e.message;
   } finally {
@@ -166,6 +206,33 @@ onMounted(load);
             </div>
           </div>
         </div>
+        <div class="mtv-visits">
+          <span>Заходы по ссылке наставника</span>
+          <div v-if="!visits[p.id]?.length" class="sv-muted">Пока ни одного</div>
+          <div
+            v-for="(v, i) in allVisits[p.id] ? visits[p.id] : visits[p.id]?.slice(0, VISITS_SHOWN)"
+            :key="i"
+            class="mtv-visit"
+          >
+            <div>
+              <b>{{ visitTime(v) }}</b> <span class="sv-muted">· {{ visitLength(v) }}</span>
+            </div>
+            <div>
+              {{ v.device }}<span v-if="v.screen" class="sv-muted"> · экран {{ screenSize(v.screen) }}</span>
+            </div>
+            <details class="sv-muted">
+              <summary>{{ v.ip }}</summary>
+              {{ v.userAgent || "браузер себя не назвал" }}
+            </details>
+          </div>
+          <button
+            v-if="!allVisits[p.id] && visits[p.id]?.length > VISITS_SHOWN"
+            class="sv-btn is-small is-ghost"
+            @click="allVisits[p.id] = true"
+          >
+            Все заходы ({{ visits[p.id].length }})
+          </button>
+        </div>
         <div v-if="confirming && confirming.id === p.id" class="mtv-confirm">
           <span v-if="confirming.action === 'delete'">Удалить пару со всеми рекомендациями и отметками?</span>
           <span v-else>Старые ссылки перестанут открываться. Обе нужно будет отправить заново.</span>
@@ -244,6 +311,26 @@ label {
   gap: 6px;
   font-size: 14px;
   color: var(--sv-dim);
+}
+.mtv-visits {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--sv-dim);
+}
+.mtv-visit {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--sv-card-2);
+  color: var(--sv-text);
+}
+.mtv-visit details {
+  font-size: 12px;
+  word-break: break-all;
 }
 .mtv-tools {
   border-top: 1px solid var(--sv-line);
