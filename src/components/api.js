@@ -822,6 +822,14 @@ export async function fetchDisciplineMonth(month, year) {
   return data;
 }
 
+// Приложения навыков: встроенные и объявленные по протоколу — docs/apps-protocol.md (back-m)
+export async function fetchApps() {
+  const response = await authorizedFetch(`${API_BASE_URL}/api/v1/apps`);
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || "не удалось загрузить приложения");
+  return data;
+}
+
 export async function updateDisciplinePlan(id, data) {
   await authorizedFetch(`${D}/plan/${id}`, { method: "PUT", body: JSON.stringify(data) });
 }

@@ -67,7 +67,7 @@ function autoSkipped(a) {
 function autoNote(a) {
   const entry = entryFor(a.id);
   const value = entry?.sourceValue || 0;
-  const unit = a.source === "sport" ? "% шаблонов" : "сес.";
+  const unit = a.source === "sport" ? "% шаблонов" : a.source === "reading" ? "стр." : "сес.";
   const next = [
     { key: "min", at: a.sourceMinEff },
     { key: "mid", at: a.sourceMidEff },
@@ -134,6 +134,20 @@ function parseVariants(a) {
   }
 }
 
+// Строки уровня «Развития» стоят под своим уровнем: блок «Японский язык»,
+// под ним «1 🌸 N5» и строки N5. Строки блока без уровня — первыми.
+function byLevel(list) {
+  return [...list].sort((a, b) => {
+    if (!a.level || !b.level) return (a.level ? 1 : 0) - (b.level ? 1 : 0);
+    return a.level.number - b.level.number || a.level.title.localeCompare(b.level.title);
+  });
+}
+
+function levelHead(list, i) {
+  const level = list[i].level;
+  return level && level.id !== list[i - 1]?.level?.id ? level : null;
+}
+
 const skillRows = computed(() => {
   if (!props.month?.skills) return [];
   const rows = props.month.skills.map((skill) => {
@@ -143,13 +157,13 @@ const skillRows = computed(() => {
     const rested = dayData.value?.rests?.some(
       (r) => r.learningSkillId === skill.learningSkillId,
     );
-    const leveled = skill.activities.filter(
+    const leveled = byLevel(skill.activities.filter(
       (a) =>
         !a.isCounter &&
         activityLevels(a).length > 0 &&
         activityScheduled(a) &&
         !autoSkipped(a),
-    );
+    ));
     const counters = skill.activities.filter((a) => a.isCounter);
     const adhocs =
       dayData.value?.entries?.filter(
@@ -469,7 +483,10 @@ function saveNote() {
       </div>
       <div v-else-if="row.rested" class="dsc-hint">🌴 Сегодня отдых от навыка</div>
       <template v-else>
-        <template v-for="a in row.leveled" :key="a.id">
+        <template v-for="(a, i) in row.leveled" :key="a.id">
+          <div v-if="levelHead(row.leveled, i)" class="dsc-level">
+            <b>{{ a.level.number }}</b> {{ a.level.emoji }} {{ a.level.title }}
+          </div>
           <div class="dsc-activity" :class="{ 'dsc-a-auto': isAuto(a) }"
             @click="isAuto(a) ? null : cycleLevel(a)">
             <span class="dsc-a-emoji">{{ a.emoji }}</span>
@@ -699,6 +716,28 @@ function saveNote() {
   font-size: 12px;
   color: #7a7f8e;
   padding: 2px 0 4px;
+}
+
+.dsc-level {
+  margin: 6px 0 2px;
+  padding: 2px 4px;
+  font-size: 12px;
+  color: #b9bdd0;
+  border-left: 2px solid #6e4aff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dsc-level b {
+  display: inline-block;
+  min-width: 16px;
+  padding: 0 4px;
+  margin-right: 2px;
+  border-radius: 4px;
+  background: #2a2c3a;
+  color: #e8eaf0;
+  text-align: center;
+  font-size: 11px;
 }
 
 .dsc-activity {

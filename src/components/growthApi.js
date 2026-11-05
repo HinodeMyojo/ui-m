@@ -45,8 +45,11 @@ export const deleteGrowthLevel = (id) => del(`${G}/levels/${id}`);
 // date — когда пройден (ГГГГ-ММ-ДД), пусто — сегодня: зачёт задним числом.
 export const completeGrowthLevel = (id, undo = false, note = "", date = "") =>
   post(`${G}/levels/${id}/complete`, { undo, note, date });
-export const makeGrowthDisciplined = (id, body) =>
-  post(`${G}/levels/${id}/discipline`, { ...body, today: disciplineLogicalToday() });
+// Строки дисциплины уровня. activityId — забрать в уровень строку, которая
+// уже стоит в плане месяца, вместе с отметками.
+export const addGrowthDiscipline = (levelId, body) => post(`${G}/levels/${levelId}/disciplines`, body);
+export const updateGrowthDiscipline = (id, body) => put(`${G}/disciplines/${id}`, body);
+export const deleteGrowthDiscipline = (id) => del(`${G}/disciplines/${id}`);
 export const createGrowthTasks = (id) => post(`${G}/levels/${id}/tasks`);
 export const linkGrowthTask = (id, taskId, unlink = false) =>
   post(`${G}/levels/${id}/link-task`, { taskId, unlink });

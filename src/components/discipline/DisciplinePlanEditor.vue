@@ -13,6 +13,7 @@ import {
   fetchLearningSkills,
 } from "../api.js";
 import { fetchJpStudies } from "../japaneseApi.js";
+import { appRef, loadSourceCatalog, parseAppRef } from "./sources.js";
 
 // Источники активностей: пункт можно не отмечать руками, а считать по данным
 // модуля. Метрика у каждого своя — от неё зависят подписи порогов.
@@ -25,8 +26,14 @@ const SOURCES = [
     hint: "считается доля закрытых тренировок (шаблонов) дня: чем больше закрыл, тем выше уровень. По умолчанию половина — минимум, три четверти — средний, все — максимум. Если тренировок на день не запланировано, день ничего не требует.",
   },
   {
+    key: "app",
+    label: "Приложение — сессии",
+    unit: "сессий",
+    hint: "считаются засчитанные сессии приложения за день (японский — встроенный, другие подключаются по протоколу docs/apps-protocol.md). По умолчанию 2 — минимум, 3 — средний, 5 — максимум. День меняется в 03:00.",
+  },
+  {
     key: "japanese",
-    label: "Японский — сессии",
+    label: "Японский — сессии (старая запись)",
     unit: "сессий",
     hint: "считаются засчитанные сессии за день (короткие и арена не в счёт). День меняется в 03:00, как и стрик модуля.",
   },
@@ -73,6 +80,7 @@ onMounted(() => {
   ownLoad();
   loadAllSkills();
   loadJpStudies();
+  loadApps();
 });
 
 // Прохождения японского — чтобы источник можно было сузить до одного из них
@@ -82,6 +90,25 @@ async function loadJpStudies() {
   try {
     jpStudies.value = (await fetchJpStudies()) || [];
   } catch { /* модуль может быть выключен — источник просто будет по всем сессиям */ }
+}
+
+const apps = ref([]);
+async function loadApps() {
+  try {
+    apps.value = (await loadSourceCatalog()).apps;
+  } catch { /* без списка приложений источник «приложение» просто не выбрать */ }
+}
+
+// sourceRef приложения — «ключ» или «ключ:курс».
+const modalApp = computed(() => parseAppRef(activityModal.value?.sourceRef));
+function setModalApp(key, course = "") {
+  activityModal.value.sourceRef = key ? appRef(key, course) : "";
+}
+
+function sourceChip(a) {
+  if (a.source === "sport") return "из плана тренировок";
+  if (a.source === "reading") return "по страницам книги";
+  return "по сессиям приложения";
 }
 
 const allSkills = ref([]);
@@ -207,6 +234,8 @@ const activitySource = computed(
 const SOURCE_DEFAULTS = {
   sport: { min: 50, mid: 75, max: 100 },
   japanese: { min: 1, mid: 3, max: 5 },
+  app: { min: 2, mid: 3, max: 5 },
+  reading: { min: 10, mid: 20, max: 40 },
 };
 
 function sourcePlaceholder(level) {
@@ -463,8 +492,9 @@ async function removeActivity() {
         <button v-for="a in s.activities" :key="a.id" class="dpe-chip" @click="openActivityModal(s.learningSkillId, a)">
           {{ a.emoji }} {{ a.title }}
           <i v-if="a.source" class="dpe-chip-auto">
-            ⚙ {{ a.source === "sport" ? "из плана тренировок" : "по сессиям японского" }}
+            ⚙ {{ sourceChip(a) }}
           </i>
+          <i v-if="a.level" class="dpe-chip-auto">· уровень {{ a.level.title }}</i>
           <i v-if="a.isCounter">· счётчик {{ a.counterGoal }}</i>
           <i v-else class="dpe-chip-levels">
             <span v-if="a.minDesc">мин: {{ a.minDesc }}</span>
@@ -518,6 +548,22 @@ async function removeActivity() {
           </label>
           <div class="dpe-muted dpe-source-hint">{{ activitySource.hint }}</div>
 
+          <template v-if="activityModal.source === 'app'">
+            <label>Приложение
+              <select :value="modalApp.app" class="dpe-input" @change="setModalApp($event.target.value)">
+                <option value="">— выберите —</option>
+                <option v-for="x in apps" :key="x.key" :value="x.key">{{ x.emoji }} {{ x.title }}</option>
+              </select>
+            </label>
+            <label v-if="modalApp.app === 'japanese'">Какое прохождение
+              <select :value="modalApp.course" class="dpe-input" @change="setModalApp('japanese', $event.target.value)">
+                <option value="">Все сессии японского</option>
+                <option v-for="st in jpStudies" :key="st.id" :value="st.id">
+                  {{ st.emoji }} {{ st.name }}
+                </option>
+              </select>
+            </label>
+          </template>
           <template v-if="activityModal.source === 'japanese'">
             <label>Какое прохождение
               <select v-model="activityModal.sourceRef" class="dpe-input">

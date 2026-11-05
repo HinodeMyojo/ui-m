@@ -1,6 +1,6 @@
 <script setup>
-// Карточка уровня в панели «Я»: цель и срок, критерии, материалы, задачи,
-// зачёт, «сделать дисциплинным», правка. docs/me-module.md (back-m)
+// Карточка уровня в панели «Я»: цель и срок, дисциплина уровня, критерии,
+// материалы, задачи, зачёт, правка. docs/me-module.md (back-m)
 import { computed, ref, watch } from "vue";
 import confetti from "@/composables/useConfetti.js";
 import {
@@ -18,13 +18,13 @@ import {
   deleteGrowthCriterion,
   deleteGrowthLevel,
   deleteGrowthMaterial,
-  makeGrowthDisciplined,
   updateGrowthCriterion,
   updateGrowthLevel,
   updateGrowthMaterial,
 } from "@/components/growthApi.js";
 import { getPdfFiles } from "@/api/pdfFiles.js";
 import { growth, growthAct, levelColor, levelsById, skillsById, STATUS_TITLES } from "@/composables/useGrowth.js";
+import LevelDisciplineEditor from "./LevelDisciplineEditor.vue";
 
 const props = defineProps({
   level: { type: Object, required: true },
@@ -61,7 +61,6 @@ function startEdit() {
 watch(() => props.level.id, () => {
   editing.value = false;
   notice.value = "";
-  discOpen.value = false;
   placeOptions.value = null;
   wishPicker.value = false;
   linkOpen.value = false;
@@ -169,16 +168,6 @@ async function complete() {
 async function createTasks() {
   if (await growthAct(() => createGrowthTasks(props.level.id))) {
     notice.value = "Задача месяца создана — она на главной.";
-  }
-}
-
-const discOpen = ref(false);
-const disc = ref({ min: "", mid: "", max: "" });
-async function makeDisciplined() {
-  if (await growthAct(() => makeGrowthDisciplined(props.level.id, disc.value))) {
-    notice.value = "Строка добавлена в дисциплину этого месяца.";
-    discOpen.value = false;
-    disc.value = { min: "", mid: "", max: "" };
   }
 }
 
@@ -378,18 +367,13 @@ const skillOf = (l) => skillsById.value.get(l.skillId);
         <input v-if="level.status !== 'done'" v-model="doneDate" type="date" class="glc-date" :max="todayYmd()"
           title="Когда пройден — можно задним числом" />
       </span>
-      <button class="glc-btn" @click="discOpen = !discOpen">Сделать дисциплинным</button>
       <button class="glc-btn" @click="createTasks">Задача месяца</button>
     </div>
     <div v-if="notice" class="glc-notice">{{ notice }}</div>
 
-    <div v-if="discOpen" class="glc-form">
-      <div class="glc-form-title">Строка в дисциплину этого месяца</div>
-      <input v-model="disc.min" placeholder="Минимум (например, 15 минут)" />
-      <input v-model="disc.mid" placeholder="Средний (можно пусто)" />
-      <input v-model="disc.max" placeholder="Максимум (можно пусто)" />
-      <button class="glc-btn primary" @click="makeDisciplined">Добавить</button>
-    </div>
+    <section class="glc-sec">
+      <LevelDisciplineEditor :level="level" :skill="skill" />
+    </section>
 
     <section v-if="isTravel" class="glc-sec glc-travel">
       <div class="glc-sec-head">
@@ -986,11 +970,6 @@ const skillOf = (l) => skillsById.value.get(l.skillId);
   border-radius: 10px;
   background: #15161c;
   border: 1px solid #23252f;
-}
-
-.glc-form-title {
-  font-size: 12px;
-  color: #9aa0b0;
 }
 
 .glc input:not([type="checkbox"]),

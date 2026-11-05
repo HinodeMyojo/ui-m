@@ -2,7 +2,8 @@
 // Из чего состоит дисциплина навыка: строки его блока в плане этого месяца.
 // Блок общий у навыков с одним «блоком дисциплины» (у всех IT-навыков —
 // «IT»), поэтому правка видна у каждого из них. Новый месяц копирует план
-// прошлого — правка остаётся и дальше. docs/me-module.md (back-m)
+// прошлого — правка остаётся и дальше. Строки уровней правятся в карточке
+// уровня, здесь они только перечислены. docs/me-module.md (back-m)
 import { computed, onMounted, ref, watch } from "vue";
 import {
   createDisciplineActivity,
@@ -11,8 +12,8 @@ import {
   fetchDisciplineMonth,
   updateDisciplineActivity,
 } from "@/components/api.js";
-import { fetchJpStudies } from "@/components/japaneseApi.js";
-import { growth } from "@/composables/useGrowth.js";
+import DisciplineSourceFields from "@/components/discipline/DisciplineSourceFields.vue";
+import { normalizeSource } from "@/components/discipline/sources.js";
 
 const props = defineProps({
   block: { type: String, required: true },
@@ -26,29 +27,17 @@ const rows = ref([]); // правимые копии строк
 const confirmId = ref("");
 const fresh = ref({ emoji: "", title: "", minDesc: "", midDesc: "", maxDesc: "" });
 
-// Строку можно считать из своего приложения: сессии японского, план
-// тренировок, страницы книги уровня. Пороги — в единицах источника.
-const SOURCES = [
-  { value: "", label: "Отмечаю руками" },
-  { value: "japanese", label: "Считать: сессии японского", unit: "сессий", defaults: [2, 3, 5] },
-  { value: "sport", label: "Считать: план тренировок", unit: "% плана", defaults: [50, 75, 100] },
-  { value: "reading", label: "Считать: страницы книги уровня", unit: "стр.", defaults: [10, 15, 25] },
-];
-const sourceOf = (value) => SOURCES.find((x) => x.value === (value || "")) || SOURCES[0];
-
-const studies = ref([]);
-// Уровни с книгой из библиотеки — для строки «чтение».
-const bookLevels = computed(() =>
-  (growth.value?.levels || []).filter((l) => (l.materials || []).some((m) => m.pdfFileId)),
-);
-
-function onSource(row) {
-  const src = sourceOf(row.source);
-  row.sourceRef = null;
-  if (src.defaults) [row.sourceMin, row.sourceMid, row.sourceMax] = src.defaults;
-  else row.sourceMin = row.sourceMid = row.sourceMax = null;
-  saveRow(row);
-}
+// Строки уровней: сколько их у каждого уровня, взятого в этот месяц.
+const levelRows = computed(() => {
+  const byLevel = new Map();
+  for (const a of skill.value?.activities || []) {
+    if (!a.level) continue;
+    const item = byLevel.get(a.level.id) || { ...a.level, count: 0 };
+    item.count++;
+    byLevel.set(a.level.id, item);
+  }
+  return [...byLevel.values()];
+});
 
 function monthYear() {
   const [y, m] = disciplineLogicalToday().split("-").map(Number);
@@ -62,16 +51,9 @@ async function load() {
     const { month, year } = monthYear();
     const data = await fetchDisciplineMonth(month, year);
     planId.value = data.plan?.id || "";
-    if (!studies.value.length) {
-      try {
-        studies.value = (await fetchJpStudies()) || [];
-      } catch {
-        studies.value = [];
-      }
-    }
     const name = props.block.trim().toLowerCase();
     skill.value = (data.skills || []).find((s) => !s.general && s.title.trim().toLowerCase() === name) || null;
-    rows.value = (skill.value?.activities || []).map((a) => ({ ...a }));
+    rows.value = (skill.value?.activities || []).filter((a) => !a.level).map((a) => normalizeSource({ ...a }));
   } catch (e) {
     error.value = e.message;
   } finally {
@@ -169,7 +151,11 @@ onMounted(load);
         тогда здесь можно будет настроить, из чего он состоит.
       </p>
       <template v-else>
-        <p v-if="!rows.length" class="sde-muted">Строк пока нет — добавьте ниже.</p>
+        <p v-if="levelRows.length" class="sde-muted">
+          Строки уровней правятся в карточке уровня:
+          <template v-for="(l, i) in levelRows" :key="l.id">{{ i ? ", " : "" }}{{ l.emoji }} {{ l.title }} — {{ l.count }}</template>.
+        </p>
+        <p v-if="!rows.length" class="sde-muted">Строк без уровня нет — добавьте ниже.</p>
         <div v-for="r in rows" :key="r.id" class="sde-row">
           <div class="sde-line">
             <input v-model="r.emoji" class="sde-emoji" maxlength="8" placeholder="🙂" @change="saveRow(r)" @keydown.enter.prevent="saveRow(r)" />
@@ -181,25 +167,7 @@ onMounted(load);
             <input v-model="r.midDesc" placeholder="средний" @change="saveRow(r)" @keydown.enter.prevent="saveRow(r)" />
             <input v-model="r.maxDesc" placeholder="максимум" @change="saveRow(r)" @keydown.enter.prevent="saveRow(r)" />
           </div>
-          <div class="sde-src">
-            <select v-model="r.source" @change="onSource(r)">
-              <option v-for="o in SOURCES" :key="o.value" :value="o.value">{{ o.label }}</option>
-            </select>
-            <select v-if="r.source === 'japanese'" v-model="r.sourceRef" @change="saveRow(r)">
-              <option :value="null">все курсы</option>
-              <option v-for="st in studies" :key="st.id" :value="st.id">{{ st.emoji }} {{ st.name }}</option>
-            </select>
-            <select v-if="r.source === 'reading'" v-model="r.sourceRef" @change="saveRow(r)">
-              <option :value="null">— выберите уровень с книгой —</option>
-              <option v-for="l in bookLevels" :key="l.id" :value="l.id">{{ l.emoji }} {{ l.title }}</option>
-            </select>
-          </div>
-          <div v-if="r.source" class="sde-levels sde-thr">
-            <label>мин <input v-model.number="r.sourceMin" type="number" min="0" @change="saveRow(r)" /></label>
-            <label>сред <input v-model.number="r.sourceMid" type="number" min="0" @change="saveRow(r)" /></label>
-            <label>макс <input v-model.number="r.sourceMax" type="number" min="0" @change="saveRow(r)" /></label>
-            <span class="sde-muted">{{ sourceOf(r.source).unit }} в день — отмечается само</span>
-          </div>
+          <DisciplineSourceFields :row="r" @change="saveRow(r)" />
           <div v-if="confirmId === r.id" class="sde-confirm">
             Убрать «{{ r.title }}» из дисциплины? Отметки по ней за месяц пропадут.
             <button type="button" class="sde-btn danger" @click="removeRow(r)">Убрать</button>
@@ -287,34 +255,6 @@ input {
   color: #8a8fa3;
   cursor: pointer;
   font-size: 15px;
-}
-.sde-src {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-select {
-  background: #1d1f29;
-  border: 1px solid #343746;
-  color: #e8eaf0;
-  border-radius: 7px;
-  padding: 5px 8px;
-  font: inherit;
-  font-size: 13px;
-}
-.sde-thr {
-  align-items: center;
-  flex-wrap: wrap;
-}
-.sde-thr label {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 12px;
-  color: #8a8fa3;
-}
-.sde-thr input {
-  width: 64px;
 }
 .sde-confirm {
   display: flex;
