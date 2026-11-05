@@ -59,7 +59,7 @@ const label = computed(() => {
     :title="upcoming ? `${layerOf(upcoming.category).emoji} ${upcoming.title}${upcoming.location ? ' — ' + upcoming.location : ''}` : 'Календарь и расписание'"
     @click="router.push('/calendar')"
   >
-    🗓 Расписание
+    🗓️ Расписание
     <span v-if="label" class="next-ev-label">{{ label }}</span>
   </button>
 </template>

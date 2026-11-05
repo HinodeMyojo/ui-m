@@ -48,7 +48,7 @@ function dayLabel(ev) {
 <template>
   <section class="m-card">
     <button class="m-card-head" @click="router.push('/calendar')">
-      <span class="m-card-title">🗓 Расписание</span>
+      <span class="m-card-title">🗓️ Расписание</span>
       <span class="m-chev">›</span>
     </button>
     <template v-if="loading">
