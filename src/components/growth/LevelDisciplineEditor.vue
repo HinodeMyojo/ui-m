@@ -2,8 +2,9 @@
 // Дисциплина уровня: что делать каждый день, пока уровень взят в месяц.
 // Строки живут на уровне; взятый уровень ставит их в блок своего навыка, и
 // чек-лист показывает их под уровнем. docs/me-module.md (back-m)
-import { computed, ref, watch } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import { disciplineLogicalToday, fetchDisciplineMonth } from "@/components/api.js";
+import { fetchArtifacts } from "@/components/artifactsApi.js";
 import {
   addGrowthDiscipline,
   deleteGrowthDiscipline,
@@ -20,7 +21,7 @@ const props = defineProps({
 
 const blank = () => ({
   emoji: "", title: "", minDesc: "", midDesc: "", maxDesc: "",
-  source: "", sourceRef: null, sourceMin: null, sourceMid: null, sourceMax: null,
+  source: "", sourceRef: null, sourceMin: null, sourceMid: null, sourceMax: null, artifactId: null,
 });
 
 const rows = ref([]);
@@ -54,7 +55,19 @@ const payload = (r, position) => ({
   sourceMin: r.source ? num(r.sourceMin) : null,
   sourceMid: r.source ? num(r.sourceMid) : null,
   sourceMax: r.source ? num(r.sourceMax) : null,
+  artifactId: r.artifactId || null,
   position,
+});
+
+// Тренажёры из «Артефактов»: строку можно открыть прямо из чек-листа.
+const artifacts = ref([]);
+const artifactsError = ref("");
+onMounted(async () => {
+  try {
+    artifacts.value = await fetchArtifacts();
+  } catch (e) {
+    artifactsError.value = e.message;
+  }
 });
 
 function changed() {
@@ -142,6 +155,13 @@ async function copyFrom(other) {
         <input v-model="r.maxDesc" placeholder="максимум" @change="saveRow(r)" />
       </div>
       <DisciplineSourceFields :row="r" :level-id="level.id" @change="saveRow(r)" />
+      <label v-if="artifacts.length || r.artifactId" class="lde-artifact">
+        🧩
+        <select v-model="r.artifactId" @change="saveRow(r)">
+          <option :value="null">без артефакта</option>
+          <option v-for="a in artifacts" :key="a.id" :value="a.id">{{ a.title }}</option>
+        </select>
+      </label>
       <div v-if="confirmId === r.id" class="lde-confirm">
         Убрать «{{ r.title }}» из уровня? Из дисциплины месяца строка уйдёт тоже.
         <button class="lde-btn danger" @click="removeRow(r)">Убрать</button>
@@ -160,12 +180,20 @@ async function copyFrom(other) {
         <input v-model="fresh.maxDesc" placeholder="максимум (можно пусто)" />
       </div>
       <DisciplineSourceFields :row="fresh" :level-id="level.id" />
+      <label v-if="artifacts.length" class="lde-artifact">
+        🧩
+        <select v-model="fresh.artifactId">
+          <option :value="null">без артефакта</option>
+          <option v-for="a in artifacts" :key="a.id" :value="a.id">{{ a.title }}</option>
+        </select>
+      </label>
       <div class="lde-btns">
         <button class="lde-btn primary" :disabled="busy" @click="addRow">Добавить</button>
         <button class="lde-btn" @click="adding = false">Отмена</button>
       </div>
     </div>
     <button v-else class="lde-link" @click="adding = true">+ строка дисциплины</button>
+    <small v-if="artifactsError" class="lde-error">Артефакты не загрузились: {{ artifactsError }}</small>
 
     <div v-if="free.length" class="lde-take">
       <small>В блоке «{{ block }}» есть строки без уровня — забери их сюда, отметки сохранятся:</small>
@@ -226,7 +254,8 @@ async function copyFrom(other) {
   flex: 1;
   min-width: 0;
 }
-input {
+input,
+select {
   background: #1d1f29;
   border: 1px solid #343746;
   color: #e8eaf0;
@@ -234,6 +263,19 @@ input {
   padding: 6px 8px;
   font: inherit;
   font-size: 13px;
+}
+.lde-artifact {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+.lde-artifact select {
+  flex: 1;
+  min-width: 0;
+}
+.lde-error {
+  color: #ff8a8a;
 }
 .lde-emoji {
   width: 42px;

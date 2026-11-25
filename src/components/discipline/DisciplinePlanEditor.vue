@@ -229,7 +229,7 @@ function emptyActivityForm(skillId) {
     isCounter: false, counterGoal: 8, minDesc: "", midDesc: "", maxDesc: "",
     weekdaySet: [1, 2, 3, 4, 5, 6, 7], variantsText: "",
     replacementText: "", replacementFrom: "", replacementTo: "",
-    source: "", sourceRef: "", sourceMin: "", sourceMid: "", sourceMax: "",
+    source: "", sourceRef: "", sourceMin: "", sourceMid: "", sourceMax: "", artifactId: null,
   };
 }
 
@@ -285,6 +285,7 @@ function openActivityModal(skillId, activity) {
     sourceMin: activity.sourceMin ?? "",
     sourceMid: activity.sourceMid ?? "",
     sourceMax: activity.sourceMax ?? "",
+    artifactId: activity.artifactId || null,
   };
 }
 
@@ -322,6 +323,7 @@ async function saveActivity() {
     sourceMin: f.source && f.sourceMin !== "" ? Number(f.sourceMin) : null,
     sourceMid: f.source && f.sourceMid !== "" ? Number(f.sourceMid) : null,
     sourceMax: f.source && f.sourceMax !== "" ? Number(f.sourceMax) : null,
+    artifactId: f.artifactId,
   };
   if (f.id) {
     await updateDisciplineActivity(f.id, payload);
@@ -405,6 +407,7 @@ async function setLevel(activity, key, value) {
     sourceMin: activity.sourceMin ?? null,
     sourceMid: activity.sourceMid ?? null,
     sourceMax: activity.sourceMax ?? null,
+    artifactId: activity.artifactId || null,
   });
   await changed();
 }

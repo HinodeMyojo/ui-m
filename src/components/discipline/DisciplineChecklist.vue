@@ -496,6 +496,8 @@ function saveNote() {
               <template v-else>{{ a.title }}</template>
               <i v-if="isAuto(a)" class="dsc-a-auto-note">{{ autoNote(a) }}</i>
             </span>
+            <button v-if="a.artifactId" class="dsc-artifact" title="Открыть тренажёр"
+              @click.stop="router.push(`/artifacts/${a.artifactId}`)">🧩</button>
             <span class="dsc-a-levels">
               <span v-for="l in activityLevels(a)" :key="l.key" class="dsc-lvl" :class="[
                 'dsc-lvl-' + l.key,
@@ -754,6 +756,14 @@ function saveNote() {
 
 /* Строка, которую считает модуль: отмечать её нечем, поэтому она и не ведёт
    себя как кнопка. */
+.dsc-artifact {
+  background: none;
+  border: 1px solid #343746;
+  border-radius: 7px;
+  padding: 1px 6px;
+  cursor: pointer;
+  font-size: 14px;
+}
 .dsc-a-auto {
   cursor: default;
 }
