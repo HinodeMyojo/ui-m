@@ -174,6 +174,14 @@ const router = createRouter({
       meta: { calm: true, noWeatherOnPhone: true },
     },
     {
+      // Артефакты: HTML от ИИ по стандарту сайта, прогресс в базе сайта.
+      // /artifacts/:id открывает артефакт поверх списка.
+      path: "/artifacts/:id?",
+      name: "Artifacts",
+      component: () => import("../views/ArtifactsView.vue"),
+      meta: { calm: true, noWeather: true },
+    },
+    {
       // Дорожная карта разработки бизнеса. С /roadmap не пересекается: там учёба.
       path: "/venture",
       name: "Venture",

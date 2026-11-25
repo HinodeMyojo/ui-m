@@ -10,6 +10,9 @@
 // памяти, которое заранее наполнено сохранённым состоянием и о каждой записи
 // сообщает родителю. Родитель отправляет состояние на сервер — и прогресс
 // живёт на любом устройстве, а не в одном браузере.
+//
+// window.artifactHost — признак для артефакта, что прогресс сохраняет сайт
+// (стандарт артефакта, back-m application/services/artifact_standard.md).
 
 export const HUB_SANDBOX = "allow-scripts allow-forms allow-modals allow-popups allow-downloads";
 
@@ -50,6 +53,7 @@ function storage(map,persist){
 var local=storage(data,true),session=storage({},false);
 try{Object.defineProperty(window,"localStorage",{value:local,configurable:true})}catch(e){}
 try{Object.defineProperty(window,"sessionStorage",{value:session,configurable:true})}catch(e){}
+window.artifactHost={name:"site",persistent:true};
 addEventListener("pagehide",flush);
 addEventListener("message",function(e){if(e.data&&e.data.hubArtifact===CH&&e.data.type==="flush")flush()});
 })();<\/script>`;
