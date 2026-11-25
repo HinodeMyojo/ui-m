@@ -124,7 +124,9 @@ function pick(key) {
         class="mdh-stale"
         :class="{ bad: totals.staleMaxDays >= 4 }"
       >🔁 висит {{ totals.staleCount }}</span>
-      <span v-if="totals?.openBlockers" class="mdh-stale bad">🚧 {{ totals.openBlockers }}</span>
+      <router-link v-if="totals?.openBlockers" to="/blockers" class="mdh-stale bad">
+        🚧 {{ totals.openBlockers }}
+      </router-link>
     </div>
 
     <input
@@ -294,6 +296,7 @@ function pick(key) {
 }
 .mdh-stale.bad {
   color: #ff7875;
+  text-decoration: none;
 }
 
 .mdh-focus {

@@ -79,6 +79,13 @@ async function drop(blocker) {
   }
 }
 
+// Сюда приходят и с доски дня, и по ссылке из бота: назад — туда, откуда
+// пришли, а если пришли извне — на главную.
+function back() {
+  if (window.history.state?.back) router.back();
+  else router.push("/");
+}
+
 async function storeSettings() {
   try {
     await saveBlockerSettings(settings.value);
@@ -94,7 +101,7 @@ onMounted(load);
   <div class="blk">
     <div class="blk-head">
       <h1>🚧 Блокеры</h1>
-      <button class="blk-btn" @click="router.push('/')">← Назад</button>
+      <button class="blk-btn" @click="back">← Назад</button>
     </div>
 
     <div v-if="error" class="blk-error">{{ error }}</div>

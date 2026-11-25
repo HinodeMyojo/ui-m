@@ -541,6 +541,7 @@ function humanMinutes(minutes) {
         <button class="ws-btn" :class="{ hot: carryCount }" @click="carryOpen = true">
           ↩ Из прошлых дней<span v-if="carryCount"> · {{ carryCount }}</span>
         </button>
+        <button class="ws-btn" @click="router.push('/blockers')">🚧 Блокеры</button>
         <button class="ws-btn" @click="toggleDiscipline">🎯 Дисциплина</button>
         <button class="ws-btn" :class="{ hot: sportOpen }" @click="sportOpen = !sportOpen">
           🏋️ Спорт

@@ -4,6 +4,7 @@ import confetti from "@/composables/useConfetti.js";
 import MarkdownView from "./MarkdownView.vue";
 import { AUTUMN_COLORS } from "@/composables/useAutumn.js";
 import { jiraLinks } from "@/composables/jira.js";
+import { fetchBlockers, resolveBlocker, blockerAgeLabel } from "@/components/blockersApi.js";
 import {
   checkTask,
   collapseWorkItemTask,
@@ -748,6 +749,86 @@ const blockersTotal = computed(() =>
   ),
 );
 
+// Сами блокеры дня — по нажатию на счётчик. Сервер отдаёт все открытые, здесь
+// оставляем те, что висят на карточках и подзадачах этой доски, и каждому
+// находим, что открыть: подзадачу — в её ящике, задачу с главной — в карточке.
+const blockersOpen = ref(false);
+const allBlockers = ref([]);
+const blockersError = ref("");
+const resolvingBlocker = ref("");
+
+const dayBlockers = computed(() => {
+  const items = new Map(props.items.map((i) => [i.id, i]));
+  const subs = new Map(visibleSubs.value.map((s) => [s.id, s]));
+  const linked = new Map();
+  for (const item of props.items) {
+    for (const task of item.tasks || []) linked.set(task.id, { item, task });
+  }
+
+  const out = [];
+  for (const b of allBlockers.value) {
+    const sub = subs.get(b.taskId);
+    const item = items.get(b.itemId);
+    const link = linked.get(b.taskId);
+    if (sub) out.push({ ...b, place: sub.title, open: () => emit("open-sub", sub.id) });
+    else if (item) out.push({ ...b, place: item.title, open: () => emit("open", item.id) });
+    else if (link) {
+      out.push({
+        ...b,
+        place: `${link.item.title} → ${link.task.title}`,
+        open: () => emit("open", link.item.id),
+      });
+    }
+  }
+  return out;
+});
+
+async function loadBlockers() {
+  blockersError.value = "";
+  try {
+    allBlockers.value = (await fetchBlockers()) || [];
+  } catch (e) {
+    blockersError.value = e.message || "не удалось загрузить блокеры";
+  }
+}
+
+function toggleBlockers() {
+  blockersOpen.value = !blockersOpen.value;
+  if (blockersOpen.value) loadBlockers();
+}
+
+async function dropBlocker(b) {
+  resolvingBlocker.value = b.id;
+  try {
+    await resolveBlocker(b.source, b.id);
+    allBlockers.value = allBlockers.value.filter((x) => x.id !== b.id);
+    forgetBlocker(b);
+  } catch (e) {
+    blockersError.value = e.message || "не удалось снять блокер";
+  } finally {
+    resolvingBlocker.value = "";
+  }
+}
+
+// Счётчики правим на месте, а не перезагрузкой дня: она пересобирает доску, и
+// раскрытый список схлопывался бы после каждого снятого блокера.
+function forgetBlocker(b) {
+  for (const item of props.items) {
+    if (item.id === b.itemId) item.openBlockers--;
+    for (const task of item.tasks || []) {
+      if (task.id === b.taskId) task.openBlockers--;
+    }
+  }
+  for (const sub of props.mainSubtasks) {
+    if (sub.id === b.taskId) sub.openBlockers--;
+  }
+}
+
+// Блокер поставили или сняли в карточке — раскрытый список не должен врать.
+watch(blockersTotal, () => {
+  if (blockersOpen.value) loadBlockers();
+});
+
 // Отметить карточку «переносить, пока не закрою» одним нажатием: выбирать
 // такие задачи приходится пачкой, лезть в редактор ради галочки — долго.
 const carryBusy = ref(new Set());
@@ -1278,8 +1359,39 @@ onBeforeUnmount(() => {
 
     <div v-if="subError" class="ovw-alert">{{ subError }}</div>
 
-    <div v-if="blockersTotal" class="ovw-alert">
-      🚧 Открытых блокеров сегодня: <b>{{ blockersTotal }}</b>
+    <div v-if="blockersTotal" class="ovw-alert ovw-blockers">
+      <button class="ovw-blockers-head" @click="toggleBlockers">
+        <span>🚧 Открытых блокеров сегодня: <b>{{ blockersTotal }}</b></span>
+        <span class="ovw-alert-dim">{{ blockersOpen ? "свернуть ▴" : "показать ▾" }}</span>
+      </button>
+
+      <template v-if="blockersOpen">
+        <div v-if="blockersError">{{ blockersError }}</div>
+        <div
+          v-for="b in dayBlockers"
+          :key="b.source + b.id"
+          class="ovw-blocker"
+          title="Открыть карточку"
+          @click="b.open()"
+        >
+          <div class="ovw-blocker-body">
+            <div class="ovw-blocker-text">{{ b.text }}</div>
+            <div class="ovw-alert-dim">{{ b.place }} · висит {{ blockerAgeLabel(b.ageHours) }}</div>
+          </div>
+          <button
+            class="ovw-tool"
+            :disabled="resolvingBlocker === b.id"
+            @click.stop="dropBlocker(b)"
+          >
+            Снят
+          </button>
+        </div>
+        <router-link to="/blockers" class="ovw-blockers-all">
+          Все открытые блокеры и напоминания<template
+            v-if="allBlockers.length > dayBlockers.length"
+          > · ещё {{ allBlockers.length - dayBlockers.length }} не на этой доске</template> →
+        </router-link>
+      </template>
     </div>
 
     <div v-if="staleSummary" class="ovw-alert stale" :class="staleSummary.tone">
@@ -1973,6 +2085,54 @@ onBeforeUnmount(() => {
   padding: 10px 14px;
   color: #ffc9cb;
   font-size: 13px;
+}
+
+.ovw-blockers {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ovw-blockers-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ovw-blocker {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.25);
+  cursor: pointer;
+}
+
+.ovw-blocker:hover {
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.ovw-blocker-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.ovw-blocker-text {
+  color: #ffe3e4;
+  white-space: pre-wrap;
+}
+
+.ovw-blockers-all {
+  color: #ffc9cb;
+  font-size: 12px;
 }
 
 .ovw-hint {
