@@ -134,7 +134,8 @@ function itemMeta(item) {
   const checks = item.checks || [];
   if (checks.length) parts.push({ text: `☑ ${checks.filter((c) => c.done).length}/${checks.length}` });
   if (item.openBlockers) parts.push({ text: `🚧 ${item.openBlockers}`, tone: "bad" });
-  if (item.spanDays > 1) parts.push({ text: `день ${item.spanIndex}/${item.spanDays}` });
+  if (item.daily) parts.push({ text: `🔂 ${item.spanIndex}/${item.spanDays} · ✓${item.doneDates.length}` });
+  else if (item.spanDays > 1) parts.push({ text: `день ${item.spanIndex}/${item.spanDays}` });
   if (item.staleDays >= 1 && item.status !== "done" && item.status !== "dropped") {
     parts.push({ text: `🔁 ${item.staleDays} ${dayWord(item.staleDays)}`, tone: item.staleDays >= 4 ? "bad" : "warn" });
   }

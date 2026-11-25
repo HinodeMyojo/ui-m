@@ -843,6 +843,21 @@ export async function deleteDisciplineActivity(id) {
   await authorizedFetch(`${D}/activities/${id}`, { method: "DELETE" });
 }
 
+// Ежедневная карточка «Сегодня» строкой в планы дисциплины и обратно.
+export async function addDisciplineCard(itemId) {
+  const response = await authorizedFetch(`${D}/cards/${itemId}?today=${disciplineLogicalToday()}`, { method: "POST" });
+  if (!response.ok) {
+    throw new Error((await response.json().catch(() => ({}))).error || "не удалось поставить в дисциплину");
+  }
+}
+
+export async function removeDisciplineCard(itemId) {
+  const response = await authorizedFetch(`${D}/cards/${itemId}`, { method: "DELETE" });
+  if (!response.ok) {
+    throw new Error((await response.json().catch(() => ({}))).error || "не удалось убрать из дисциплины");
+  }
+}
+
 export async function addDisciplinePlanSkill(data) {
   return (await authorizedFetch(`${D}/plan-skills`, { method: "POST", body: JSON.stringify(data) })).json();
 }
@@ -949,8 +964,12 @@ export async function deleteWorkItem(id) {
   await authorizedFetch(`${W}/items/${id}`, { method: "DELETE" });
 }
 
+// data.date — день доски: у карточки «делать каждый день» отмечается только он.
 export async function setWorkItemStatus(id, data) {
-  await authorizedFetch(`${W}/items/${id}/status`, { method: "POST", body: JSON.stringify(data) });
+  const response = await authorizedFetch(`${W}/items/${id}/status`, { method: "POST", body: JSON.stringify(data) });
+  if (!response.ok) {
+    throw new Error((await response.json().catch(() => ({}))).error || "не удалось сменить статус");
+  }
 }
 
 // mode: move | link | copy
@@ -971,6 +990,17 @@ export async function setWorkItemCarry(id, autoCarry) {
   });
   if (!response.ok) {
     throw new Error((await response.json().catch(() => ({}))).error || "не удалось переключить перенос");
+  }
+}
+
+// «Делать каждый день» — у каждого дня карточки своя отметка.
+export async function setWorkItemDaily(id, daily) {
+  const response = await authorizedFetch(`${W}/items/${id}/daily`, {
+    method: "POST",
+    body: JSON.stringify({ daily }),
+  });
+  if (!response.ok) {
+    throw new Error((await response.json().catch(() => ({}))).error || "не удалось переключить «каждый день»");
   }
 }
 

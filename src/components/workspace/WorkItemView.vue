@@ -146,6 +146,7 @@ const openBlockers = computed(() => blockers.value.filter((b) => !b.resolved).le
 // её экземпляр, и подпись показывает, какой это день из диапазона.
 const spanLabel = computed(() => {
   const days = props.item.spanDays || 1;
+  if (props.item.daily) return `каждый день: ${props.item.spanIndex} из ${days}, сделано ${props.item.doneDates.length}`;
   if (days < 2) return "";
   return `день ${props.item.spanIndex} из ${days}`;
 });
@@ -339,7 +340,7 @@ async function setStatus(key) {
       const list = props.item.tasks.map((t) => `• ${t.title}`).join("\n");
       closeTasks = confirm(`Закрыть также привязанные задачи?\n\n${list}`);
     }
-    await setWorkItemStatus(props.item.id, { status: key, closeTasks });
+    await setWorkItemStatus(props.item.id, { status: key, closeTasks, date: props.item.date });
     emit("changed", { keepSelection: true });
   } catch (e) {
     error.value = e.message;
@@ -406,7 +407,7 @@ function toggleLog(taskId) {
         <span v-if="totalSpent" class="wiv-meta-item">⏱ {{ humanMinutes(totalSpent) }}</span>
         <span v-if="item.googleEventId" class="wiv-meta-item">📅 в календаре</span>
         <span v-if="spanLabel" class="wiv-meta-item">
-          ⧉ {{ spanLabel }} <span class="wiv-meta-dim">({{ item.spanStart }} — {{ item.spanEnd }})</span>
+          {{ item.daily ? "🔂" : "⧉" }} {{ spanLabel }} <span class="wiv-meta-dim">({{ item.spanStart }} — {{ item.spanEnd }})</span>
         </span>
         <span v-else-if="item.otherDates?.length" class="wiv-meta-item">
           ⧉ ещё {{ item.otherDates.length }} дн.

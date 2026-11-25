@@ -58,7 +58,13 @@ function setApp(key, course = "") {
   <div class="dsf">
     <div class="dsf-line">
       <select v-model="row.source" @change="onSource">
-        <option v-for="o in DISCIPLINE_SOURCES" :key="o.value" :value="o.value">{{ o.label }}</option>
+        <option
+          v-for="o in DISCIPLINE_SOURCES.filter((x) => !x.fixed || x.value === row.source)"
+          :key="o.value"
+          :value="o.value"
+        >
+          {{ o.label }}
+        </option>
       </select>
       <template v-if="row.source === 'app'">
         <select :value="app.app" @change="setApp($event.target.value)">
@@ -75,7 +81,7 @@ function setApp(key, course = "") {
         <option v-for="l in bookLevels" :key="l.id" :value="l.id">{{ l.emoji }} {{ l.title }}</option>
       </select>
     </div>
-    <div v-if="row.source" class="dsf-line dsf-thr">
+    <div v-if="sourceOf(row.source).defaults" class="dsf-line dsf-thr">
       <label>мин <input v-model.number="row.sourceMin" type="number" min="0" @change="emit('change')" /></label>
       <label>сред <input v-model.number="row.sourceMid" type="number" min="0" @change="emit('change')" /></label>
       <label>макс <input v-model.number="row.sourceMax" type="number" min="0" @change="emit('change')" /></label>

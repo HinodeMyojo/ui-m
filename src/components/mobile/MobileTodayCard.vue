@@ -62,7 +62,7 @@ async function toggle(item) {
   const prev = item.status;
   item.status = next; // отклик сразу, без ожидания сети
   try {
-    await setWorkItemStatus(item.id, { status: next });
+    await setWorkItemStatus(item.id, { status: next, date: item.date });
     await load();
   } catch {
     item.status = prev;

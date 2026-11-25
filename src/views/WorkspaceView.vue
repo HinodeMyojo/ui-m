@@ -142,6 +142,7 @@ async function load({ keepSelection = true } = {}) {
     const forced = !!pendingSelect.value;
     pendingSelect.value = null;
     day.value = await fetchWorkDay(date.value);
+    if (disciplineOpen.value && hasDisciplineCards.value) loadDiscipline();
     const stillHere = day.value.items.some((i) => i.id === previous);
     selectedId.value =
       (forced || keepSelection) && stillHere ? previous : day.value.items[0]?.id || null;
@@ -164,6 +165,9 @@ watch(date, () => {
 });
 
 const items = computed(() => day.value?.items || []);
+// Ежедневная карточка в дисциплине и её строка в чек-листе — одна отметка:
+// правка с любой стороны перечитывает обе.
+const hasDisciplineCards = computed(() => items.value.some((i) => i.daily && i.inDiscipline));
 
 const selected = computed(() => items.value.find((i) => i.id === selectedId.value) || null);
 const selectedSub = computed(
@@ -244,7 +248,7 @@ async function moveItem({ id, status, order, deadline }) {
   applyBoardOrder(order);
 
   try {
-    if (previous !== status) await setWorkItemStatus(id, { status, closeTasks: false });
+    if (previous !== status) await setWorkItemStatus(id, { status, closeTasks: false, date: date.value });
     if (deadline !== undefined) await setWorkItemDeadline(id, deadline);
     await reorderWorkItems(date.value, order);
     await load();
@@ -326,7 +330,7 @@ async function setItemStatus({ id, status }) {
   const previous = item.status;
   item.status = status;
   try {
-    await setWorkItemStatus(id, { status, closeTasks: false });
+    await setWorkItemStatus(id, { status, closeTasks: false, date: date.value });
   } catch (e) {
     item.status = previous;
     error.value = e.message;
@@ -610,7 +614,7 @@ function humanMinutes(minutes) {
         v-if="disciplineMonth"
         :month="disciplineMonth"
         :date="date"
-        @changed="loadDiscipline"
+        @changed="hasDisciplineCards ? load() : loadDiscipline()"
       />
       <div v-else class="ws-empty">Плана дисциплины на этот месяц пока нет</div>
     </section>

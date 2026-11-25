@@ -883,8 +883,9 @@ function jiraKeys(...texts) {
     .join(", ");
 }
 
-// Подпись «день 2 из 5» у многодневной карточки.
+// Подпись «день 2 из 5» у многодневной карточки, у ежедневной — и сколько сделано.
 function spanLabel(item) {
+  if (item.daily) return `${item.spanIndex}/${item.spanDays} · ✓${item.doneDates.length}`;
   return (item.spanDays || 1) > 1 ? `${item.spanIndex}/${item.spanDays}` : "";
 }
 
@@ -1635,6 +1636,7 @@ onBeforeUnmount(() => {
                 >✋</button>
               </span>
               <button
+                v-if="!card.item.daily"
                 class="ovw-card-carry ovw-nodrag"
                 :class="{ on: card.item.autoCarry }"
                 :disabled="carryBusy.has(card.item.id)"
@@ -1753,9 +1755,9 @@ onBeforeUnmount(() => {
               <span
                 v-if="spanLabel(card.item)"
                 class="ovw-chip span"
-                :title="`Многодневная: ${card.item.spanStart} — ${card.item.spanEnd}`"
+                :title="`${card.item.daily ? 'Каждый день' : 'Многодневная'}: ${card.item.spanStart} — ${card.item.spanEnd}`"
               >
-                ⧉ {{ spanLabel(card.item) }}
+                {{ card.item.daily ? "🔂" : "⧉" }} {{ spanLabel(card.item) }}
               </span>
               <span
                 v-if="card.item.autoCarry"

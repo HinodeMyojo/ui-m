@@ -12,6 +12,9 @@ import {
   placeWorkItem,
   setWorkItemSpan,
   setWorkItemStatus,
+  setWorkItemDaily,
+  addDisciplineCard,
+  removeDisciplineCard,
   uploadWorkItemFile,
   deleteWorkItemFile,
   syncWorkItemToGoogle,
@@ -93,6 +96,7 @@ const newBlocker = ref("");
 // формы: он меняет размещения, а не поля карточки, — поэтому отдельной кнопкой.
 const spanUntil = ref(props.date);
 const spanBusy = ref(false);
+const dailyBusy = ref(false);
 
 let saveTimer = null;
 let skipNextSave = false;
@@ -265,6 +269,19 @@ watch(() => form.value.learningSkillId, loadGrades);
 // --- Статус ---
 
 async function setStatus(status) {
+  // У ежедневной карточки статус — отметка этого дня, полное сохранение её не ставит.
+  if (props.item.daily) {
+    form.value.status = status;
+    error.value = "";
+    try {
+      await save({ silent: true });
+      await setWorkItemStatus(props.item.id, { status, date: props.date });
+      emit("changed", { keepSelection: true });
+    } catch (e) {
+      error.value = e.message || "не удалось сменить статус";
+    }
+    return;
+  }
   const closable = status === "done" && form.value.tasks.length > 0;
   form.value.status = status;
   if (closable) {
@@ -487,6 +504,41 @@ async function applySpan(until) {
   } finally {
     spanBusy.value = false;
   }
+}
+
+// --- Каждый день ---
+
+const itemDates = computed(() => [props.item.date, ...(props.item.otherDates || [])].sort());
+const doneDates = computed(() => new Set(props.item.doneDates || []));
+
+async function runDaily(fn) {
+  if (dailyBusy.value) return;
+  dailyBusy.value = true;
+  error.value = "";
+  try {
+    await save({ silent: true });
+    await fn();
+    emit("changed", { keepSelection: true });
+  } catch (e) {
+    error.value = e.message || "не удалось сохранить";
+  } finally {
+    dailyBusy.value = false;
+  }
+}
+
+function toggleDaily(on) {
+  if (!on && props.item.inDiscipline && !confirm("Карточка стоит в дисциплине. Убрать её и оттуда?")) return;
+  runDaily(async () => {
+    if (!on && props.item.inDiscipline) await removeDisciplineCard(props.item.id);
+    await setWorkItemDaily(props.item.id, on);
+    if (on) form.value.autoCarry = false;
+  });
+}
+
+function toggleDiscipline() {
+  runDaily(() =>
+    props.item.inDiscipline ? removeDisciplineCard(props.item.id) : addDisciplineCard(props.item.id),
+  );
 }
 
 // --- Ссылки ---
@@ -1061,6 +1113,47 @@ const totalSpent = computed(
       </p>
 
       <label class="wie-carry">
+        <input
+          type="checkbox"
+          :checked="item.daily"
+          :disabled="dailyBusy"
+          @change="toggleDaily($event.target.checked)"
+        />
+        <span>
+          Делать каждый день
+          <span class="wie-dim">
+            — у каждого дня своя отметка: сделанное сегодня не закрывает завтра
+          </span>
+        </span>
+      </label>
+      <template v-if="item.daily">
+        <div class="wie-days">
+          <span
+            v-for="d in itemDates"
+            :key="d"
+            class="wie-day"
+            :class="{ done: doneDates.has(d), here: d === date }"
+            :title="d"
+          >
+            {{ d.slice(8) }}
+          </span>
+        </div>
+        <p class="wie-dim">Сделано {{ doneDates.size }} из {{ itemDates.length }}.</p>
+        <div class="wie-span">
+          <button class="wie-chip" :disabled="dailyBusy" @click="toggleDiscipline">
+            {{ item.inDiscipline ? "Убрать из дисциплины" : "В ежедневные занятия" }}
+          </button>
+          <span class="wie-dim">
+            {{
+              item.inDiscipline
+                ? "строка в плане дисциплины — отметка там и здесь одна"
+                : "строкой в план дисциплины, в блок навыка карточки"
+            }}
+          </span>
+        </div>
+      </template>
+
+      <label v-else class="wie-carry">
         <input v-model="form.autoCarry" type="checkbox" />
         <span>
           Переносить, пока не закрою
@@ -1912,6 +2005,32 @@ select.wie-input {
 .wie-carry input {
   margin-top: 3px;
   flex-shrink: 0;
+}
+
+.wie-days {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 8px 0 4px;
+}
+
+.wie-day {
+  min-width: 26px;
+  padding: 3px 0;
+  border: 1px solid #2f3340;
+  border-radius: 6px;
+  text-align: center;
+  font-size: 12px;
+  color: #8f95a6;
+}
+
+.wie-day.done {
+  border-color: #63c94f;
+  color: #63c94f;
+}
+
+.wie-day.here {
+  outline: 1px solid #1767fd;
 }
 
 .wie-move .wie-input {

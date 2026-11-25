@@ -43,6 +43,13 @@ const SOURCES = [
     unit: "стр.",
     hint: "считаются страницы, прочитанные в читалке за день: книги уровня «Развития», а если их нет — любые. Перелистывание скачком не засчитывается. Строку заводит выбор уровней на месяц.",
   },
+  {
+    key: "card",
+    label: "Карточка «Сегодня» — каждый день",
+    unit: "",
+    hint: "отметка дня общая с ежедневной карточкой: её ставят на доске «Сегодня» или в чек-листе. В дни вне карточки строка ничего не требует. Строку заводит кнопка «В ежедневные занятия» в карточке.",
+    fixed: true,
+  },
 ];
 
 // Контролируемый режим: передан month → редактируем его, наружу emit('changed').
@@ -108,6 +115,7 @@ function setModalApp(key, course = "") {
 function sourceChip(a) {
   if (a.source === "sport") return "из плана тренировок";
   if (a.source === "reading") return "по страницам книги";
+  if (a.source === "card") return "карточка «Сегодня»";
   return "по сессиям приложения";
 }
 
@@ -543,7 +551,13 @@ async function removeActivity() {
                берётся отметка. -->
           <label>Откуда берётся отметка
             <select v-model="activityModal.source" class="dpe-input">
-              <option v-for="s in SOURCES" :key="s.key" :value="s.key">{{ s.label }}</option>
+              <option
+                v-for="s in SOURCES.filter((x) => !x.fixed || x.key === activityModal.source)"
+                :key="s.key"
+                :value="s.key"
+              >
+                {{ s.label }}
+              </option>
             </select>
           </label>
           <div class="dpe-muted dpe-source-hint">{{ activitySource.hint }}</div>
@@ -575,7 +589,7 @@ async function removeActivity() {
             </label>
           </template>
 
-          <template v-if="activityModal.source && !activityModal.isCounter">
+          <template v-if="activityModal.source && !activitySource.fixed && !activityModal.isCounter">
             <div class="dpe-section-title">Пороги уровней, {{ activitySource.unit }}</div>
             <div class="dpe-form-row">
               <label>Мин

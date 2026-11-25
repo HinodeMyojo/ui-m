@@ -13,11 +13,13 @@ function sessions(n) {
 }
 
 // describe — подпись уровня по порогу: «2 сессии», «50% плана».
+// fixed — источник не выбирают: строку заводит сам модуль.
 export const DISCIPLINE_SOURCES = [
   { value: "", label: "Отмечаю руками" },
   { value: "app", label: "Считать: сессии в приложении", unit: "сессий", defaults: [2, 3, 5], describe: sessions },
   { value: "sport", label: "Считать: план тренировок", unit: "% плана", defaults: [50, 75, 100], describe: (n) => `${n}% плана` },
   { value: "reading", label: "Считать: страницы книги уровня", unit: "стр.", defaults: [10, 20, 40], describe: (n) => `${n} стр.` },
+  { value: "card", label: "Карточка «Сегодня»: отметка общая с ней", fixed: true },
 ];
 
 export const sourceOf = (value) =>
