@@ -42,8 +42,12 @@ jobs:
       - name: Check
         run: npm run check
 
+      # Куча Node по умолчанию на раннере — около 2 ГБ, и сборке её уже не
+      # хватает (25.11.2026 упала по памяти).
       - name: Build
         run: npm run build
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
 
       - name: Deploy to server
         uses: appleboy/scp-action@v0.1.7
